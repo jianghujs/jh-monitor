@@ -286,7 +286,7 @@ class config_api:
             if admin_path in admin_path_checks:
                 return jh.returnJson(False, '该入口已被面板占用,请使用其它入口!')
             if not re.match("^/[\w\./-_]+$", admin_path):
-                return jh.returnJson(False, '入口地址格式不正确,示例: /mw_rand')
+                return jh.returnJson(False, '入口地址格式不正确,示例: /jh_rand')
         # else:
         #     domain = jh.readFile('data/bind_domain.pl')
         #     if not domain:

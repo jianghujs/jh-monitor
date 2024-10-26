@@ -17,15 +17,15 @@ import os
 import json
 
 
-class mwApi:
+class jhApi:
     __MW_KEY = 'j7GQhzNcBV4KU9QKYPXvtjSzCcmfkc0e'
     __MW_PANEL = 'http://127.0.0.1:7200'
 
     # 如果希望多台面板，可以在实例化对象时，将面板地址与密钥传入
-    def __init__(self, mw_panel=None, mw_key=None):
-        if mw_panel:
-            self.__MW_PANEL = mw_panel
-            self.__MW_KEY = mw_key
+    def __init__(self, jh_panel=None, jh_key=None):
+        if jh_panel:
+            self.__MW_PANEL = jh_panel
+            self.__MW_KEY = jh_key
 
     # 计算MD5
     def __get_md5(self, s):
@@ -113,7 +113,7 @@ class mwApi:
 
 if __name__ == '__main__':
     # 实例化API对象
-    api = mwApi()
+    api = jhApi()
 
     # 调用get_logs方法
     rdata = api.getLogs()

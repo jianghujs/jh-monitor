@@ -41,24 +41,24 @@ if not os.path.exists(log_dir):
     os.mkdir(log_dir)
 
 # default port
-mw_port = "7200"
+jh_port = "7200"
 if os.path.exists("data/port.pl"):
-    mw_port = jh.readFile('data/port.pl')
-    mw_port.strip()
+    jh_port = jh.readFile('data/port.pl')
+    jh_port.strip()
 else:
     import firewall_api
     import common
     common.initDB()
-    # mw_port = str(random.randint(10000, 65530))
-    mw_port = "10844"
-    firewall_api.firewall_api().addAcceptPortArgs(mw_port, 'tcp', 'WEB面板', 'port')
-    jh.writeFile('data/port.pl', mw_port)
+    # jh_port = str(random.randint(10000, 65530))
+    jh_port = "10844"
+    firewall_api.firewall_api().addAcceptPortArgs(jh_port, 'tcp', 'WEB面板', 'port')
+    jh.writeFile('data/port.pl', jh_port)
 
 bind = []
 if os.path.exists('data/ipv6.pl'):
-    bind.append('[0:0:0:0:0:0:0:0]:%s' % mw_port)
+    bind.append('[0:0:0:0:0:0:0:0]:%s' % jh_port)
 else:
-    bind.append('0.0.0.0:%s' % mw_port)
+    bind.append('0.0.0.0:%s' % jh_port)
 
 
 # 初始安装时,自动生成安全路径

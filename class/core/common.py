@@ -73,19 +73,19 @@ def initInitD():
     # systemctl
     # sysCfgDir = jh.systemdCfgDir()
     # if os.path.exists(sysCfgDir) and jh.getOsName() == 'centos' and jh.getOsID() == '9':
-    #     systemd_mw = sysCfgDir + '/jh.service'
-    #     systemd_mw_task = sysCfgDir + '/jh-task.service'
+    #     systemd_jh = sysCfgDir + '/jh.service'
+    #     systemd_jh_task = sysCfgDir + '/jh-task.service'
 
-    #     systemd_mw_tpl = jh.getRunDir() + '/scripts/init.d/jhm.service.tpl'
-    #     systemd_mw_task_tpl = jh.getRunDir() + '/scripts/init.d/jhm-task.service.tpl'
+    #     systemd_jh_tpl = jh.getRunDir() + '/scripts/init.d/jhm.service.tpl'
+    #     systemd_jh_task_tpl = jh.getRunDir() + '/scripts/init.d/jhm-task.service.tpl'
 
-    #     if os.path.exists(systemd_mw):
-    #         os.remove(systemd_mw)
-    #     if os.path.exists(systemd_mw_task):
-    #         os.remove(systemd_mw_task)
+    #     if os.path.exists(systemd_jh):
+    #         os.remove(systemd_jh)
+    #     if os.path.exists(systemd_jh_task):
+    #         os.remove(systemd_jh_task)
 
-    #     doContentReplace(systemd_mw_tpl, systemd_mw)
-    #     doContentReplace(systemd_mw_task_tpl, systemd_mw_task)
+    #     doContentReplace(systemd_jh_tpl, systemd_jh)
+    #     doContentReplace(systemd_jh_task_tpl, systemd_jh_task)
 
     #     jh.execShell('systemctl enable jh')
     #     jh.execShell('systemctl enable jh-task')

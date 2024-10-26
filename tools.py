@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------------------
 # copyright (c) 2018-∞(https://github.com/jianghujs/jh-monitor) All rights reserved.
 # ---------------------------------------------------------------------------------
-# Author: midoks <midoks@163.com>
+# Author: Jianghu
 # ---------------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------------
@@ -34,17 +34,17 @@ INIT_DIR = "/etc/rc.d/init.d"
 if jh.isAppleSystem():
     INIT_DIR = jh.getRunDir() + "/scripts/init.d"
 
-INIT_CMD = INIT_DIR + "/jh"
+INIT_CMD = INIT_DIR + "/jhm"
 
 
-def mw_input_cmd(msg):
+def jh_input_cmd(msg):
     if sys.version_info[0] == 2:
         in_val = raw_input(msg)
     else:
         in_val = input(msg)
     return in_val
 
-def mw_input_default_cmd(msg, default):
+def jh_input_default_cmd(msg, default):
     if sys.version_info[0] == 2:
         in_val = raw_input(msg)
     else:
@@ -53,9 +53,9 @@ def mw_input_default_cmd(msg, default):
     return in_val
 
 
-def mwcli(mw_input=0, confirm=False):
+def jhcli(jh_input=0, confirm=False):
     raw_tip = "======================================================"
-    if not mw_input:
+    if not jh_input:
         print("===============jh-monitor cli tools=================")
         print("(1) 重启面板服务")
         print("(2) 停止面板服务")
@@ -71,39 +71,39 @@ def mwcli(mw_input=0, confirm=False):
         print("(0) 取消")
         print(raw_tip)
         try:
-            mw_input = input("请输入命令编号：")
+            jh_input = input("请输入命令编号：")
             if sys.version_info[0] == 3:
-                mw_input = int(mw_input)
+                jh_input = int(jh_input)
         except:
-            mw_input = 0
+            jh_input = 0
 
     nums = [1, 2, 3, 4, 5, 10, 11, 12, 13, 20, 21]
-    if not mw_input in nums:
+    if not jh_input in nums:
         print(raw_tip)
         print("已取消!")
         exit()
 
-    if mw_input == 1:
+    if jh_input == 1:
       if not confirm:
-        confirm = mw_input_default_cmd("提示：在面板终端执行此操作可能会失败，请勿在面板终端执行此操作\n确定要重启面板吗？（默认y）[y/n]：", 'y')
+        confirm = jh_input_default_cmd("提示：在面板终端执行此操作可能会失败，请勿在面板终端执行此操作\n确定要重启面板吗？（默认y）[y/n]：", 'y')
         if confirm != 'y':
             print("已取消")
             exit()
       os.system(INIT_CMD + " restart")
-    elif mw_input == 2:
+    elif jh_input == 2:
       if not confirm:
-        confirm = mw_input_default_cmd("提示：在面板终端执行此操作可能会失败，请勿在面板终端执行此操作\n确定要停止面板吗？（默认n）[y/n]：", 'n')
+        confirm = jh_input_default_cmd("提示：在面板终端执行此操作可能会失败，请勿在面板终端执行此操作\n确定要停止面板吗？（默认n）[y/n]：", 'n')
         if confirm != 'y':
             print("已取消")
             exit()
       
       os.system(INIT_CMD + " stop")
-    elif mw_input == 3:
+    elif jh_input == 3:
         os.system(INIT_CMD + " start")
-    elif mw_input == 4:
+    elif jh_input == 4:
         os.system(INIT_CMD + " reload")
-    elif mw_input == 5:
-        in_port = mw_input_cmd("请输入新的面板端口：")
+    elif jh_input == 5:
+        in_port = jh_input_cmd("请输入新的面板端口：")
         in_port_int = int(in_port.strip())
         if in_port_int < 65536 and in_port_int > 0:
             import firewall_api
@@ -113,26 +113,26 @@ def mwcli(mw_input=0, confirm=False):
         else:
             print("|-端口范围在0-65536之间")
         return
-    elif mw_input == 10:
+    elif jh_input == 10:
         os.system(INIT_CMD + " default")
-    elif mw_input == 11:
-        input_pwd = mw_input_cmd("请输入新的面板密码：")
+    elif jh_input == 11:
+        input_pwd = jh_input_cmd("请输入新的面板密码：")
         if len(input_pwd.strip()) < 5:
             print("|-错误，密码长度不能小于5位")
             return
         set_panel_pwd(input_pwd.strip(), True)
-    elif mw_input == 12:
-        input_user = mw_input_cmd("请输入新的面板用户名(>=5位)：")
+    elif jh_input == 12:
+        input_user = jh_input_cmd("请输入新的面板用户名(>=5位)：")
         set_panel_username(input_user.strip())
-    elif mw_input == 13:
+    elif jh_input == 13:
         os.system('tail -100 ' + jh.getRunDir() + '/logs/error.log')
-    elif mw_input == 20:
+    elif jh_input == 20:
         basic_auth = 'data/basic_auth.json'
         if os.path.exists(basic_auth):
             os.remove(basic_auth)
             os.system(INIT_CMD + " restart")
             print("|-关闭basic_auth成功")
-    elif mw_input == 21:
+    elif jh_input == 21:
         bind_domain = 'data/bind_domain.pl'
         if os.path.exists(bind_domain):
             os.remove(bind_domain)
@@ -212,18 +212,6 @@ def getLocalIp():
 def getPanelIp():
     print(jh.getLocalIpBack())
 
-def getStandbyIp():
-    standby_ip = ""
-    try:
-        slave_ssh_list_result = jh.execShell("python3 /www/server/jh-monitor/plugins/mysql-apt/index.py get_slave_ssh_list {page:1,page_size:5,tojs:getSlaveSSHPage}")
-        slave_ssh_list_result = json.loads(slave_ssh_list_result[0])
-        slave_ssh_list = slave_ssh_list_result.get("data")
-        if len(slave_ssh_list) > 0:
-            standby_ip = slave_ssh_list[0].get("ip")
-    except:
-        standby_ip = ""
-    print(standby_ip)
-
 if __name__ == "__main__":
     method = sys.argv[1]
     confirm = True if len(sys.argv) > 3 and sys.argv[3] == '-y' else False
@@ -242,8 +230,6 @@ if __name__ == "__main__":
         getLocalIp()
     elif method == 'getPanelIp':
         getPanelIp()
-    elif method == 'getStandbyIp':
-        getStandbyIp()
     elif method == "cli":
         clinum = 0
         try:
@@ -251,6 +237,6 @@ if __name__ == "__main__":
                 clinum = int(sys.argv[2]) if sys.argv[2][:6] else sys.argv[2]
         except:
             clinum = sys.argv[2]
-        mwcli(clinum, confirm)
+        jhcli(clinum, confirm)
     else:
         print('ERROR: Parameter error')

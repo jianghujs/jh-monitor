@@ -38,7 +38,7 @@ import datetime
 crontabApi = crontab_api.crontab_api()
 
 
-def mw_async(f):
+def jh_async(f):
     def wrapper(*args, **kwargs):
         thr = Thread(target=f, args=args, kwargs=kwargs)
         thr.start()
@@ -138,7 +138,7 @@ class system_api:
         jh.writeFile('data/' + pl, 'True')
         return True
 
-    @mw_async
+    @jh_async
     def restartServer(self):
         if not jh.isRestart():
             return jh.returnJson(False, '请等待所有安装任务完成再执行!')
@@ -737,10 +737,10 @@ class system_api:
 
                 newUrl = "https://github.com/jianghujs/jh-monitor/archive/refs/tags/" + version + ".zip"
 
-                dist_mw = toPath + '/jh.zip'
-                if not os.path.exists(dist_mw):
+                dist_jh = toPath + '/jh.zip'
+                if not os.path.exists(dist_jh):
                     jh.execShell(
-                        'wget --no-check-certificate -O ' + dist_mw + ' ' + newUrl)
+                        'wget --no-check-certificate -O ' + dist_jh + ' ' + newUrl)
 
                 dist_to = toPath + "/jh-monitor-" + version
                 if not os.path.exists(dist_to):

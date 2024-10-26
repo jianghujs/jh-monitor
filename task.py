@@ -65,14 +65,14 @@ def service_cmd(method):
         return
 
 
-def mw_async(f):
+def jh_async(f):
     def wrapper(*args, **kwargs):
         thr = threading.Thread(target=f, args=args, kwargs=kwargs)
         thr.start()
     return wrapper
 
 
-@mw_async
+@jh_async
 def restartMw():
     time.sleep(1)
     cmd = jh.getRunDir() + '/scripts/init.d/jhm reload &'

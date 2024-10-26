@@ -303,10 +303,10 @@ class files_api:
             try:
                 tmp = {}
                 fname = rPath + file
-                tmp1 = file.split('_mw_')
+                tmp1 = file.split('_jh_')
                 tmp2 = tmp1[len(tmp1) - 1].split('_t_')
                 tmp['rname'] = file
-                tmp['dname'] = file.replace('_mw_', '/').split('_t_')[0]
+                tmp['dname'] = file.replace('_jh_', '/').split('_t_')[0]
                 tmp['name'] = tmp2[0]
                 tmp['time'] = int(float(tmp2[1]))
                 if os.path.islink(fname):
@@ -344,7 +344,7 @@ class files_api:
     def reRecycleBinApi(self):
         rPath = self.rPath
         path = request.form.get('path', '')
-        dFile = path.replace('_mw_', '/').split('_t_')[0]
+        dFile = path.replace('_jh_', '/').split('_t_')[0]
         try:
             import shutil
             shutil.move(rPath + path, dFile)
@@ -372,7 +372,7 @@ class files_api:
         else:
             os.remove(rPath + path)
 
-        tfile = path.replace('_mw_', '/').split('_t_')[0]
+        tfile = path.replace('_jh_', '/').split('_t_')[0]
         msg = jh.getInfo('已彻底从回收站删除{1}!', (tfile,))
         jh.writeLog('文件管理', msg)
         return jh.returnJson(True, msg)
@@ -681,7 +681,7 @@ class files_api:
         if not os.path.exists(rPath):
             os.system('mkdir -p ' + rPath)
 
-        rFile = rPath + path.replace('/', '_mw_') + '_t_' + str(time.time())
+        rFile = rPath + path.replace('/', '_jh_') + '_t_' + str(time.time())
         try:
             import shutil
             shutil.move(path, rFile)

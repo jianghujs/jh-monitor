@@ -5,18 +5,18 @@
  * date 2022-11-28
  * author midoks
  */
-class mwApi {
+class jhApi {
     private $MW_KEY   = "j7GQhzNcBV4KU9QKYPXvtjSzCcmfkc0e"; //接口密钥
     private $MW_PANEL = "http://127.0.0.1:7200"; //面板地址
 
     //如果希望多台面板，可以在实例化对象时，将面板地址与密钥传入
-    public function __construct($mw_panel = null, $mw_key = null) {
-        if ($mw_panel) {
-            $this->MW_PANEL = $mw_panel;
+    public function __construct($jh_panel = null, $jh_key = null) {
+        if ($jh_panel) {
+            $this->MW_PANEL = $jh_panel;
         }
 
-        if ($mw_key) {
-            $this->MW_KEY = $mw_key;
+        if ($jh_key) {
+            $this->MW_KEY = $jh_key;
         }
     }
 
@@ -83,7 +83,7 @@ class mwApi {
 }
 
 //实例化对象
-$api = new mwApi();
+$api = new jhApi();
 //获取面板日志
 $rdata = $api->getLogsList();
 

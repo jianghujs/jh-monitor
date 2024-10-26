@@ -624,7 +624,7 @@ echo "--------------------------------------------------------------------------
             jh.execShell('mkdir -p ' + cronPath)
 
         if not 'echo' in param:
-            cronName = jh.md5(jh.md5(str(time.time()) + '_mw'))
+            cronName = jh.md5(jh.md5(str(time.time()) + '_jh'))
         else:
             cronName = param['echo']
         file = cronPath + '/' + cronName
