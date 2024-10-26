@@ -41,7 +41,7 @@ cache.init_app(app, config={'CACHE_TYPE': 'simple'})
 
 try:
     from flask_sqlalchemy import SQLAlchemy
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/jh_session.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/jhm_session.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
     app.config['SESSION_TYPE'] = 'sqlalchemy'
     app.config['SESSION_SQLALCHEMY'] = sdb
@@ -50,7 +50,7 @@ try:
     sdb.create_all()
 except:
     app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['SESSION_FILE_DIR'] = '/tmp/py_jh_session_' + \
+    app.config['SESSION_FILE_DIR'] = '/tmp/py_jhm_session_' + \
         str(sys.version_info[0])
     app.config['SESSION_FILE_THRESHOLD'] = 1024
     app.config['SESSION_FILE_MODE'] = 384
@@ -59,8 +59,8 @@ except:
 app.secret_key = uuid.UUID(int=uuid.getnode()).hex[-12:]
 app.config['SESSION_PERMANENT'] = True
 app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_KEY_PREFIX'] = 'MW_:'
-app.config['SESSION_COOKIE_NAME'] = "MW_VER_1"
+app.config['SESSION_KEY_PREFIX'] = 'JHM_:'
+app.config['SESSION_COOKIE_NAME'] = "JHM_VER_1"
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 # Session(app)
 

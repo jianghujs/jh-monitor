@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------------
 # 江湖面板
 # ---------------------------------------------------------------------------------
-# copyright (c) 2018-∞(https://github.com/jianghujs/jh-panel) All rights reserved.
+# copyright (c) 2018-∞(https://github.com/jianghujs/jh-monitor) All rights reserved.
 # ---------------------------------------------------------------------------------
 # Author: midoks <midoks@163.com>
 # ---------------------------------------------------------------------------------
@@ -24,8 +24,8 @@ import os
 import sys
 import argparse
 
-if os.path.exists('/www/server/jh-panel'):
-    os.chdir('/www/server/jh-panel')
+if os.path.exists('/www/server/jh-monitor'):
+    os.chdir('/www/server/jh-monitor')
 
 import jh
 
@@ -1047,7 +1047,7 @@ fi
     # 替换服务器上的同域名同品牌证书
     def subAllCert(self, key_file, pem_file):
         cert_init = self.getCertInit(pem_file)  # 获取新证书的基本信息
-        paths = ['/www/server/jh-panel/data/letsencrypt']
+        paths = ['/www/server/jh-monitor/data/letsencrypt']
         is_panel = False
         for path in paths:
             if not os.path.exists(path):
@@ -1703,9 +1703,9 @@ fullchain.pem       粘贴到证书输入框
 // create
 python3 class/core/cert_api.py --domain=dev38.cachecha.com --type=http --path=/www/wwwroot/dev38.cachecha.com
 // renew
-cd /www/server/jh-panel && python3 class/core/cert_api.py --renew=1 --index=46c558aa1fae96facf36ac7df8eb4750
+cd /www/server/jh-monitor && python3 class/core/cert_api.py --renew=1 --index=46c558aa1fae96facf36ac7df8eb4750
 // revoke
-cd /www/server/jh-panel && python3 class/core/cert_api.py --revoke=1 --index=370423ed29481b2caf22e36d90a6894a
+cd /www/server/jh-monitor && python3 class/core/cert_api.py --revoke=1 --index=370423ed29481b2caf22e36d90a6894a
 
 
 
