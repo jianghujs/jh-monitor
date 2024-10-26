@@ -28,10 +28,6 @@ fi
 
 # 创建www目录
 mkdir -p /www/server
-mkdir -p /www/wwwroot
-mkdir -p /www/wwwlogs
-mkdir -p /www/backup/database
-mkdir -p /www/backup/site
 
 # git clone jh-monitor from github
 echo "git clone https://github.com/jianghujs/jh-monitor /www/server/jh-monitor"

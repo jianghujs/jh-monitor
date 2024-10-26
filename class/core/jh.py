@@ -1913,7 +1913,7 @@ def tgbotNotifyHttpPost(app_token, chat_id, msg):
 
 
 def tgbotNotifyTest(app_token, chat_id):
-    msg = 'MW-通知验证测试OK'
+    msg = 'JH-通知验证测试OK'
     return tgbotNotifyHttpPost(app_token, chat_id, msg)
 
 

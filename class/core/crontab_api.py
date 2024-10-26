@@ -17,7 +17,7 @@ import psutil
 import time
 import os
 import sys
-import mw
+import jh
 import re
 import json
 import pwd
@@ -35,7 +35,7 @@ class crontab_api:
     ##### ----- start ----- ###
     def listApi(self):
         # TODO 兼容旧版本，检查并添加saveAllDay,saveOther,saveMaxDay字段
-        crontab_db = mw.M('crontab')
+        crontab_db = jh.M('crontab')
         crontab_columns = crontab_db.originExecute("PRAGMA table_info(crontab)").fetchall()
         saveAllDay_exists = any(column[1] == 'saveAllDay' for column in crontab_columns)
         if not saveAllDay_exists:
@@ -53,7 +53,7 @@ class crontab_api:
         startPage = (int(p) - 1) * psize
         pageInfo = str(startPage) + ',' + str(psize)
 
-        _list = mw.M('crontab').where('', ()).field(
+        _list = jh.M('crontab').where('', ()).field(
             self.field).limit(pageInfo).order('id desc').select()
 
         data = []
@@ -61,65 +61,65 @@ class crontab_api:
             tmp = _list[i]
             if _list[i].get('type', None) == "day":
                 tmp['type'] = '每天'
-                tmp['cycle'] = mw.getInfo('每天, {1}点{2}分 执行', (str(
+                tmp['cycle'] = jh.getInfo('每天, {1}点{2}分 执行', (str(
                     _list[i]['where_hour']), str(_list[i]['where_minute'])))
             elif _list[i].get('type', None) == "day-n":
-                tmp['type'] = mw.getInfo(
+                tmp['type'] = jh.getInfo(
                     '每{1}天', (str(_list[i]['where1']),))
-                tmp['cycle'] = mw.getInfo('每隔{1}天, {2}点{3}分 执行',  (str(
+                tmp['cycle'] = jh.getInfo('每隔{1}天, {2}点{3}分 执行',  (str(
                     _list[i]['where1']), str(_list[i]['where_hour']), str(_list[i]['where_minute'])))
             elif _list[i].get('type', None) == "hour":
                 tmp['type'] = '每小时'
-                tmp['cycle'] = mw.getInfo(
+                tmp['cycle'] = jh.getInfo(
                     '每小时, 第{1}分钟 执行', (str(_list[i]['where_minute']),))
             elif _list[i].get('type', None) == "hour-n":
-                tmp['type'] = mw.getInfo(
+                tmp['type'] = jh.getInfo(
                     '每{1}小时', (str(_list[i]['where1']),))
-                tmp['cycle'] = mw.getInfo('每{1}小时, 第{2}分钟 执行', (str(
+                tmp['cycle'] = jh.getInfo('每{1}小时, 第{2}分钟 执行', (str(
                     _list[i]['where1']), str(_list[i]['where_minute'])))
             elif _list[i].get('type', None) == "minute-n":
-                tmp['type'] = mw.getInfo(
+                tmp['type'] = jh.getInfo(
                     '每{1}分钟', (str(_list[i]['where1']),))
-                tmp['cycle'] = mw.getInfo(
+                tmp['cycle'] = jh.getInfo(
                     '每隔{1}分钟执行', (str(_list[i]['where1']),))
             elif _list[i].get('type', None) == "week":
                 tmp['type'] = '每周'
                 if not _list[i]['where1']:
                     _list[i]['where1'] = '0'
-                tmp['cycle'] = mw.getInfo('每周{1}, {2}点{3}分执行', (self.toWeek(int(
+                tmp['cycle'] = jh.getInfo('每周{1}, {2}点{3}分执行', (self.toWeek(int(
                     _list[i]['where1'])), str(_list[i]['where_hour']), str(_list[i]['where_minute'])))
             elif _list[i].get('type', None) == "month":
                 tmp['type'] = '每月'
-                tmp['cycle'] = mw.getInfo('每月, {1}日 {2}点{3}分执行', (str(_list[i]['where1']), str(
+                tmp['cycle'] = jh.getInfo('每月, {1}日 {2}点{3}分执行', (str(_list[i]['where1']), str(
                     _list[i]['where_hour']), str(_list[i]['where_minute'])))
             data.append(tmp)
 
         rdata = {}
         rdata['data'] = data
 
-        count = mw.M('crontab').where('', ()).count()
+        count = jh.M('crontab').where('', ()).count()
         _page = {}
         _page['count'] = count
         _page['p'] = p
         _page['row'] = psize
         _page['tojs'] = "getCronData"
 
-        rdata['list'] = mw.getPage(_page)
+        rdata['list'] = jh.getPage(_page)
         rdata['p'] = p
 
         # backup hock
-        bh_file = mw.getPanelDataDir() + "/hook_backup.json"
+        bh_file = jh.getPanelDataDir() + "/hook_backup.json"
         if os.path.exists(bh_file):
-            hb_data = mw.readFile(bh_file)
+            hb_data = jh.readFile(bh_file)
             hb_data = json.loads(hb_data)
             rdata['backup_hook'] = hb_data
 
-        return mw.getJson(rdata)
+        return jh.getJson(rdata)
 
     # 设置计划任务状态
     def setCronStatusApi(self):
         mid = request.form.get('id', '')
-        cronInfo = mw.M('crontab').where(
+        cronInfo = jh.M('crontab').where(
             'id=?', (mid,)).field(self.field).find()
         status = 1
         if cronInfo['status'] == status:
@@ -129,17 +129,17 @@ class crontab_api:
             cronInfo['status'] = 1
             self.syncToCrond(cronInfo)
 
-        mw.M('crontab').where('id=?', (mid,)).setField('status', status)
-        mw.writeLog(
+        jh.M('crontab').where('id=?', (mid,)).setField('status', status)
+        jh.writeLog(
             '计划任务', '修改计划任务[' + cronInfo['name'] + ']状态为[' + str(status) + ']')
-        return mw.returnJson(True, '设置成功')
+        return jh.returnJson(True, '设置成功')
 
     # 获取指定任务数据
     def getCrondFindApi(self):
         sid = request.form.get('id', '')
-        data = mw.M('crontab').where(
+        data = jh.M('crontab').where(
             'id=?', (sid,)).field(self.field).find()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     # 参数校验
     def cronCheck(self, params):
@@ -216,7 +216,7 @@ class crontab_api:
           sbody = dumpType
 
         if len(iname) < 1:
-            return mw.returnJson(False, '任务名称不能为空!')
+            return jh.returnJson(False, '任务名称不能为空!')
 
         params = {
             'name': iname,
@@ -238,11 +238,11 @@ class crontab_api:
 
         is_check_pass, msg = self.cronCheck(params)
         if not is_check_pass:
-            return mw.returnJson(is_check_pass, msg)
+            return jh.returnJson(is_check_pass, msg)
 
         cuonConfig, get, name = self.getCrondCycle(params)
         print(str(get))
-        cronInfo = mw.M('crontab').where(
+        cronInfo = jh.M('crontab').where(
             'id=?', (sid,)).field(self.field).find()
         del(cronInfo['id'])
         del(cronInfo['addtime'])
@@ -259,21 +259,21 @@ class crontab_api:
         cronInfo['urladdress'] = get['urladdress']
         cronInfo['dumpType'] = get['dumpType']
 
-        addData = mw.M('crontab').where('id=?', (sid,)).save('name,type,where1,where_hour,where_minute,saveAllDay,saveOther,saveMaxDay,backup_to,sbody,urladdress', (get[
+        addData = jh.M('crontab').where('id=?', (sid,)).save('name,type,where1,where_hour,where_minute,saveAllDay,saveOther,saveMaxDay,backup_to,sbody,urladdress', (get[
             'name'], field_type, get['where1'], get['hour'], get['minute'], get['saveAllDay'], get['saveOther'], get['saveMaxDay'], get['backup_to'], get['sbody'], get['urladdress']))
         self.removeCrond(cronInfo['echo'])
         self.syncToCrond(cronInfo)
-        mw.writeLog('计划任务', '修改计划任务[' + cronInfo['name'] + ']成功')
-        return mw.returnJson(True, '修改成功')
+        jh.writeLog('计划任务', '修改计划任务[' + cronInfo['name'] + ']成功')
+        return jh.returnJson(True, '修改成功')
 
     def logsApi(self):
         sid = request.form.get('id', '')
-        echo = mw.M('crontab').where("id=?", (sid,)).field('echo').find()
-        logFile = mw.getCronDir() + '/' + echo['echo'] + '.log'
+        echo = jh.M('crontab').where("id=?", (sid,)).field('echo').find()
+        logFile = jh.getCronDir() + '/' + echo['echo'] + '.log'
         if not os.path.exists(logFile):
-            return mw.returnJson(False, '当前日志为空!')
-        log = mw.getLastLine(logFile, 500)
-        return mw.returnJson(True, log)
+            return jh.returnJson(False, '当前日志为空!')
+        log = jh.getLastLine(logFile, 500)
+        return jh.returnJson(True, log)
 
     def addApi(self):
         iname = request.form.get('name', '')
@@ -293,7 +293,7 @@ class crontab_api:
         urladdress = request.form.get('urladdress', '')
 
         if len(iname) < 1:
-            return mw.returnJson(False, '任务名称不能为空!')
+            return jh.returnJson(False, '任务名称不能为空!')
 
         params = {
             'name': iname,
@@ -315,12 +315,12 @@ class crontab_api:
 
         is_check_pass, msg = self.cronCheck(params)
         if not is_check_pass:
-            return mw.returnJson(is_check_pass, msg)
+            return jh.returnJson(is_check_pass, msg)
 
         addData = self.add(params)
         if addData > 0:
-            return mw.returnJson(True, '添加计划任务成功')
-        return mw.returnJson(False, '添加计划任务失败')
+            return jh.returnJson(True, '添加计划任务成功')
+        return jh.returnJson(False, '添加计划任务失败')
 
     def add(self, params):
 
@@ -344,7 +344,7 @@ class crontab_api:
 
         # print params
         cronConfig, get, name = self.getCrondCycle(params)
-        cronPath = mw.getCronDir()
+        cronPath = jh.getCronDir()
         cronName = self.getShell(params)
 
         if type(cronName) == dict:
@@ -354,49 +354,49 @@ class crontab_api:
             ' >> ' + cronPath + '/' + cronName + '.log 2>&1'
         
         # print(cronConfig)
-        if not mw.isAppleSystem():
+        if not jh.isAppleSystem():
             wRes = self.writeCrond(cronConfig)
             if type(wRes) != bool:
                 return wRes
             self.crondReload()
 
         add_time = time.strftime('%Y-%m-%d %X', time.localtime())
-        task_id = mw.M('crontab').add('name,type,where1,where_hour,where_minute,echo,addtime,status,saveAllDay,saveOther,saveMaxDay,backup_to,stype,sname,sbody,urladdress',
+        task_id = jh.M('crontab').add('name,type,where1,where_hour,where_minute,echo,addtime,status,saveAllDay,saveOther,saveMaxDay,backup_to,stype,sname,sbody,urladdress',
                                       (iname, field_type, where1, hour, minute, cronName, add_time, 1, saveAllDay, saveOther, saveMaxDay, backup_to, stype, sname, sbody, urladdress,))
         return task_id
 
     def getApi(self):
         name = request.form.get('name', '')
-        cronInfo = mw.M('crontab').where(
+        cronInfo = jh.M('crontab').where(
             'name=?', (name,)).field(self.field).find()
         if cronInfo:
-            return mw.returnJson(True, '成功!', cronInfo)
-        return mw.returnJson(False, name + ' 不存在')    
+            return jh.returnJson(True, '成功!', cronInfo)
+        return jh.returnJson(False, name + ' 不存在')    
 
     def getCrontab(self, name):
-        return mw.M('crontab').where('name=?', (name,)).field(self.field).find()
+        return jh.M('crontab').where('name=?', (name,)).field(self.field).find()
         
     def startTaskApi(self):
         sid = request.form.get('id', '')
-        echo = mw.M('crontab').where('id=?', (sid,)).getField('echo')
-        execstr = mw.getCronDir() + '/' + echo
+        echo = jh.M('crontab').where('id=?', (sid,)).getField('echo')
+        execstr = jh.getCronDir() + '/' + echo
         os.system('chmod +x ' + execstr)
         os.system('export IGNORE_STOPPED=1\nnohup ' + execstr + ' >> ' + execstr + '.log 2>&1 &')
-        return mw.returnJson(True, '任务已执行!')
+        return jh.returnJson(True, '任务已执行!')
 
     def delApi(self):
         task_id = request.form.get('id', '')
         try:
             data = self.delete(task_id)
             if not data[0]:
-                return mw.returnJson(False, data[1])
-            return mw.returnJson(True, '删除计划任务成功')
+                return jh.returnJson(False, data[1])
+            return jh.returnJson(True, '删除计划任务成功')
         except Exception as e:
-            return mw.returnJson(False, '删除计划任务失败:' + str(e))
+            return jh.returnJson(False, '删除计划任务失败:' + str(e))
 
     def delete(self, tid):
 
-        find = mw.M('crontab').where("id=?", (tid,)).field('name,echo').find()
+        find = jh.M('crontab').where("id=?", (tid,)).field('name,echo').find()
 
         if len(find) == 0:
             return (False, '任务不存在!')
@@ -404,7 +404,7 @@ class crontab_api:
         if not self.removeCrond(find['echo']):
             return (False, '无法写入文件，请检查是否开启了系统加固功能!')
 
-        cronPath = mw.getCronDir()
+        cronPath = jh.getCronDir()
         sfile = cronPath + '/' + find['echo']
 
         if os.path.exists(sfile):
@@ -413,19 +413,19 @@ class crontab_api:
         if os.path.exists(sfile):
             os.remove(sfile)
 
-        mw.M('crontab').where("id=?", (tid,)).delete()
-        mw.writeLog('计划任务', mw.getInfo('删除计划任务[{1}]成功!', (find['name'],)))
+        jh.M('crontab').where("id=?", (tid,)).delete()
+        jh.writeLog('计划任务', jh.getInfo('删除计划任务[{1}]成功!', (find['name'],)))
         return (True, "OK")
 
     def delLogsApi(self):
         sid = request.form.get('id', '')
         try:
-            echo = mw.M('crontab').where("id=?", (sid,)).getField('echo')
-            logFile = mw.getCronDir() + '/' + echo + '.log'
+            echo = jh.M('crontab').where("id=?", (sid,)).getField('echo')
+            logFile = jh.getCronDir() + '/' + echo + '.log'
             os.remove(logFile)
-            return mw.returnJson(True, '任务日志已清空!')
+            return jh.returnJson(True, '任务日志已清空!')
         except:
-            return mw.returnJson(False, '任务日志清空失败!')
+            return jh.returnJson(False, '任务日志清空失败!')
 
     # 取数据列表
     def getDataListApi(self):
@@ -439,17 +439,17 @@ class crontab_api:
         
         # bak_data获取
         if stype == 'sites' or stype == 'databases':
-            hookPath = mw.getPanelDataDir() + "/hook_backup.json"
+            hookPath = jh.getPanelDataDir() + "/hook_backup.json"
             if os.path.exists(hookPath):
-                t = mw.readFile(hookPath)
+                t = jh.readFile(hookPath)
                 bak_data = json.loads(t)
         
         # data获取
         if stype == 'sites' or stype == 'siteSetting' or stype == 'logs': 
-            data['data'] = mw.M('sites').field('name,ps').select()
+            data['data'] = jh.M('sites').field('name,ps').select()
 
         if stype == 'pluginSetting':
-            data['data'] = mw.getBackupPluginList()
+            data['data'] = jh.getBackupPluginList()
 
         if stype == 'databases':
             db_list = {}
@@ -457,9 +457,9 @@ class crontab_api:
 
             # 获取的mysql目录
             path = ''
-            if os.path.exists(mw.getServerDir() + '/mysql-apt'):
+            if os.path.exists(jh.getServerDir() + '/mysql-apt'):
                 path = '/www/server/mysql-apt'
-            elif os.path.exists(mw.getServerDir() + '/mysql'):
+            elif os.path.exists(jh.getServerDir() + '/mysql'):
                 path = '/www/server/mysql'
             else:
                 print('未检测到安装的mysql插件')
@@ -467,13 +467,13 @@ class crontab_api:
             if not os.path.exists(path + '/mysql.db'):
                 db_list['data'] = []
             else:
-                db_list['data'] = mw.M('databases').dbPos(
+                db_list['data'] = jh.M('databases').dbPos(
                     path, 'mysql').field('name,ps').select()
                 
-            return mw.getJson(db_list)
+            return jh.getJson(db_list)
 
         data['orderOpt'] = bak_data
-        return mw.getJson(data)
+        return jh.getJson(data)
     ##### ----- start ----- ###
 
     # 转换大写星期
@@ -500,7 +500,7 @@ class crontab_api:
             name = '每天'
         elif params['type'] == "day-n":
             cuonConfig = self.getDay_N(params)
-            name = mw.getInfo('每{1}天', (params['where1'],))
+            name = jh.getInfo('每{1}天', (params['where1'],))
         elif params['type'] == "hour":
             cuonConfig = self.getHour(params)
             name = '每小时'
@@ -570,12 +570,12 @@ MW_PATH=%s/bin/activate
 if [ -f $MW_PATH ];then
     source $MW_PATH
 fi
-            ''' % (mw.getRunDir(),)
+            ''' % (jh.getRunDir(),)
 
             head = head + source_bin_activate + "\n"
             log = '.log'
 
-            script_dir = mw.getServerDir() + "/jh-monitor/scripts"
+            script_dir = jh.getServerDir() + "/jh-monitor/scripts"
 
             save = json.dumps({
                 "saveAllDay": param.get('saveAllDay', ''),
@@ -593,7 +593,7 @@ fi
                 'rememory': head + "/bin/bash " + script_dir + '/rememory.sh'
             }
             if param['backup_to'] != 'localhost':
-                cfile = mw.getPluginDir() + "/" + \
+                cfile = jh.getPluginDir() + "/" + \
                     param['backup_to'] + "/index.py"
                 wheres = {
                     'path': head + "python3 " + cfile + " path " + param['sname'] + " '" + str(save) + "'",
@@ -619,12 +619,12 @@ endDate=`date +"%Y-%m-%d %H:%M:%S"`
 echo "★[$endDate] Successful"
 echo "----------------------------------------------------------------------------"
 '''
-        cronPath = mw.getCronDir()
+        cronPath = jh.getCronDir()
         if not os.path.exists(cronPath):
-            mw.execShell('mkdir -p ' + cronPath)
+            jh.execShell('mkdir -p ' + cronPath)
 
         if not 'echo' in param:
-            cronName = mw.md5(mw.md5(str(time.time()) + '_mw'))
+            cronName = jh.md5(jh.md5(str(time.time()) + '_mw'))
         else:
             cronName = param['echo']
         file = cronPath + '/' + cronName
@@ -637,8 +637,8 @@ if [ -z "$IGNORE_STOPPED" ] && [ -f {file + '_stopped'} ];then
 fi
         """ + shell 
 
-        mw.writeFile(file, self.checkScript(shell))
-        mw.execShell('chmod 750 ' + file)
+        jh.writeFile(file, self.checkScript(shell))
+        jh.execShell('chmod 750 ' + file)
         return cronName
 
     # 检查脚本
@@ -655,46 +655,46 @@ fi
         if not os.path.exists(u_file):
             # file = '/var/spool/cron/root'
             file = '/var/spool/cron/crontabs/root' # 20230715 如果在debian上，/var/spool/cron/crontabs/root被删掉了，会写到错误的目录，暂时改成同一个文件
-            if mw.isAppleSystem():
+            if jh.isAppleSystem():
                 file = '/etc/crontab'
         else:
             file = u_file
 
         if not os.path.exists(file):
-            mw.writeFile(file, '')
-        conf = mw.readFile(file)
+            jh.writeFile(file, '')
+        conf = jh.readFile(file)
         conf += str(config) + "\n"
-        if mw.writeFile(file, conf):
+        if jh.writeFile(file, conf):
             if not os.path.exists(u_file):
-                mw.execShell("chmod 600 '" + file +
+                jh.execShell("chmod 600 '" + file +
                              "' && chown root.root " + file)
             else:
-                mw.execShell("chmod 600 '" + file +
+                jh.execShell("chmod 600 '" + file +
                              "' && chown root.crontab " + file)
             return True
-        return mw.returnJson(False, '文件写入失败,请检查是否开启系统加固功能!')
+        return jh.returnJson(False, '文件写入失败,请检查是否开启系统加固功能!')
 
     # 重载配置
     def crondReload(self):
-        if mw.isAppleSystem():
+        if jh.isAppleSystem():
             if os.path.exists('/etc/crontab'):
                 pass
-                # mw.execShell('/usr/sbin/cron restart')
+                # jh.execShell('/usr/sbin/cron restart')
         else:
             if os.path.exists('/etc/init.d/crond'):
-                mw.execShell('/etc/init.d/crond reload')
+                jh.execShell('/etc/init.d/crond reload')
             elif os.path.exists('/etc/init.d/cron'):
-                mw.execShell('systemctl reset-failed')
-                mw.execShell('service cron restart')
+                jh.execShell('systemctl reset-failed')
+                jh.execShell('service cron restart')
             else:
-                mw.execShell("systemctl reload crond")
+                jh.execShell("systemctl reload crond")
 
     # 从crond删除
     def removeCrond(self, echo):
         u_file = '/var/spool/cron/crontabs/root'
         if not os.path.exists(u_file):
             file = '/var/spool/cron/root'
-            if mw.isAppleSystem():
+            if jh.isAppleSystem():
                 file = '/etc/crontab'
 
             if not os.path.exists(file):
@@ -702,18 +702,18 @@ fi
         else:
             file = u_file
 
-        if mw.isAppleSystem():
+        if jh.isAppleSystem():
             return True
 
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         rep = ".+" + str(echo) + ".+\n"
         conf = re.sub(rep, "", conf)
-        if not mw.writeFile(file, conf):
+        if not jh.writeFile(file, conf):
             return False
         self.crondReload()
         # 在目录下增加标识文件
-        statusPath = mw.getCronDir() + '/' + str(echo) + '_stopped'
-        mw.execShell('echo "" > ' + statusPath)
+        statusPath = jh.getCronDir() + '/' + str(echo) + '_stopped'
+        jh.execShell('echo "" > ' + statusPath)
         return True
 
     def syncToCrond(self, cronInfo):
@@ -722,7 +722,7 @@ fi
             cronInfo['minute'] = cronInfo['where_minute']
             cronInfo['week'] = cronInfo['where1']
         cuonConfig, cronInfo, name = self.getCrondCycle(cronInfo)
-        cronPath = mw.getCronDir()
+        cronPath = jh.getCronDir()
         cronName = self.getShell(cronInfo)
         if type(cronName) == dict:
             return cronName
@@ -734,10 +734,10 @@ fi
         if cronInfo.get('status', 1) == 0:
             # 在目录下增加标识文件
             statusPath = cronPath + '/' + str(cronName) + '_stopped'
-            mw.execShell('echo "" > ' + statusPath)
+            jh.execShell('echo "" > ' + statusPath)
             return False
         else:
             # 清除stopped文件
             statusPath = cronPath + '/' + str(cronName) + '_stopped'
-            mw.execShell('rm ' + statusPath)
+            jh.execShell('rm ' + statusPath)
         self.crondReload()

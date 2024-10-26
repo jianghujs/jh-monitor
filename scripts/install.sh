@@ -55,28 +55,27 @@ fi
 cd /www/server/jh-monitor && bash cli.sh start
 isStart=`ps -ef|grep 'gunicorn -c setting.py app:app' |grep -v grep|awk '{print $2}'`
 n=0
-while [ ! -f /etc/rc.d/init.d/mw ];
+while [ ! -f /etc/rc.d/init.d/jhm ];
 do
     echo -e ".\c"
     sleep 1
     let n+=1
     if [ $n -gt 20 ];then
-    	echo -e "start mw fail"
+    	echo -e "start jh fail"
     	exit 1
     fi
 done
 
 # 启动面板
-cd /www/server/jh-monitor && bash /etc/rc.d/init.d/mw stop
-cd /www/server/jh-monitor && bash /etc/rc.d/init.d/mw start
-cd /www/server/jh-monitor && bash /etc/rc.d/init.d/mw default
+cd /www/server/jh-monitor && bash /etc/rc.d/init.d/jhm stop
+cd /www/server/jh-monitor && bash /etc/rc.d/init.d/jhm start
+cd /www/server/jh-monitor && bash /etc/rc.d/init.d/jhm default
 
 sleep 2
-if [ ! -e /usr/bin/mw ]; then
-	if [ -f /etc/rc.d/init.d/mw ];then
+if [ ! -e /usr/bin/jhm ]; then
+	if [ -f /etc/rc.d/init.d/jhm ];then
     # 添加软连接
-		ln -s /etc/rc.d/init.d/mw /usr/bin/mw
-    ln -s /etc/rc.d/init.d/mw /usr/bin/jh
+		ln -s /etc/rc.d/init.d/jhm /usr/bin/jhm
 	fi
 fi
 

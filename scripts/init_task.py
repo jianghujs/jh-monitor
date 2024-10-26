@@ -20,7 +20,7 @@ sys.path.append(chdir + '/class/plugin')
 # sys.setdefaultencoding('utf-8')
 
 
-import mw
+import jh
 import common
 
 if __name__ == "__main__":

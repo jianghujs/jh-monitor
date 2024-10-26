@@ -26,13 +26,13 @@ if sys.version_info[0] == 2:
 
 
 sys.path.append(os.getcwd() + "/class/core")
-import mw
+import jh
 import db
 
 # print sys.path
 
 # cmd = 'ls /usr/local/lib/ | grep python  | cut -d \\  -f 1 | awk \'END {print}\''
-# info = mw.execShell(cmd)
+# info = jh.execShell(cmd)
 # p = "/usr/local/lib/" + info[0].strip() + "/site-packages"
 # sys.path.append(p)
 
@@ -54,12 +54,12 @@ if not os.path.exists(logPath):
 
 
 def service_cmd(method):
-    cmd = '/etc/init.d/mw'
+    cmd = '/etc/init.d/jhm'
     if os.path.exists(cmd):
         execShell(cmd + ' ' + method)
         return
 
-    cmd = mw.getRunDir() + '/scripts/init.d/mw'
+    cmd = jh.getRunDir() + '/scripts/init.d/jhm'
     if os.path.exists(cmd):
         execShell(cmd + ' ' + method)
         return
@@ -75,8 +75,8 @@ def mw_async(f):
 @mw_async
 def restartMw():
     time.sleep(1)
-    cmd = mw.getRunDir() + '/scripts/init.d/mw reload &'
-    mw.execShell(cmd)
+    cmd = jh.getRunDir() + '/scripts/init.d/jhm reload &'
+    jh.execShell(cmd)
 
 
 def execShell(cmdstring, cwd=None, timeout=None, shell=True):
@@ -102,10 +102,10 @@ def execShell(cmdstring, cwd=None, timeout=None, shell=True):
 
         if isinstance(data[1], bytes):
             t2 = str(data[1], encoding='utf-8')
-        # mw.writeFile('/root/1.txt', '执行成功:' + str(t1 + t2))
+        # jh.writeFile('/root/1.txt', '执行成功:' + str(t1 + t2))
         return True
     except Exception as e:
-        # mw.writeFile('/root/1.txt', '执行失败:' + str(e))
+        # jh.writeFile('/root/1.txt', '执行失败:' + str(e))
         return False
 
 
@@ -125,7 +125,7 @@ def downloadFile(url, filename):
         urllib.request.urlretrieve(
             url, filename=filename, reporthook=downloadHook)
 
-        if not mw.isAppleSystem():
+        if not jh.isAppleSystem():
             os.system('chown www.www ' + filename)
 
         writeLogs('done')
@@ -171,7 +171,7 @@ def runTask():
                 sql.table('tasks').where("id=?", (value['id'],)).save(
                     'status,start', ('-1', start))
                 if value['type'] == 'download':
-                    argv = value['execstr'].split('|mw|')
+                    argv = value['execstr'].split('|jh|')
                     downloadFile(argv[0], argv[1])
                 elif value['type'] == 'execshell':
                     execStatus = execShell(value['execstr'])
@@ -206,19 +206,19 @@ def siteEdate():
     global oldEdate
     try:
         if not oldEdate:
-            oldEdate = mw.readFile('data/edate.pl')
+            oldEdate = jh.readFile('data/edate.pl')
         if not oldEdate:
             oldEdate = '0000-00-00'
         mEdate = time.strftime('%Y-%m-%d', time.localtime())
         if oldEdate == mEdate:
             return False
-        edateSites = mw.M('sites').where('edate>? AND edate<? AND (status=? OR status=?)',
+        edateSites = jh.M('sites').where('edate>? AND edate<? AND (status=? OR status=?)',
                                          ('0000-00-00', mEdate, 1, '正在运行')).field('id,name').select()
         import site_api
         for site in edateSites:
             site_api.site_api().stop(site['id'], site['name'])
         oldEdate = mEdate
-        mw.writeFile('data/edate.pl', mEdate)
+        jh.writeFile('data/edate.pl', mEdate)
     except Exception as e:
         print(str(e))
 
@@ -232,7 +232,7 @@ def systemTask():
         filename = 'data/control.conf'
 
         sql = db.Sql().dbfile('system')
-        csql = mw.readFile('data/sql/system.sql')
+        csql = jh.readFile('data/sql/system.sql')
         csql_list = [sql.strip() for sql in csql.split(';') if sql.strip()]
         for index in range(len(csql_list)):
             sql.execute(csql_list[index], ())
@@ -250,7 +250,7 @@ def systemTask():
 
             day = 30
             try:
-                day = int(mw.readFile(filename))
+                day = int(jh.readFile(filename))
                 if day < 1:
                     time.sleep(10)
                     continue
@@ -321,7 +321,7 @@ def systemTask():
             # mysql
             mysqlInfo = sm.getMysqlInfo()
             # 报告
-            mw.generateMonitorReportAndNotify(cpuInfo, networkInfo, diskInfo, siteInfo, mysqlInfo)
+            jh.generateMonitorReportAndNotify(cpuInfo, networkInfo, diskInfo, siteInfo, mysqlInfo)
             
             # print diskInfo
             if count >= 12:
@@ -358,7 +358,7 @@ def systemTask():
 
                     # Database
                     mysql_write_lock_data_key = 'MySQL信息写入面板数据库任务'
-                    if not mw.checkLockValid(mysql_write_lock_data_key, 'day_start'):
+                    if not jh.checkLockValid(mysql_write_lock_data_key, 'day_start'):
                         mysqlInfo = sm.getMysqlInfo()
                         database_list = mysqlInfo.get('database_list', [])
                         sql.table('database').add('total_size,total_bytes,list,addtime', (
@@ -369,7 +369,7 @@ def systemTask():
                         ))
                         sql.table('database').where(
                             "addtime<?", (deltime,)).delete()
-                        mw.updateLockData(mysql_write_lock_data_key)
+                        jh.updateLockData(mysql_write_lock_data_key)
 
                     lpro = None
                     load_average = None
@@ -380,7 +380,7 @@ def systemTask():
                     reloadNum += 1
                     if reloadNum > 1440:
                         reloadNum = 0
-                        mw.writeFile('logs/sys_interrupt.pl',
+                        jh.writeFile('logs/sys_interrupt.pl',
                                      "reload num:" + str(reloadNum))
                         restartMw()
                 except Exception as ex:
@@ -390,7 +390,7 @@ def systemTask():
                     networkInfo = None
                     diskInfo = None
                     print(str(ex))
-                    mw.writeFile('logs/sys_interrupt.pl', str(ex))
+                    jh.writeFile('logs/sys_interrupt.pl', str(ex))
 
             del(tmp)
             time.sleep(5)
@@ -398,10 +398,10 @@ def systemTask():
     except Exception as ex:
         traceback.print_exc()
         print(str(ex))
-        mw.writeFile('logs/sys_interrupt.pl', str(ex))
+        jh.writeFile('logs/sys_interrupt.pl', str(ex))
         
-        notify_msg = mw.generateCommonNotifyMessage("服务器监控异常：" + str(ex))
-        mw.notifyMessage(title='服务器异常通知', msg=notify_msg, stype='服务器监控', trigger_time=3600)
+        notify_msg = jh.generateCommonNotifyMessage("服务器监控异常：" + str(ex))
+        jh.notifyMessage(title='服务器异常通知', msg=notify_msg, stype='服务器监控', trigger_time=3600)
 
         restartMw()
 
@@ -414,7 +414,7 @@ def systemTask():
 def check502Task():
     try:
         while True:
-            if os.path.exists(mw.getRunDir() + '/data/502Task.pl'):
+            if os.path.exists(jh.getRunDir() + '/data/502Task.pl'):
                 check502()
             time.sleep(30)
     except:
@@ -427,7 +427,7 @@ def check502():
         verlist = ['52', '53', '54', '55', '56', '70',
                    '71', '72', '73', '74', '80', '81', '82']
         for ver in verlist:
-            sdir = mw.getServerDir()
+            sdir = jh.getServerDir()
             php_path = sdir + '/php/' + ver + '/sbin/php-fpm'
             if not os.path.exists(php_path):
                 continue
@@ -435,20 +435,20 @@ def check502():
                 continue
             if startPHPVersion(ver):
                 print('检测到PHP-' + ver + '处理异常,已自动修复!')
-                mw.writeLog('PHP守护程序', '检测到PHP-' + ver + '处理异常,已自动修复!')
+                jh.writeLog('PHP守护程序', '检测到PHP-' + ver + '处理异常,已自动修复!')
     except Exception as e:
         print(str(e))
 
 
 # 处理指定PHP版本
 def startPHPVersion(version):
-    sdir = mw.getServerDir()
+    sdir = jh.getServerDir()
     try:
 
         # system
-        phpService = mw.systemdCfgDir() + '/php' + version + '.service'
+        phpService = jh.systemdCfgDir() + '/php' + version + '.service'
         if os.path.exists(phpService):
-            mw.execShell("systemctl restart php" + version)
+            jh.execShell("systemctl restart php" + version)
             if checkPHPVersion(version):
                 return True
 
@@ -471,7 +471,7 @@ def startPHPVersion(version):
         # 尝试重启服务
         cgi = '/tmp/php-cgi-' + version + '.sock'
         pid = sdir + '/php/' + version + '/var/run/php-fpm.pid'
-        data = mw.execShell("ps -ef | grep php/" + version +
+        data = jh.execShell("ps -ef | grep php/" + version +
                             " | grep -v grep|grep -v python |awk '{print $2}'")
         if data[0] != '':
             os.system("ps -ef | grep php/" + version +
@@ -494,7 +494,7 @@ def startPHPVersion(version):
 
 
 def getFpmConfFile(version):
-    return mw.getServerDir() + '/php/' + version + '/etc/php-fpm.d/www.conf'
+    return jh.getServerDir() + '/php/' + version + '/etc/php-fpm.d/www.conf'
 
 
 def getFpmAddress(version):
@@ -524,7 +524,7 @@ def checkPHPVersion(version):
     # 检查指定PHP版本
     try:
         sock = getFpmAddress(version)
-        data = mw.requestFcgiPHP(sock, '/phpfpm_status_' + version + '?json')
+        data = jh.requestFcgiPHP(sock, '/phpfpm_status_' + version + '?json')
         result = str(data, encoding='utf-8')
     except Exception as e:
         result = 'Bad Gateway'
@@ -540,12 +540,12 @@ def checkPHPVersion(version):
     if result.find('Connection refused') != -1:
         global isTask
         if os.path.exists(isTask):
-            isStatus = mw.readFile(isTask)
+            isStatus = jh.readFile(isTask)
             if isStatus == 'True':
                 return True
 
         # systemd
-        systemd = mw.systemdCfgDir() + '/openresty.service'
+        systemd = jh.systemdCfgDir() + '/openresty.service'
         if os.path.exists(systemd):
             execShell('systemctl reload openresty')
             return True
@@ -564,7 +564,7 @@ def openrestyAutoRestart():
     try:
         while True:
             # 检查是否安装
-            odir = mw.getServerDir() + '/openresty'
+            odir = jh.getServerDir() + '/openresty'
             if not os.path.exists(odir):
                 time.sleep(86400)
                 continue
@@ -634,7 +634,7 @@ def debounceCommandsService():
           command = debounce_commands_info.get('command', '')
           debounce_commands_to_remove.append(debounce_commands_info)
           if command:
-            mw.execShell(command)
+            jh.execShell(command)
       # 删除已经执行的命令
       for debounce_commands_info in debounce_commands_to_remove:
         debounce_commands_pool.remove(debounce_commands_info)

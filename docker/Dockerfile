@@ -21,10 +21,6 @@ RUN apt update -y && \
     export LANGUAGE=en_US.UTF-8 && \
     localedef -i en_US -f UTF-8 en_US.UTF-8 && \
     mkdir -p /www/server && \
-	mkdir -p /www/wwwroot && \
-	mkdir -p /www/wwwlogs && \
-	mkdir -p /www/backup/database && \
-	mkdir -p /www/backup/site && \
 	wget -O /tmp/dev.zip https://github.com/jianghujs/jh-monitor/archive/refs/heads/dev.zip && \
 	cd /tmp && unzip /tmp/dev.zip && \
 	mv -f /tmp/jh-monitor-dev /www/server/jh-monitor && \

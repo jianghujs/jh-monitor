@@ -193,7 +193,7 @@ $('#login-button').click(function(){
 		layer.close(loadT);
 		if(!rdata.status){
 			if(username == 'admin' && rdata.msg.indexOf('用户名') != -1){
-				rdata.msg += ', <br>获取默认用户和密码命令： mw default';
+				rdata.msg += ', <br>获取默认用户和密码命令： jh default';
 			}
 			$("#errorStr").html(rdata.msg);
 			$("input[name='password']").val('');

@@ -17,7 +17,7 @@ import psutil
 import time
 import os
 import sys
-import mw
+import jh
 import re
 import json
 import pwd
@@ -34,7 +34,7 @@ class files_api:
     rPath = None
 
     def __init__(self):
-        self.rPath = mw.getRootDir() + '/recycle_bin/'
+        self.rPath = jh.getRootDir() + '/recycle_bin/'
 
     ##### ----- start ----- ###
     def getBodyApi(self):
@@ -46,13 +46,13 @@ class files_api:
         line = request.form.get('line', '100')
 
         if not os.path.exists(path):
-            return mw.returnJson(False, '文件不存在', (path,))
+            return jh.returnJson(False, '文件不存在', (path,))
 
         try:
-            data = mw.getLastLine(path, int(line))
-            return mw.returnJson(True, 'OK', data)
+            data = jh.getLastLine(path, int(line))
+            return jh.returnJson(True, 'OK', data)
         except Exception as ex:
-            return mw.returnJson(False, '无法正确读取文件!' + str(ex))
+            return jh.returnJson(False, '无法正确读取文件!' + str(ex))
 
     def saveBodyApi(self):
         path = request.form.get('path', '')
@@ -87,21 +87,21 @@ class files_api:
         sfile = request.form.get('sfile', '')
         dfile = request.form.get('dfile', '')
         if not self.checkFileName(dfile):
-            return mw.returnJson(False, '文件名中不能包含特殊字符!')
+            return jh.returnJson(False, '文件名中不能包含特殊字符!')
         if not os.path.exists(sfile):
-            return mw.returnJson(False, '指定文件不存在!')
+            return jh.returnJson(False, '指定文件不存在!')
 
         if not self.checkDir(sfile):
-            return mw.returnJson(False, 'FILE_DANGER')
+            return jh.returnJson(False, 'FILE_DANGER')
 
         import shutil
         try:
             shutil.move(sfile, dfile)
-            msg = mw.getInfo('移动或重名命文件[{1}]到[{2}]成功!', (sfile, dfile,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '移动或重名命文件成功!')
+            msg = jh.getInfo('移动或重名命文件[{1}]到[{2}]成功!', (sfile, dfile,))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '移动或重名命文件成功!')
         except:
-            return mw.returnJson(False, '移动或重名命文件失败!')
+            return jh.returnJson(False, '移动或重名命文件失败!')
 
     def deleteApi(self):
         path = request.form.get('path', '')
@@ -110,12 +110,12 @@ class files_api:
     def fileAccessApi(self):
         filename = request.form.get('filename', '')
         data = self.getAccess(filename)
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def setFileAccessApi(self):
 
-        if mw.isAppleSystem():
-            return mw.returnJson(True, '开发机不设置!')
+        if jh.isAppleSystem():
+            return jh.returnJson(True, '开发机不设置!')
 
         filename = request.form.get('filename', '')
         user = request.form.get('user', '')
@@ -123,25 +123,25 @@ class files_api:
         sall = '-R'
         try:
             if not self.checkDir(filename):
-                return mw.returnJson(False, '请不要花样作死')
+                return jh.returnJson(False, '请不要花样作死')
 
             if not os.path.exists(filename):
-                return mw.returnJson(False, '指定文件不存在!')
+                return jh.returnJson(False, '指定文件不存在!')
 
             os.system('chmod ' + sall + ' ' + access + " '" + filename + "'")
             os.system('chown ' + sall + ' ' + user +
                       ':' + user + " '" + filename + "'")
-            msg = mw.getInfo(
+            msg = jh.getInfo(
                 '设置[{1}]权限为[{2}]所有者为[{3}]', (filename, access, user,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '设置成功!')
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '设置成功!')
         except:
-            return mw.returnJson(False, '设置失败!')
+            return jh.returnJson(False, '设置失败!')
 
     def getDirSizeApi(self):
         path = request.form.get('path', '')
         tmp = self.getDirSize(path)
-        return mw.returnJson(True, tmp[0].split()[0])
+        return jh.returnJson(True, tmp[0].split()[0])
 
     def getDirApi(self):
         path = request.form.get('path', '')
@@ -149,7 +149,7 @@ class files_api:
         sort_type = request.form.get('sortType', self.default_sort_type)
         desc = True if sort_type.lower() == 'desc' else False
         if not os.path.exists(path):
-            path = mw.getRootDir() + "/wwwroot"
+            path = jh.getRootDir() + "/wwwroot"
         search = request.args.get('search', '').strip().lower()
         search_all = request.args.get('all', '').strip().lower()
         page = request.args.get('p', '1').strip().lower()
@@ -167,50 +167,50 @@ class files_api:
         file = request.form.get('path', '')
         try:
             if not self.checkFileName(file):
-                return mw.returnJson(False, '文件名中不能包含特殊字符!')
+                return jh.returnJson(False, '文件名中不能包含特殊字符!')
             if os.path.exists(file):
-                return mw.returnJson(False, '指定文件已存在!')
+                return jh.returnJson(False, '指定文件已存在!')
             _path = os.path.dirname(file)
             if not os.path.exists(_path):
                 os.makedirs(_path)
             open(file, 'w+', encoding='utf-8').close()
             self.setFileAccept(file)
-            msg = mw.getInfo('创建文件[{1}]成功!', (file,))
-            mw.writeLog('文件管理', msg)
+            msg = jh.getInfo('创建文件[{1}]成功!', (file,))
+            jh.writeLog('文件管理', msg)
             
-            return mw.returnJson(True, '文件创建成功!')
+            return jh.returnJson(True, '文件创建成功!')
         except Exception as e:
-            return mw.returnJson(True, '文件创建失败!')
+            return jh.returnJson(True, '文件创建失败!')
 
     def removeFileApi(self):
         p = request.form.get('path', '')
         if not os.path.exists(p):
-            return mw.returnJson(False, '指定文件不存在!')
+            return jh.returnJson(False, '指定文件不存在!')
         try:
             if os.path.exists('data/recycle_bin.pl'):
                 if self.mvRecycleBin(p):
-                    return mw.returnJson(True, '已将文件移动到回收站!')
+                    return jh.returnJson(True, '已将文件移动到回收站!')
             os.remove(p)
-            msg = mw.getInfo('删除文件[{1}]成功!', (p,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '删除文件成功!')
+            msg = jh.getInfo('删除文件[{1}]成功!', (p,))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '删除文件成功!')
         except:
-            return mw.returnJson(False, '删除文件失败!')
+            return jh.returnJson(False, '删除文件失败!')
 
     def createDirApi(self):
         path = request.form.get('path', '')
         try:
             if not self.checkFileName(path):
-                return mw.returnJson(False, '目录名中不能包含特殊字符!')
+                return jh.returnJson(False, '目录名中不能包含特殊字符!')
             if os.path.exists(path):
-                return mw.returnJson(False, '指定目录已存在!')
+                return jh.returnJson(False, '指定目录已存在!')
             os.makedirs(path)
             self.setFileAccept(path)
-            msg = mw.getInfo('创建目录[{1}]成功!', (path,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '目录创建成功!')
+            msg = jh.getInfo('创建目录[{1}]成功!', (path,))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '目录创建成功!')
         except Exception as e:
-            return mw.returnJson(False, '目录创建失败!')
+            return jh.returnJson(False, '目录创建失败!')
 
     def downloadFileApi(self):
         import db
@@ -218,53 +218,53 @@ class files_api:
         url = request.form.get('url', '')
         path = request.form.get('path', '')
         filename = request.form.get('filename', '')
-        execstr = url + '|mw|' + path + '/' + filename
+        execstr = url + '|jh|' + path + '/' + filename
         execstr = execstr.strip()
-        mw.M('tasks').add('name,type,status,addtime,execstr',
+        jh.M('tasks').add('name,type,status,addtime,execstr',
                           ('下载文件[' + filename + ']', 'download', '-1', time.strftime('%Y-%m-%d %H:%M:%S'), execstr))
 
         # self.setFileAccept(path + '/' + filename)
-        mw.triggerTask()
-        return mw.returnJson(True, '已将下载任务添加到队列!')
+        jh.triggerTask()
+        return jh.returnJson(True, '已将下载任务添加到队列!')
 
     # 删除进程下的所有进程
     def removeTaskRecursion(self, pid):
         cmd = "ps -ef|grep " + pid + \
             " | grep -v grep |sed -n '2,1p' | awk '{print $2}'"
-        sub_pid = mw.execShell(cmd)
+        sub_pid = jh.execShell(cmd)
 
         if sub_pid[0].strip() == '':
             return 'ok'
 
         self.removeTaskRecursion(sub_pid[0].strip())
-        mw.execShell('kill -9 ' + sub_pid[0].strip())
+        jh.execShell('kill -9 ' + sub_pid[0].strip())
         return sub_pid[0].strip()
 
     def removeTaskApi(self):
         import system_api
         mid = request.form.get('id', '')
         try:
-            name = mw.M('tasks').where('id=?', (mid,)).getField('name')
-            status = mw.M('tasks').where('id=?', (mid,)).getField('status')
-            mw.M('tasks').delete(mid)
+            name = jh.M('tasks').where('id=?', (mid,)).getField('name')
+            status = jh.M('tasks').where('id=?', (mid,)).getField('status')
+            jh.M('tasks').delete(mid)
             if status == '-1':
-                task_pid = mw.execShell(
+                task_pid = jh.execShell(
                     "ps aux | grep 'task.py' | grep -v grep |awk '{print $2}'")
 
                 task_list = task_pid[0].strip().split("\n")
                 for i in range(len(task_list)):
                     self.removeTaskRecursion(task_list[i])
 
-                mw.triggerTask()
+                jh.triggerTask()
                 system_api.system_api().restartTask()
         except:
             system_api.system_api().restartTask()
 
         # 删除日志
-        task_log = mw.getRunDir() + "/tmp/panelTask.pl"
+        task_log = jh.getRunDir() + "/tmp/panelTask.pl"
         if os.path.exists(task_log):
             os.remove(task_log)
-        return mw.returnJson(True, '任务已删除!')
+        return jh.returnJson(True, '任务已删除!')
 
     # 上传文件
     def uploadFileApi(self):
@@ -286,9 +286,9 @@ class files_api:
         os.chown(filename, p_stat.st_uid, p_stat.st_gid)
         os.chmod(filename, p_stat.st_mode)
 
-        msg = mw.getInfo('上传文件[{1}] 到 [{2}]成功!', (filename, path))
-        mw.writeLog('文件管理', msg)
-        return mw.returnMsg(True, '上传成功!')
+        msg = jh.getInfo('上传文件[{1}] 到 [{2}]成功!', (filename, path))
+        jh.writeLog('文件管理', msg)
+        return jh.returnMsg(True, '上传成功!')
 
     def getRecycleBinApi(self):
         rPath = self.rPath
@@ -324,7 +324,7 @@ class files_api:
                     data['files'].append(tmp)
             except Exception as e:
                 continue
-        return mw.returnJson(True, 'OK', data)
+        return jh.returnJson(True, 'OK', data)
 
     # 回收站开关
     def recycleBinApi(self):
@@ -334,12 +334,12 @@ class files_api:
             c = 'data/recycle_bin_db.pl'
         if os.path.exists(c):
             os.remove(c)
-            mw.writeLog('文件管理', '已关闭回收站功能!')
-            return mw.returnJson(True, '已关闭回收站功能!')
+            jh.writeLog('文件管理', '已关闭回收站功能!')
+            return jh.returnJson(True, '已关闭回收站功能!')
         else:
-            mw.writeFile(c, 'True')
-            mw.writeLog('文件管理', '已开启回收站功能!')
-            return mw.returnJson(True, '已开启回收站功能!')
+            jh.writeFile(c, 'True')
+            jh.writeLog('文件管理', '已开启回收站功能!')
+            return jh.returnJson(True, '已开启回收站功能!')
 
     def reRecycleBinApi(self):
         rPath = self.rPath
@@ -348,13 +348,13 @@ class files_api:
         try:
             import shutil
             shutil.move(rPath + path, dFile)
-            msg = mw.getInfo('移动文件[{1}]到回收站成功!', (dFile,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '恢复成功!')
+            msg = jh.getInfo('移动文件[{1}]到回收站成功!', (dFile,))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '恢复成功!')
         except Exception as e:
-            msg = mw.getInfo('从回收站恢复[{1}]失败!', (dFile,))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(False, '恢复失败!')
+            msg = jh.getInfo('从回收站恢复[{1}]失败!', (dFile,))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(False, '恢复失败!')
 
     def delRecycleBinApi(self):
         rPath = self.rPath
@@ -363,9 +363,9 @@ class files_api:
         dFile = path.split('_t_')[0]
 
         if not self.checkDir(path):
-            return mw.returnJson(False, '敏感目录,请不要花样作死!')
+            return jh.returnJson(False, '敏感目录,请不要花样作死!')
 
-        mw.execShell('which chattr && chattr -R -i ' + rPath + path)
+        jh.execShell('which chattr && chattr -R -i ' + rPath + path)
         if os.path.isdir(rPath + path):
             import shutil
             shutil.rmtree(rPath + path)
@@ -373,37 +373,37 @@ class files_api:
             os.remove(rPath + path)
 
         tfile = path.replace('_mw_', '/').split('_t_')[0]
-        msg = mw.getInfo('已彻底从回收站删除{1}!', (tfile,))
-        mw.writeLog('文件管理', msg)
-        return mw.returnJson(True, msg)
+        msg = jh.getInfo('已彻底从回收站删除{1}!', (tfile,))
+        jh.writeLog('文件管理', msg)
+        return jh.returnJson(True, msg)
 
     # 获取进度
     def getSpeedApi(self):
-        data = mw.getSpeed()
-        return mw.returnJson(True, '已清空回收站!', data)
+        data = jh.getSpeed()
+        return jh.returnJson(True, '已清空回收站!', data)
 
     def closeRecycleBinApi(self):
         rPath = self.rPath
-        mw.execShell('which chattr && chattr -R -i ' + rPath)
+        jh.execShell('which chattr && chattr -R -i ' + rPath)
         rlist = os.listdir(rPath)
         i = 0
         l = len(rlist)
         for name in rlist:
             i += 1
             path = rPath + name
-            mw.writeSpeed(name, i, l)
+            jh.writeSpeed(name, i, l)
             if os.path.isdir(path) and not os.path.islink(path):
                 shutil.rmtree(path)
             else:
                 os.remove(path)
-        mw.writeSpeed(None, 0, 0)
-        mw.writeLog('文件管理', '已清空回收站!')
-        return mw.returnJson(True, '已清空回收站!')
+        jh.writeSpeed(None, 0, 0)
+        jh.writeLog('文件管理', '已清空回收站!')
+        return jh.returnJson(True, '已清空回收站!')
 
     def deleteDirApi(self):
         path = request.form.get('path', '')
         if not os.path.exists(path):
-            return mw.returnJson(False, '指定文件不存在!')
+            return jh.returnJson(False, '指定文件不存在!')
 
         # 检查是否为.user.ini
         if path.find('.user.ini'):
@@ -411,21 +411,21 @@ class files_api:
         try:
             if os.path.exists('data/recycle_bin.pl'):
                 if self.mvRecycleBin(path):
-                    return mw.returnJson(True, '已将文件移动到回收站!')
-            mw.execShell('rm -rf ' + path)
-            mw.writeLog('文件管理', '删除文件成功！', (path,))
-            return mw.returnJson(True, '删除文件成功!')
+                    return jh.returnJson(True, '已将文件移动到回收站!')
+            jh.execShell('rm -rf ' + path)
+            jh.writeLog('文件管理', '删除文件成功！', (path,))
+            return jh.returnJson(True, '删除文件成功!')
         except:
-            return mw.returnJson(False, '删除文件失败!')
+            return jh.returnJson(False, '删除文件失败!')
 
     def closeLogsApi(self):
-        logPath = mw.getLogsDir()
+        logPath = jh.getLogsDir()
         os.system('rm -f ' + logPath + '/*')
-        os.system('kill -USR1 `cat ' + mw.getServerDir() +
+        os.system('kill -USR1 `cat ' + jh.getServerDir() +
                   'openresty/nginx/logs/nginx.pid`')
-        mw.writeLog('文件管理', '网站日志已被清空!')
+        jh.writeLog('文件管理', '网站日志已被清空!')
         tmp = self.getDirSize(logPath)
-        return mw.returnJson(True, tmp[0].split()[0])
+        return jh.returnJson(True, tmp[0].split()[0])
 
     def setBatchDataApi(self):
         path = request.form.get('path', '')
@@ -441,20 +441,20 @@ class files_api:
                 'user': user,
                 'data': data
             }
-            return mw.returnJson(True, '标记成功,请在目标目录点击粘贴所有按钮!')
+            return jh.returnJson(True, '标记成功,请在目标目录点击粘贴所有按钮!')
         elif stype == '3':
             for key in json.loads(data):
                 try:
                     filename = path + '/' + key
                     if not self.checkDir(filename):
-                        return mw.returnJson(False, 'FILE_DANGER')
+                        return jh.returnJson(False, 'FILE_DANGER')
                     os.system('chmod -R ' + access + " '" + filename + "'")
                     os.system('chown -R ' + user + ':' +
                               user + " '" + filename + "'")
                 except:
                     continue
-            mw.writeLog('文件管理', '批量设置权限成功!')
-            return mw.returnJson(True, '批量设置权限成功!')
+            jh.writeLog('文件管理', '批量设置权限成功!')
+            return jh.returnJson(True, '批量设置权限成功!')
         else:
             import shutil
             isRecyle = os.path.exists('data/recycle_bin.pl')
@@ -469,10 +469,10 @@ class files_api:
                         continue
 
                     i += 1
-                    mw.writeSpeed(key, i, l)
+                    jh.writeSpeed(key, i, l)
                     if os.path.isdir(filename):
                         if not self.checkDir(filename):
-                            return mw.returnJson(False, '请不要花样作死!')
+                            return jh.returnJson(False, '请不要花样作死!')
                         if isRecyle:
                             self.mvRecycleBin(topath)
                         else:
@@ -486,9 +486,9 @@ class files_api:
                             os.remove(filename)
                 except:
                     continue
-                mw.writeSpeed(None, 0, 0)
-            mw.writeLog('文件管理', '批量删除成功!')
-            return mw.returnJson(True, '批量删除成功！')
+                jh.writeSpeed(None, 0, 0)
+            jh.writeLog('文件管理', '批量删除成功!')
+            return jh.returnJson(True, '批量删除成功！')
 
     def checkExistsFilesApi(self):
         dfile = request.form.get('dfile', '')
@@ -511,11 +511,11 @@ class files_api:
                 tmp['size'] = os.path.getsize(filename)
                 tmp['mtime'] = str(int(stat.st_mtime))
                 data.append(tmp)
-        return mw.returnJson(True, 'ok', data)
+        return jh.returnJson(True, 'ok', data)
 
     def checkExistPathApi(self):
         p = request.form.get('path', '')
-        return mw.returnJson(True, 'ok', os.path.exists(p))
+        return jh.returnJson(True, 'ok', os.path.exists(p))
 
     def batchPasteApi(self):
         path = request.form.get('path', '')
@@ -523,14 +523,14 @@ class files_api:
         # filename = request.form.get('filename', '')
         import shutil
         if not self.checkDir(path):
-            return mw.returnJson(False, '请不要花样作死!')
+            return jh.returnJson(False, '请不要花样作死!')
         i = 0
         myfiles = json.loads(session['selected']['data'])
         l = len(myfiles)
         if stype == '1':
             for key in myfiles:
                 i += 1
-                mw.writeSpeed(key, i, l)
+                jh.writeSpeed(key, i, l)
                 try:
 
                     sfile = session['selected'][
@@ -545,14 +545,14 @@ class files_api:
                     os.chown(dfile, stat.st_uid, stat.st_gid)
                 except:
                     continue
-            msg = mw.getInfo('从[{1}]批量复制到[{2}]成功',
+            msg = jh.getInfo('从[{1}]批量复制到[{2}]成功',
                              (session['selected']['path'], path,))
-            mw.writeLog('文件管理', msg)
+            jh.writeLog('文件管理', msg)
         else:
             for key in myfiles:
                 try:
                     i += 1
-                    mw.writeSpeed(key, i, l)
+                    jh.writeSpeed(key, i, l)
 
                     sfile = session['selected'][
                         'path'] + '/' + key
@@ -561,24 +561,24 @@ class files_api:
                     shutil.move(sfile, dfile)
                 except:
                     continue
-            msg = mw.getInfo('从[{1}]批量移动到[{2}]成功',
+            msg = jh.getInfo('从[{1}]批量移动到[{2}]成功',
                              (session['selected']['path'], path,))
-            mw.writeLog('文件管理', msg)
-        mw.writeSpeed(None, 0, 0)
+            jh.writeLog('文件管理', msg)
+        jh.writeSpeed(None, 0, 0)
         errorCount = len(myfiles) - i
         del(session['selected'])
-        msg = mw.getInfo('批量操作成功[{1}],失败[{2}]', (str(i), str(errorCount)))
-        return mw.returnJson(True, msg)
+        msg = jh.getInfo('批量操作成功[{1}],失败[{2}]', (str(i), str(errorCount)))
+        return jh.returnJson(True, msg)
 
     def copyFileApi(self):
         sfile = request.form.get('sfile', '')
         dfile = request.form.get('dfile', '')
 
         if sfile == dfile:
-            return mw.returnJson(False, '源与目的一致!')
+            return jh.returnJson(False, '源与目的一致!')
 
         if not os.path.exists(sfile):
-            return mw.returnJson(False, '指定文件不存在!')
+            return jh.returnJson(False, '指定文件不存在!')
 
         if os.path.isdir(sfile):
             return self.copyDir(sfile, dfile)
@@ -586,33 +586,33 @@ class files_api:
         try:
             import shutil
             shutil.copyfile(sfile, dfile)
-            msg = mw.getInfo('复制文件[{1}]到[{2}]成功!', (sfile, dfile,))
-            mw.writeLog('文件管理', msg)
+            msg = jh.getInfo('复制文件[{1}]到[{2}]成功!', (sfile, dfile,))
+            jh.writeLog('文件管理', msg)
             stat = os.stat(sfile)
             os.chown(dfile, stat.st_uid, stat.st_gid)
-            return mw.returnJson(True, '文件复制成功!')
+            return jh.returnJson(True, '文件复制成功!')
         except:
-            return mw.returnJson(False, '文件复制失败!')
+            return jh.returnJson(False, '文件复制失败!')
 
     ##### ----- end ----- ###
 
     def copyDir(self, sfile, dfile):
 
         if not os.path.exists(sfile):
-            return mw.returnJson(False, '指定目录不存在!')
+            return jh.returnJson(False, '指定目录不存在!')
 
         if os.path.exists(dfile):
-            return mw.returnJson(False, '指定目录已存在!')
+            return jh.returnJson(False, '指定目录已存在!')
         import shutil
         try:
             shutil.copytree(sfile, dfile)
             stat = os.stat(sfile)
             os.chown(dfile, stat.st_uid, stat.st_gid)
-            msg = mw.getInfo('复制目录[{1}]到[{2}]成功!', (sfile, dfile))
-            mw.writeLog('文件管理', msg)
-            return mw.returnJson(True, '目录复制成功!')
+            msg = jh.getInfo('复制目录[{1}]到[{2}]成功!', (sfile, dfile))
+            jh.writeLog('文件管理', msg)
+            return jh.returnJson(True, '目录复制成功!')
         except:
-            return mw.returnJson(False, '目录复制失败!')
+            return jh.returnJson(False, '目录复制失败!')
 
     # 检查敏感目录
     def checkDir(self, path):
@@ -644,15 +644,15 @@ class files_api:
                  '/srv',
                  '/selinux',
                  '/www/server',
-                 mw.getRootDir())
+                 jh.getRootDir())
 
         return not path in nDirs
 
     def getDirSize(self, path):
-        if mw.getOs() == 'darwin':
-            tmp = mw.execShell('du -sh ' + path)
+        if jh.getOs() == 'darwin':
+            tmp = jh.execShell('du -sh ' + path)
         else:
-            tmp = mw.execShell('du -sbh ' + path)
+            tmp = jh.execShell('du -sbh ' + path)
         return tmp
 
     def checkFileName(self, filename):
@@ -667,8 +667,8 @@ class files_api:
 
     def setFileAccept(self, filename):
         auth = 'www:www'
-        if mw.getOs() == 'darwin':
-            user = mw.execShell(
+        if jh.getOs() == 'darwin':
+            user = jh.execShell(
                 "who | sed -n '2, 1p' |awk '{print $1}'")[0].strip()
             auth = user + ':staff'
 
@@ -685,20 +685,20 @@ class files_api:
         try:
             import shutil
             shutil.move(path, rFile)
-            mw.writeLog('文件管理', mw.getInfo(
+            jh.writeLog('文件管理', jh.getInfo(
                 '移动文件[{1}]到回收站成功!', (path)))
             return True
         except:
-            mw.writeLog('文件管理', mw.getInfo(
+            jh.writeLog('文件管理', jh.getInfo(
                 '移动文件[{1}]到回收站失败!', (path)))
             return False
 
     def getBody(self, path):
         if not os.path.exists(path):
-            return mw.returnJson(False, '文件不存在', (path,))
+            return jh.returnJson(False, '文件不存在', (path,))
 
         if os.path.getsize(path) > 2097152:
-            return mw.returnJson(False, '不能在线编辑大于2MB的文件!')
+            return jh.returnJson(False, '不能在线编辑大于2MB的文件!')
 
         fp = open(path, 'rb')
         data = {}
@@ -739,7 +739,7 @@ class files_api:
                             data['encoding']).encode('utf-8', errors='ignore')
                     else:
                         data['data'] = srcBody.decode(data['encoding'])
-                return mw.returnJson(True, 'OK', data)
+                return jh.returnJson(True, 'OK', data)
             else:
                 if sys.version_info[0] == 2:
                     data['data'] = srcBody.decode('utf-8').encode('utf-8')
@@ -747,13 +747,13 @@ class files_api:
                     data['data'] = srcBody.decode('utf-8')
                 data['encoding'] = 'utf-8'
 
-            return mw.returnJson(True, 'OK', data)
+            return jh.returnJson(True, 'OK', data)
         except Exception as ex:
-            return mw.returnJson(False, '文件编码不被兼容，无法正确读取文件!' + str(ex))
+            return jh.returnJson(False, '文件编码不被兼容，无法正确读取文件!' + str(ex))
 
     def saveBody(self, path, data, encoding='utf-8'):
         if not os.path.exists(path):
-            return mw.returnJson(False, '文件不存在')
+            return jh.returnJson(False, '文件不存在')
         try:
             if encoding == 'ascii':
                 encoding = 'utf-8'
@@ -768,22 +768,22 @@ class files_api:
             fp.close()
 
             if path.find("web_conf") > 0:
-                mw.restartWeb()
+                jh.restartWeb()
 
-            mw.writeLog('文件管理', '文件保存成功', (path,))
-            return mw.returnJson(True, '文件保存成功')
+            jh.writeLog('文件管理', '文件保存成功', (path,))
+            return jh.returnJson(True, '文件保存成功')
         except Exception as ex:
-            return mw.returnJson(False, '文件保存错误:' + str(ex))
+            return jh.returnJson(False, '文件保存错误:' + str(ex))
 
     def zip(self, sfile, dfile, stype, path):
         if sfile.find(',') == -1:
             if not os.path.exists(path + '/' + sfile):
-                return mw.returnMsg(False, '指定文件不存在!')
+                return jh.returnMsg(False, '指定文件不存在!')
 
         try:
-            tmps = mw.getRunDir() + '/tmp/panelExec.log'
+            tmps = jh.getRunDir() + '/tmp/panelExec.log'
             if stype == 'zip':
-                mw.execShell("cd '" + path + "' && zip '" + dfile +
+                jh.execShell("cd '" + path + "' && zip '" + dfile +
                              "' -r '" + sfile + "' > " + tmps + " 2>&1")
             else:
                 sfiles = ''
@@ -791,23 +791,23 @@ class files_api:
                     if not sfile:
                         continue
                     sfiles += " '" + sfile + "'"
-                mw.execShell("cd '" + path + "' && tar -zcvf '" +
+                jh.execShell("cd '" + path + "' && tar -zcvf '" +
                              dfile + "' " + sfiles + " > " + tmps + " 2>&1")
             self.setFileAccept(dfile)
-            mw.writeLog("文件管理", '文件压缩成功!', (sfile, dfile))
-            return mw.returnJson(True, '文件压缩成功!')
+            jh.writeLog("文件管理", '文件压缩成功!', (sfile, dfile))
+            return jh.returnJson(True, '文件压缩成功!')
         except:
-            return mw.returnJson(False, '文件压缩失败!')
+            return jh.returnJson(False, '文件压缩失败!')
 
     def unzip(self, sfile, dfile, stype, path):
 
         if not os.path.exists(sfile):
-            return mw.returnMsg(False, '指定文件不存在!')
+            return jh.returnMsg(False, '指定文件不存在!')
 
         try:
-            tmps = mw.getRunDir() + '/tmp/panelExec.log'
+            tmps = jh.getRunDir() + '/tmp/panelExec.log'
             if stype == 'zip':
-                mw.execShell("cd " + path + " && unzip -o -d '" + dfile +
+                jh.execShell("cd " + path + " && unzip -o -d '" + dfile +
                              "' '" + sfile + "' > " + tmps + " 2>&1 &")
             else:
                 sfiles = ''
@@ -817,34 +817,34 @@ class files_api:
                     sfiles += " '" + sfile + "'"
                 if not os.path.exists(dfile):
                     os.makedirs(dfile)
-                mw.execShell("cd " + path + " && tar -zxvf " + sfiles +
+                jh.execShell("cd " + path + " && tar -zxvf " + sfiles +
                              " -C " + dfile + " > " + tmps + " 2>&1 &")
 
             self.setFileAccept(dfile)
-            mw.writeLog("文件管理", '文件解压成功!', (sfile, dfile))
-            return mw.returnJson(True, '文件解压成功!')
+            jh.writeLog("文件管理", '文件解压成功!', (sfile, dfile))
+            return jh.returnJson(True, '文件解压成功!')
         except:
-            return mw.returnJson(False, '文件解压失败!')
+            return jh.returnJson(False, '文件解压失败!')
 
     def delete(self, path):
 
         if not os.path.exists(path):
-            return mw.returnJson(False, '指定文件不存在!')
+            return jh.returnJson(False, '指定文件不存在!')
 
         # 检查是否为.user.ini
         if path.find('.user.ini') >= 0:
-            mw.execShell("which chattr && chattr -i '" + path + "'")
+            jh.execShell("which chattr && chattr -i '" + path + "'")
 
         try:
             if os.path.exists('data/recycle_bin.pl'):
                 if self.mvRecycleBin(path):
-                    return mw.returnJson(True, '已将文件移动到回收站!')
+                    return jh.returnJson(True, '已将文件移动到回收站!')
             os.remove(path)
-            mw.writeLog('文件管理', mw.getInfo(
+            jh.writeLog('文件管理', jh.getInfo(
                 '删除文件[{1}]成功!', (path)))
-            return mw.returnJson(True, '删除文件成功!')
+            return jh.returnJson(True, '删除文件成功!')
         except:
-            return mw.returnJson(False, '删除文件失败!')
+            return jh.returnJson(False, '删除文件失败!')
 
     def getAccess(self, filename):
         data = {}
@@ -911,7 +911,7 @@ class files_api:
         info['row'] = page_size
         info['p'] = page
         info['tojs'] = 'getFiles'
-        pageObj = mw.getPageObject(info, '1,2,3,4,5,6,7,8')
+        pageObj = jh.getPageObject(info, '1,2,3,4,5,6,7,8')
         data['PAGE'] = pageObj[0]
 
         one_page_files = total_files[pageObj[1].SHIFT : pageObj[1].SHIFT + pageObj[1].ROW]
@@ -925,7 +925,7 @@ class files_api:
         data['FILES'] = self.__format_files(filenames)
         data['PATH'] = path.replace('//', '/')
 
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getDir(self, path, page=1, page_size=10, search=None, sort_stat_field=None, desc=False):
         data = {}
@@ -954,7 +954,7 @@ class files_api:
         info['row'] = page_size
         info['p'] = page
         info['tojs'] = 'getFiles'
-        pageObj = mw.getPageObject(info, '1,2,3,4,5,6,7,8')
+        pageObj = jh.getPageObject(info, '1,2,3,4,5,6,7,8')
         data['PAGE'] = pageObj[0]
 
         one_page_files = total_files[pageObj[1].SHIFT : pageObj[1].SHIFT + pageObj[1].ROW]
@@ -969,7 +969,7 @@ class files_api:
         data['FILES'] = self.__format_files(filenames)
         data['PATH'] = path.replace('//', '/')
 
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def __sort_files(self, files, sort_stat_field, desc):
         sort_key = self.sortable_stat_fields[sort_stat_field] if sort_stat_field in self.sortable_stat_fields else self.default_sort_key

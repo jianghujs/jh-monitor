@@ -62,24 +62,24 @@ cp -rf /tmp/jh-monitor-dev/* /www/server/jh-monitor
 rm -rf /tmp/dev.zip
 rm -rf /tmp/jh-monitor-dev
 
-if [ -f /etc/rc.d/init.d/mw ];then
-    sh /etc/rc.d/init.d/mw stop && rm -rf /www/server/jh-monitor/scripts/init.d/mw && rm -rf /etc/rc.d/init.d/mw
+if [ -f /etc/rc.d/init.d/jhm ];then
+    sh /etc/rc.d/init.d/jhm stop && rm -rf /www/server/jh-monitor/scripts/init.d/jhm && rm -rf /etc/rc.d/init.d/jhm
 fi
 
 #pip uninstall public
 echo "use system version: ${OSNAME}"
 cd /www/server/jh-monitor && bash scripts/update/${OSNAME}.sh
 
-bash /etc/rc.d/init.d/mw restart
-bash /etc/rc.d/init.d/mw default
+bash /etc/rc.d/init.d/jhm restart
+bash /etc/rc.d/init.d/jhm default
 
-if [ -f /usr/bin/mw ];then
-	rm -rf /usr/bin/mw
+if [ -f /usr/bin/jhm ];then
+	rm -rf /usr/bin/jhm
 fi
 
-if [ ! -e /usr/bin/mw ]; then
-	if [ ! -f /usr/bin/mw ];then
-		ln -s /etc/rc.d/init.d/mw /usr/bin/mw
+if [ ! -e /usr/bin/jhm ]; then
+	if [ ! -f /usr/bin/jhm ];then
+		ln -s /etc/rc.d/init.d/jhm /usr/bin/jhm
 	fi
 fi
 

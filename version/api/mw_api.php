@@ -1,6 +1,6 @@
 <?php
 /**
- * MW API接口示例Demo
+ * JH API接口示例Demo
  * 仅供参考，请根据实际项目需求开发，并做好安全处理
  * date 2022-11-28
  * author midoks

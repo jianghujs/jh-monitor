@@ -297,8 +297,8 @@ class Sql():
             opt = opt[0:len(opt) - 1]
             sql = "UPDATE " + self.__DB_TABLE + " SET " + opt + self.__OPT_WHERE
 
-            # import mw
-            # mw.writeFile('/tmp/test.pl', sql)
+            # import jh
+            # jh.writeFile('/tmp/test.pl', sql)
 
             # 处理拼接WHERE与UPDATE参数
             tmp = list(param)
@@ -361,8 +361,8 @@ class Sql():
     def create(self, name):
         # 创建数据表
         self.__getConn()
-        import mw
-        script = mw.readFile('data/' + name + '.sql')
+        import jh
+        script = jh.readFile('data/' + name + '.sql')
         result = self.__DB_CONN.executescript(script)
         self.__DB_CONN.commit()
         return result.rowcount
@@ -370,8 +370,8 @@ class Sql():
     def fofile(self, filename):
         # 执行脚本
         self.__getConn()
-        import mw
-        script = mw.readFile(filename)
+        import jh
+        script = jh.readFile(filename)
         result = self.__DB_CONN.executescript(script)
         self.__DB_CONN.commit()
         return result.rowcount

@@ -16,7 +16,7 @@
 import psutil
 import time
 import os
-import mw
+import jh
 import re
 import json
 
@@ -56,9 +56,9 @@ class plugins_api:
 
     def __init__(self):
         self.setupPath = 'server'
-        self.__plugin_dir = mw.getRunDir() + '/plugins'
-        self.__type = mw.getRunDir() + '/data/json/type.json'
-        self.__index = mw.getRunDir() + '/data/json/index.json'
+        self.__plugin_dir = jh.getRunDir() + '/plugins'
+        self.__type = jh.getRunDir() + '/data/json/type.json'
+        self.__index = jh.getRunDir() + '/data/json/index.json'
 
     ##### ----- start ----- ###
     def listApi(self):
@@ -66,18 +66,18 @@ class plugins_api:
         sPage = request.args.get('p', '1')
         sLimit = request.args.get('limit', '1')
 
-        if not mw.isNumber(sPage):
+        if not jh.isNumber(sPage):
             sPage = 1
 
-        if not mw.isNumber(sLimit):
+        if not jh.isNumber(sLimit):
             sPage = 10
 
-        if not mw.isNumber(sType):
+        if not jh.isNumber(sType):
             sType = 0
 
         # print sPage
         data = self.getPluginList(sType, int(sPage), int(sLimit))
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def fileApi(self):
         name = request.args.get('name', '')
@@ -88,7 +88,7 @@ class plugins_api:
         if f.strip() == '':
             return ''
 
-        file = mw.getPluginDir() + '/' + name + '/' + f
+        file = jh.getPluginDir() + '/' + name + '/' + f
         if not os.path.exists(file):
             return ''
 
@@ -97,16 +97,16 @@ class plugins_api:
 
     def indexListApi(self):
         data = self.getIndexList()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def indexSortApi(self):
         sort = request.form.get('ssort', '')
         if sort.strip() == '':
-            return mw.returnJson(False, '排序数据不能为空!')
+            return jh.returnJson(False, '排序数据不能为空!')
         data = self.setIndexSort(sort)
         if data:
-            return mw.returnJson(True, '成功!')
-        return mw.returnJson(False, '失败!')
+            return jh.returnJson(True, '成功!')
+        return jh.returnJson(False, '失败!')
 
     def initApi(self):
 
@@ -120,15 +120,15 @@ class plugins_api:
             'jianghujs': '1.0',
         }
 
-        pn_dir = mw.getPluginDir()
-        pn_server_dir = mw.getServerDir()
+        pn_dir = jh.getPluginDir()
+        pn_server_dir = jh.getServerDir()
         pn_list = []
         for pn in plugin_names:
             info = {}
             pn_json = pn_dir + '/' + pn + '/info.json'
             pn_server = pn_server_dir + '/' + pn
             if not os.path.exists(pn_server):
-                tmp = mw.readFile(pn_json)
+                tmp = jh.readFile(pn_json)
                 if tmp:
                     tmp = json.loads(tmp)
                     info['title'] = tmp['title']
@@ -137,8 +137,8 @@ class plugins_api:
                     info['default_ver'] = plugin_names[pn]
                     pn_list.append(info)
             else:
-                return mw.returnJson(False, 'ok')
-        return mw.returnJson(True, 'ok', pn_list)
+                return jh.returnJson(False, 'ok')
+        return jh.returnJson(True, 'ok', pn_list)
 
     def initInstallApi(self):
         pn_list = request.form.get('list', '')
@@ -149,9 +149,9 @@ class plugins_api:
                 name = pn['name']
                 version = pn['version']
                 infoJsonPos = self.__plugin_dir + '/' + name + '/' + 'info.json'
-                pluginInfo = json.loads(mw.readFile(infoJsonPos))
+                pluginInfo = json.loads(jh.readFile(infoJsonPos))
                 self.hookInstall(pluginInfo)
-                execstr = 'cd ' + mw.getPluginDir() + '/' + name + ' && bash ' + \
+                execstr = 'cd ' + jh.getPluginDir() + '/' + name + ' && bash ' + \
                     pluginInfo['shell'] + ' install ' + version
     
                 self.addIndex(name, version)
@@ -159,16 +159,16 @@ class plugins_api:
                 taskAdd = ('安装[' + name + '-' + version + ']',
                            'execshell', '0', time.strftime('%Y-%m-%d %H:%M:%S'), execstr)
 
-                mw.M('tasks').add('name,type,status,addtime, execstr', taskAdd)
-            # os.mkdir(mw.getServerDir() + '/php')
+                jh.M('tasks').add('name,type,status,addtime, execstr', taskAdd)
+            # os.mkdir(jh.getServerDir() + '/php')
             # 任务执行相关
-            mw.triggerTask()
-            return mw.returnJson(True, '添加成功')
+            jh.triggerTask()
+            return jh.returnJson(True, '添加成功')
         except Exception as e:
-            return mw.returnJson(False, mw.getTracebackInfo())
+            return jh.returnJson(False, jh.getTracebackInfo())
 
     def installApi(self):
-        rundir = mw.getRunDir()
+        rundir = jh.getRunDir()
         name = request.form.get('name', '')
         version = request.form.get('version', '')
 
@@ -178,43 +178,43 @@ class plugins_api:
             mmsg = 'upgrade'
 
         if name.strip() == '':
-            return mw.returnJson(False, '缺少插件名称!', ())
+            return jh.returnJson(False, '缺少插件名称!', ())
 
         if version.strip() == '':
-            return mw.returnJson(False, '缺少版本信息!', ())
+            return jh.returnJson(False, '缺少版本信息!', ())
 
         infoJsonPos = self.__plugin_dir + '/' + name + '/' + 'info.json'
         # print infoJsonPos
 
         if not os.path.exists(infoJsonPos):
-            return mw.returnJson(False, '配置文件不存在!', ())
+            return jh.returnJson(False, '配置文件不存在!', ())
 
-        pluginInfo = json.loads(mw.readFile(infoJsonPos))
+        pluginInfo = json.loads(jh.readFile(infoJsonPos))
         self.hookInstall(pluginInfo)
 
-        execstr = 'cd ' + mw.getPluginDir() + '/' + name + ' && bash ' + \
+        execstr = 'cd ' + jh.getPluginDir() + '/' + name + ' && bash ' + \
             pluginInfo['shell'] + ' install ' + version
 
         self.addIndex(name, version)
 
-        if mw.isAppleSystem():
+        if jh.isAppleSystem():
             print(execstr)
 
         taskAdd = (mmsg + '[' + name + '-' + version + ']',
                    'execshell', '0', time.strftime('%Y-%m-%d %H:%M:%S'), execstr)
 
-        mw.M('tasks').add('name,type,status,addtime, execstr', taskAdd)
+        jh.M('tasks').add('name,type,status,addtime, execstr', taskAdd)
 
         # 任务执行相关
-        mw.triggerTask()
+        jh.triggerTask()
 
-        return mw.returnJson(True, '已将安装任务添加到队列!')
+        return jh.returnJson(True, '已将安装任务添加到队列!')
 
     def hookInstallFile(self, hook_name, info):
-        hookPath = mw.getPanelDataDir() + "/hook_" + hook_name + ".json"
+        hookPath = jh.getPanelDataDir() + "/hook_" + hook_name + ".json"
         data = []
         if os.path.exists(hookPath):
-            t = mw.readFile(hookPath)
+            t = jh.readFile(hookPath)
             data = json.loads(t)
 
         isNeedAdd = True
@@ -227,19 +227,19 @@ class plugins_api:
             tmp['title'] = info['title']
             tmp['name'] = info['name']
             data.append(tmp)
-        mw.writeFile(hookPath, json.dumps(data))
+        jh.writeFile(hookPath, json.dumps(data))
 
     def hookUninstallFile(self, hook_name, info):
-        hookPath = mw.getPanelDataDir() + "/hook_" + hook_name + ".json"
+        hookPath = jh.getPanelDataDir() + "/hook_" + hook_name + ".json"
         data = []
         if os.path.exists(hookPath):
-            t = mw.readFile(hookPath)
+            t = jh.readFile(hookPath)
             data = json.loads(t)
 
         for idx in range(len(data)):
             if data[idx]['title'] == info['title'] and data[idx]['name'] == info['name']:
                 data.remove(data[idx])
-        mw.writeFile(hookPath, json.dumps(data))
+        jh.writeFile(hookPath, json.dumps(data))
 
     def hookInstall(self, info):
         if 'hook' in info:
@@ -260,21 +260,21 @@ class plugins_api:
         return False
 
     def uninstallOldApi(self):
-        rundir = mw.getRunDir()
+        rundir = jh.getRunDir()
         name = request.form.get('name', '')
         version = request.form.get('version', '')
         if name.strip() == '':
-            return mw.returnJson(False, "缺少插件名称!", ())
+            return jh.returnJson(False, "缺少插件名称!", ())
 
         if version.strip() == '':
-            return mw.returnJson(False, "缺少版本信息!", ())
+            return jh.returnJson(False, "缺少版本信息!", ())
 
         infoJsonPos = self.__plugin_dir + '/' + name + '/' + 'info.json'
 
         if not os.path.exists(infoJsonPos):
-            return mw.returnJson(False, "配置文件不存在!", ())
+            return jh.returnJson(False, "配置文件不存在!", ())
 
-        pluginInfo = json.loads(mw.readFile(infoJsonPos))
+        pluginInfo = json.loads(jh.readFile(infoJsonPos))
         execstr = "cd " + os.getcwd() + "/plugins/" + \
             name + " && /bin/bash " + pluginInfo["shell"] \
             + " uninstall " + version
@@ -282,52 +282,52 @@ class plugins_api:
         taskAdd = (None, '卸载[' + name + '-' + version + ']',
                    'execshell', '0', time.strftime('%Y-%m-%d %H:%M:%S'), execstr)
 
-        mw.M('tasks').add('id,name,type,status,addtime, execstr', taskAdd)
-        return mw.returnJson(True, '已将卸载任务添加到队列!')
+        jh.M('tasks').add('id,name,type,status,addtime, execstr', taskAdd)
+        return jh.returnJson(True, '已将卸载任务添加到队列!')
 
     # 卸载时间短,不加入任务中...
     def uninstallApi(self):
-        rundir = mw.getRunDir()
+        rundir = jh.getRunDir()
         name = request.form.get('name', '')
         version = request.form.get('version', '')
         if name.strip() == '':
-            return mw.returnJson(False, "缺少插件名称!", ())
+            return jh.returnJson(False, "缺少插件名称!", ())
 
         if version.strip() == '':
             version = '1.0'
-            # return mw.returnJson(False, "缺少版本信息!", ())
+            # return jh.returnJson(False, "缺少版本信息!", ())
 
         infoJsonPos = self.__plugin_dir + '/' + name + '/' + 'info.json'
 
         if not os.path.exists(infoJsonPos):
-            return mw.returnJson(False, "配置文件不存在!", ())
+            return jh.returnJson(False, "配置文件不存在!", ())
 
-        pluginInfo = json.loads(mw.readFile(infoJsonPos))
+        pluginInfo = json.loads(jh.readFile(infoJsonPos))
         self.hookUninstall(pluginInfo)
         execstr = "cd " + os.getcwd() + "/plugins/" + \
             name + " && /bin/bash " + pluginInfo["shell"] \
             + " uninstall " + version
 
-        data = mw.execShell(execstr)
-        if mw.isDebugMode():
+        data = jh.execShell(execstr)
+        if jh.isDebugMode():
             print(execstr)
             print(data[0], data[1])
         self.removeIndex(name, version)
-        return mw.returnJson(True, '卸载执行成功!')
+        return jh.returnJson(True, '卸载执行成功!')
         # if data[1] == '':
-        #     return mw.returnJson(True, '已将卸载成功!')
+        #     return jh.returnJson(True, '已将卸载成功!')
         # else:
-        #     return mw.returnJson(False, '卸载出现错误信息!' + data[1])
+        #     return jh.returnJson(False, '卸载出现错误信息!' + data[1])
 
     def checkApi(self):
         name = request.form.get('name', '')
         if name.strip() == '':
-            return mw.returnJson(False, "缺少插件名称!", ())
+            return jh.returnJson(False, "缺少插件名称!", ())
 
         infoJsonPos = self.__plugin_dir + '/' + name + '/' + 'info.json'
         if not os.path.exists(infoJsonPos):
-            return mw.returnJson(False, "配置文件不存在!", ())
-        return mw.returnJson(True, "插件存在!", ())
+            return jh.returnJson(False, "配置文件不存在!", ())
+        return jh.returnJson(True, "插件存在!", ())
 
     def setIndexApi(self):
         name = request.form.get('name', '')
@@ -340,7 +340,7 @@ class plugins_api:
     def settingApi(self):
         name = request.args.get('name', '')
         html = self.__plugin_dir + '/' + name + '/index.html'
-        return mw.readFile(html)
+        return jh.readFile(html)
 
     def runApi(self):
         name = request.form.get('name', '')
@@ -351,9 +351,9 @@ class plugins_api:
 
         data = self.run(name, func, version, args, script)
         if data[1] == '':
-            r = mw.returnJson(True, "OK", data[0].strip())
+            r = jh.returnJson(True, "OK", data[0].strip())
         else:
-            r = mw.returnJson(False, data[1].strip())
+            r = jh.returnJson(False, data[1].strip())
         return r
 
     def callbackApi(self):
@@ -364,23 +364,23 @@ class plugins_api:
 
         data = self.callback(name, func, args, script)
         if data[0]:
-            return mw.returnJson(True, "OK", data[1])
-        return mw.returnJson(False, data[1])
+            return jh.returnJson(True, "OK", data[1])
+        return jh.returnJson(False, data[1])
 
     def updateZipApi(self):
-        tmp_path = mw.getRootDir() + '/temp'
+        tmp_path = jh.getRootDir() + '/temp'
         if not os.path.exists(tmp_path):
             os.makedirs(tmp_path)
-        mw.execShell("rm -rf " + tmp_path + '/*')
+        jh.execShell("rm -rf " + tmp_path + '/*')
 
         tmp_file = tmp_path + '/plugin_tmp.zip'
         from werkzeug.utils import secure_filename
         from flask import request
         f = request.files['plugin_zip']
         if f.filename[-4:] != '.zip':
-            return mw.returnJson(False, '仅支持zip文件!')
+            return jh.returnJson(False, '仅支持zip文件!')
         f.save(tmp_file)
-        mw.execShell('cd ' + tmp_path + ' && unzip ' + tmp_file)
+        jh.execShell('cd ' + tmp_path + ' && unzip ' + tmp_file)
         os.remove(tmp_file)
 
         p_info = tmp_path + '/info.json'
@@ -400,48 +400,48 @@ class plugins_api:
                 tmp_path = d_path
                 p_info = tmp_path + '/info.json'
         try:
-            data = json.loads(mw.readFile(p_info))
-            data['size'] = mw.getPathSize(tmp_path)
+            data = json.loads(jh.readFile(p_info))
+            data['size'] = jh.getPathSize(tmp_path)
             if not 'author' in data:
                 data['author'] = '未知'
             if not 'home' in data:
                 data['home'] = 'https://github.com/jianghujs/jh-monitor'
-            plugin_path = mw.getPluginDir() + data['name'] + '/info.json'
+            plugin_path = jh.getPluginDir() + data['name'] + '/info.json'
             data['old_version'] = '0'
             data['tmp_path'] = tmp_path
             if os.path.exists(plugin_path):
                 try:
-                    old_info = json.loads(mw.ReadFile(plugin_path))
+                    old_info = json.loads(jh.ReadFile(plugin_path))
                     data['old_version'] = old_info['versions']
                 except:
                     pass
         except:
-            mw.execShell("rm -rf " + tmp_path)
-            return mw.returnJson(False, '在压缩包中没有找到插件信息,请检查插件包!')
+            jh.execShell("rm -rf " + tmp_path)
+            return jh.returnJson(False, '在压缩包中没有找到插件信息,请检查插件包!')
         protectPlist = ('openresty', 'mysql', 'php', 'redis', 'memcached'
                         'mongodb', 'swap', 'gogs', 'pureftp')
         if data['name'] in protectPlist:
-            return mw.returnJson(False, '[' + data['name'] + '],重要插件不可修改!')
-        return mw.getJson(data)
+            return jh.returnJson(False, '[' + data['name'] + '],重要插件不可修改!')
+        return jh.getJson(data)
 
     def inputZipApi(self):
         plugin_name = request.form.get('plugin_name', '')
         tmp_path = request.form.get('tmp_path', '')
 
         if not os.path.exists(tmp_path):
-            return mw.returnJson(False, '临时文件不存在,请重新上传!')
-        plugin_path = mw.getPluginDir() + '/' + plugin_name
+            return jh.returnJson(False, '临时文件不存在,请重新上传!')
+        plugin_path = jh.getPluginDir() + '/' + plugin_name
         if not os.path.exists(plugin_path):
-            print(mw.execShell('mkdir -p ' + plugin_path))
-        mw.execShell("\cp -rf " + tmp_path + '/* ' + plugin_path + '/')
-        mw.execShell('chmod -R 755 ' + plugin_path)
-        p_info = mw.readFile(plugin_path + '/info.json')
+            print(jh.execShell('mkdir -p ' + plugin_path))
+        jh.execShell("\cp -rf " + tmp_path + '/* ' + plugin_path + '/')
+        jh.execShell('chmod -R 755 ' + plugin_path)
+        p_info = jh.readFile(plugin_path + '/info.json')
         if p_info:
-            mw.writeLog('软件管理', '安装第三方插件[%s]' %
+            jh.writeLog('软件管理', '安装第三方插件[%s]' %
                         json.loads(p_info)['title'])
-            return mw.returnJson(True, '安装成功!')
-        mw.execShell("rm -rf " + plugin_path)
-        return mw.returnJson(False, '安装失败!')
+            return jh.returnJson(True, '安装成功!')
+        jh.execShell("rm -rf " + plugin_path)
+        return jh.returnJson(False, '安装失败!')
     ##### ----- end ----- ###
 
     # 进程是否存在
@@ -467,11 +467,11 @@ class plugins_api:
     # 检查是否正在安装
     def checkSetupTask(self, sName, sVer, sCoexist):
         if not self.__tasks:
-            self.__tasks = mw.M('tasks').where(
+            self.__tasks = jh.M('tasks').where(
                 "status!=?", ('1',)).field('status,name').select()
         isTask = '1'
         for task in self.__tasks:
-            tmpt = mw.getStrBetween('[', ']', task['name'])
+            tmpt = jh.getStrBetween('[', ']', task['name'])
             if not tmpt:
                 continue
             task_sign = tmpt.split('-')
@@ -579,9 +579,9 @@ class plugins_api:
 
     def checkDisplayIndex(self, name, version):
         if not os.path.exists(self.__index):
-            mw.writeFile(self.__index, '[]')
+            jh.writeFile(self.__index, '[]')
 
-        indexList = json.loads(mw.readFile(self.__index))
+        indexList = json.loads(jh.readFile(self.__index))
         if type(version) == list:
             for index in range(len(version)):
                 vname = name + '-' + version[index]
@@ -596,7 +596,7 @@ class plugins_api:
     def getVersion(self, path):
         version_f = path + '/version.pl'
         if os.path.exists(version_f):
-            return mw.readFile(version_f).strip()
+            return jh.readFile(version_f).strip()
         return ''
 
      # 构造本地插件信息
@@ -608,13 +608,13 @@ class plugins_api:
         if info["checks"][0:1] == '/':
             checks = info["checks"]
         else:
-            checks = mw.getRootDir() + '/' + info['checks']
+            checks = jh.getRootDir() + '/' + info['checks']
 
         if 'path' in info:
             path = info['path']
 
         if path[0:1] != '/':
-            path = mw.getRootDir() + '/' + path
+            path = jh.getRootDir() + '/' + path
 
         if 'coexist' in info and info['coexist']:
             coexist = True
@@ -719,7 +719,7 @@ class plugins_api:
             json_file = path + '/info.json'
             if os.path.exists(json_file):
                 try:
-                    data = json.loads(mw.readFile(json_file))
+                    data = json.loads(jh.readFile(json_file))
                     tmp_data = self.makeList(data, sType)
                     for item in tmp_data:
                         plugins_info.append(item)
@@ -737,7 +737,7 @@ class plugins_api:
                 json_file = path + '/info.json'
                 if os.path.exists(json_file):
                     try:
-                        data = json.loads(mw.readFile(json_file))
+                        data = json.loads(jh.readFile(json_file))
                         tmp_data = self.makeList(data, sType)
                         
                         tmp_data = self.checkStatusMThreads(tmp_data)
@@ -803,7 +803,7 @@ class plugins_api:
             if os.path.isdir(path):
                 json_file = path + '/info.json'
                 if os.path.exists(json_file):
-                    data = json.loads(mw.readFile(json_file))
+                    data = json.loads(jh.readFile(json_file))
                     if sType == '0':
                         tmp_list.append(data)
 
@@ -864,7 +864,7 @@ class plugins_api:
             if os.path.isdir(path):
                 json_file = path + '/info.json'
                 if os.path.exists(json_file):
-                    data = json.loads(mw.readFile(json_file))
+                    data = json.loads(jh.readFile(json_file))
                     if sType == '0':
                         tmp_list.append(data)
 
@@ -892,7 +892,7 @@ class plugins_api:
         # print sType, sPage, sPageSize
 
         ret = {}
-        ret['type'] = json.loads(mw.readFile(self.__type))
+        ret['type'] = json.loads(jh.readFile(self.__type))
         # plugins_info = self.getAllListThread(sType)
         # plugins_info = self.getAllListProcess(sType)
         data = self.getAllListPage(sType, sPage, sPageSize)
@@ -904,14 +904,14 @@ class plugins_api:
         args['tojs'] = 'getSList'
         args['row'] = sPageSize
 
-        ret['list'] = mw.getPage(args)
+        ret['list'] = jh.getPage(args)
         return ret
 
     def getIndexList(self):
         if not os.path.exists(self.__index):
-            mw.writeFile(self.__index, '[]')
+            jh.writeFile(self.__index, '[]')
 
-        indexList = json.loads(mw.readFile(self.__index))
+        indexList = json.loads(jh.readFile(self.__index))
         plist = []
         for i in indexList:
             tmp = i.split('-')
@@ -925,7 +925,7 @@ class plugins_api:
 
             json_file = self.__plugin_dir + '/' + plugin_name + '/info.json'
             if os.path.exists(json_file):
-                content = mw.readFile(json_file)
+                content = jh.readFile(json_file)
                 try:
                     data = json.loads(content)
                     data = self.makeList(data)
@@ -944,36 +944,36 @@ class plugins_api:
 
     def setIndexSort(self, sort):
         data = sort.split('|')
-        mw.writeFile(self.__index, json.dumps(data))
+        jh.writeFile(self.__index, json.dumps(data))
         return True
 
     def addIndex(self, name, version):
         if not os.path.exists(self.__index):
-            mw.writeFile(self.__index, '[]')
+            jh.writeFile(self.__index, '[]')
 
-        indexList = json.loads(mw.readFile(self.__index))
+        indexList = json.loads(jh.readFile(self.__index))
         vname = name + '-' + version
 
         if vname in indexList:
-            return mw.returnJson(False, '请不要重复添加!')
+            return jh.returnJson(False, '请不要重复添加!')
         if len(indexList) > 12:
-            return mw.returnJson(False, '首页最多只能显示12个软件!')
+            return jh.returnJson(False, '首页最多只能显示12个软件!')
 
         indexList.append(vname)
-        mw.writeFile(self.__index, json.dumps(indexList))
-        return mw.returnJson(True, '添加成功!')
+        jh.writeFile(self.__index, json.dumps(indexList))
+        return jh.returnJson(True, '添加成功!')
 
     def removeIndex(self, name, version):
         if not os.path.exists(self.__index):
-            mw.writeFile(self.__index, '[]')
+            jh.writeFile(self.__index, '[]')
 
-        indexList = json.loads(mw.readFile(self.__index))
+        indexList = json.loads(jh.readFile(self.__index))
         vname = name + '-' + version
         if not vname in indexList:
-            return mw.returnJson(True, '删除成功!')
+            return jh.returnJson(True, '删除成功!')
         indexList.remove(vname)
-        mw.writeFile(self.__index, json.dumps(indexList))
-        return mw.returnJson(True, '删除成功!')
+        jh.writeFile(self.__index, json.dumps(indexList))
+        return jh.returnJson(True, '删除成功!')
 
     # shell 调用
     def run(self, name, func, version='', args='', script='index'):
@@ -988,9 +988,9 @@ class plugins_api:
 
         if not os.path.exists(path):
             return ('', '')
-        data = mw.execShell(cmdstring=py_cmd, useTmpFile=True)
+        data = jh.execShell(cmdstring=py_cmd, useTmpFile=True)
 
-        if mw.isDebugMode():
+        if jh.isDebugMode():
             print('run', py_cmd)
             print(data)
         # print os.path.exists(py_cmd)
@@ -1006,7 +1006,7 @@ class plugins_api:
         sys.path.append(package)
         eval_str = "__import__('" + script + "')." + func + '(' + args + ')'
         newRet = eval(eval_str)
-        if mw.isDebugMode():
+        if jh.isDebugMode():
             print('callback', eval_str)
 
         return (True, newRet)

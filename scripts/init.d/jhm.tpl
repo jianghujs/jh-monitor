@@ -1,6 +1,6 @@
 #!/bin/bash
 # chkconfig: 2345 55 25
-# description: MW Cloud Service
+# description: JH Cloud Service
 
 ### BEGIN INIT INFO
 # Provides:          Midoks
@@ -8,8 +8,8 @@
 # Required-Stop:     $all
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: starts mw
-# Description:       starts the mw
+# Short-Description: starts jh
+# Description:       starts the jh
 ### END INIT INFO
 
 
@@ -57,7 +57,7 @@ mw_start_panel()
         fi
         echo -e "\033[32mdone\033[0m"
     else
-        echo "starting jh-monitor... mw(pid $(echo $isStart)) already running"
+        echo "starting jh-monitor... jh(pid $(echo $isStart)) already running"
     fi
 }
 
@@ -90,7 +90,7 @@ mw_start()
 	mw_start_panel
 }
 
-# /www/server/jh-monitor/tmp/panelTask.pl && service mw restart_task
+# /www/server/jh-monitor/tmp/panelTask.pl && service jh restart_task
 mw_stop_task()
 {
     if [ -f $mw_path/tmp/panelTask.pl ];then
@@ -117,7 +117,7 @@ mw_stop_panel()
         kill -9 $p &>/dev/null
     done
     
-    pidfile=${mw_path}/logs/mw.pid
+    pidfile=${mw_path}/logs/jh.pid
     if [ -f $pidfile ];then
         rm -f $pidfile
     fi
@@ -153,7 +153,7 @@ mw_reload()
 	isStart=$(ps aux|grep 'gunicorn -c setting.py app:app $ssl_param '|grep -v grep|awk '{print $2}');
     
     if [ "$isStart" != '' ];then
-    	echo -e "reload mw... \c";
+    	echo -e "reload jh... \c";
 	    arr=`ps aux|grep 'gunicorn -c setting.py app:app $ssl_param '|grep -v grep|awk '{print $2}'`;
 		for p in ${arr[@]}
         do
@@ -166,7 +166,7 @@ mw_reload()
             echo '------------------------------------------------------'
             tail -n 20 $mw_path/logs/error.log
             echo '------------------------------------------------------'
-            echo -e "\033[31mError: mw service startup failed.\033[0m"
+            echo -e "\033[31mError: jh service startup failed.\033[0m"
             return;
         fi
         echo -e "\033[32mdone\033[0m"
@@ -356,7 +356,7 @@ case "$1" in
         # echo -e "password: $password"
         echo -e "\033[33mWarning:\033[0m"
         echo -e "\033[33mIf you cannot access the panel. \033[0m"
-        echo -e "\033[33mrelease the following port (${show_panel_ip}888|80|443|22|10022|33067|10744) in the security group.\033[0m"
+        echo -e "\033[33mrelease the following port (${show_panel_ip}888|80|443|22|10022|33067|10844) in the security group.\033[0m"
         echo -e "=================================================================="
         ;;
     *)

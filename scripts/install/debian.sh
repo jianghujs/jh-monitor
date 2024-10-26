@@ -29,10 +29,6 @@ fi
 
 # 创建www目录
 mkdir -p /www/server
-mkdir -p /www/wwwroot
-mkdir -p /www/wwwlogs
-mkdir -p /www/backup/database
-mkdir -p /www/backup/site
 
 # 判断是否存在jh-monitor目录，存在则删除
 if [ -d "/www/server/jh-monitor" ]; then
@@ -83,16 +79,7 @@ fi
 
 # 防火墙开放端口
 if [ -f /usr/sbin/ufw ];then
-	ufw allow 22/tcp
-	ufw allow 80/tcp
-	ufw allow 443/tcp
-	ufw allow 888/tcp
-	ufw allow 10022/tcp
-	ufw allow 10744/tcp
-	ufw allow 33067/tcp
-	# ufw allow 7200/tcp
-	# ufw allow 3306/tcp
-	# ufw allow 30000:40000/tcp
+	ufw allow 10844/tcp
 	
 	# 关闭防火墙（安装时先关闭）
 	ufw disable
@@ -104,16 +91,7 @@ if [ ! -f /usr/sbin/ufw ];then
 	systemctl enable firewalld
 	systemctl start firewalld
 
-	firewall-cmd --permanent --zone=public --add-port=22/tcp
-	firewall-cmd --permanent --zone=public --add-port=80/tcp
-	firewall-cmd --permanent --zone=public --add-port=443/tcp
-	firewall-cmd --permanent --zone=public --add-port=888/tcp
-	firewall-cmd --permanent --zone=public --add-port=10022/tcp
-	firewall-cmd --permanent --zone=public --add-port=10744/tcp
-	firewall-cmd --permanent --zone=public --add-port=33067/tcp
-	# firewall-cmd --permanent --zone=public --add-port=7200/tcp
-	# firewall-cmd --permanent --zone=public --add-port=3306/tcp
-	# firewall-cmd --permanent --zone=public --add-port=30000-40000/tcp
+	firewall-cmd --permanent --zone=public --add-port=10844/tcp
 
 	# fix:debian10 firewalld faq
 	# https://kawsing.gitbook.io/opensystem/andoid-shou-ji/untitled/fang-huo-qiang#debian-10-firewalld-0.6.3-error-commandfailed-usrsbinip6tablesrestorewn-failed-ip6tablesrestore-v1.8

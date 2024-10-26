@@ -21,10 +21,10 @@ import os
 pwd = os.getcwd()
 sys.path.append(pwd + '/class/core')
 
-import mw
+import jh
 
 # cmd = 'ls /usr/local/lib/ | grep python  | cut -d \\  -f 1 | awk \'END {print}\''
-# info = mw.execShell(cmd)
+# info = jh.execShell(cmd)
 # p = "/usr/local/lib/" + info[0].strip() + "/site-packages"
 # p_debain = "/usr/local/lib/" + info[0].strip() + "/dist-packages"
 
@@ -43,16 +43,16 @@ if not os.path.exists(log_dir):
 # default port
 mw_port = "7200"
 if os.path.exists("data/port.pl"):
-    mw_port = mw.readFile('data/port.pl')
+    mw_port = jh.readFile('data/port.pl')
     mw_port.strip()
 else:
     import firewall_api
     import common
     common.initDB()
     # mw_port = str(random.randint(10000, 65530))
-    mw_port = "10744"
+    mw_port = "10844"
     firewall_api.firewall_api().addAcceptPortArgs(mw_port, 'tcp', 'WEB面板', 'port')
-    mw.writeFile('data/port.pl', mw_port)
+    jh.writeFile('data/port.pl', mw_port)
 
 bind = []
 if os.path.exists('data/ipv6.pl'):
@@ -63,8 +63,8 @@ else:
 
 # 初始安装时,自动生成安全路径
 if not os.path.exists('data/admin_path.pl'):
-    admin_path = mw.getRandomString(8)
-    mw.writeFile('data/admin_path.pl', '/' + admin_path.lower())
+    admin_path = jh.getRandomString(8)
+    jh.writeFile('data/admin_path.pl', '/' + admin_path.lower())
 
 workers = 1
 threads = workers * 1
@@ -80,4 +80,4 @@ access_log_format = '%(t)s %(p)s %(h)s "%(r)s" %(s)s %(L)s %(b)s %(f)s" "%(a)s"'
 loglevel = 'info'
 errorlog = log_dir + '/error.log'
 accesslog = log_dir + '/access.log'
-pidfile = log_dir + '/mw.pid'
+pidfile = log_dir + '/jh.pid'

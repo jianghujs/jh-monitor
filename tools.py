@@ -20,21 +20,21 @@ import time
 import socket
 
 sys.path.append(os.getcwd() + "/class/core")
-import mw
+import jh
 import db
 
 import system_api
 
 # cmd = 'ls /usr/local/lib/ | grep python  | cut -d \\  -f 1 | awk \'END {print}\''
-# info = mw.execShell(cmd)
+# info = jh.execShell(cmd)
 # p = "/usr/local/lib/" + info[0].strip() + "/site-packages"
 # sys.path.append(p)
 
 INIT_DIR = "/etc/rc.d/init.d"
-if mw.isAppleSystem():
-    INIT_DIR = mw.getRunDir() + "/scripts/init.d"
+if jh.isAppleSystem():
+    INIT_DIR = jh.getRunDir() + "/scripts/init.d"
 
-INIT_CMD = INIT_DIR + "/mw"
+INIT_CMD = INIT_DIR + "/jh"
 
 
 def mw_input_cmd(msg):
@@ -109,7 +109,7 @@ def mwcli(mw_input=0, confirm=False):
             import firewall_api
             firewall_api.firewall_api().addAcceptPortArgs(
                 in_port, 'tcp', 'WEB面板[TOOLS修改]', 'port')
-            mw.writeFile('data/port.pl', in_port)
+            jh.writeFile('data/port.pl', in_port)
         else:
             print("|-端口范围在0-65536之间")
         return
@@ -125,7 +125,7 @@ def mwcli(mw_input=0, confirm=False):
         input_user = mw_input_cmd("请输入新的面板用户名(>=5位)：")
         set_panel_username(input_user.strip())
     elif mw_input == 13:
-        os.system('tail -100 ' + mw.getRunDir() + '/logs/error.log')
+        os.system('tail -100 ' + jh.getRunDir() + '/logs/error.log')
     elif mw_input == 20:
         basic_auth = 'data/basic_auth.json'
         if os.path.exists(basic_auth):
@@ -144,7 +144,7 @@ def set_panel_pwd(password, ncli=False):
     import db
     sql = db.Sql()
     result = sql.table('users').where('id=?', (1,)).setField(
-        'password', mw.md5(password))
+        'password', jh.md5(password))
     username = sql.table('users').where('id=?', (1,)).getField('username')
     if ncli:
         print("|-用户名: " + username)
@@ -161,9 +161,9 @@ def show_panel_pwd():
 
     file_pwd = ''
     if os.path.exists('data/default.pl'):
-        file_pwd = mw.readFile('data/default.pl').strip()
+        file_pwd = jh.readFile('data/default.pl').strip()
 
-    if mw.md5(file_pwd) == password:
+    if jh.md5(file_pwd) == password:
         print('password: ' + file_pwd)
         return
     print("the password has been changed!")
@@ -187,14 +187,14 @@ def set_panel_username(username=None):
 
     username = sql.table('users').where('id=?', (1,)).getField('username')
     if username == 'admin':
-        username = mw.getRandomString(8).lower()
+        username = jh.getRandomString(8).lower()
         sql.table('users').where('id=?', (1,)).setField('username', username)
     print('username: ' + username)
 
 
 def getServerIp():
     version = sys.argv[2]
-    ip = mw.execShell(
+    ip = jh.execShell(
         "curl -{} -sS --connect-timeout 5 -m 60 https://v6r.ipip.net/?format=text".format(version))
     print(ip[0] if ip[2] == 0 else "")
 
@@ -210,12 +210,12 @@ def getLocalIp():
     print(local_ip) 
 
 def getPanelIp():
-    print(mw.getLocalIpBack())
+    print(jh.getLocalIpBack())
 
 def getStandbyIp():
     standby_ip = ""
     try:
-        slave_ssh_list_result = mw.execShell("python3 /www/server/jh-monitor/plugins/mysql-apt/index.py get_slave_ssh_list {page:1,page_size:5,tojs:getSlaveSSHPage}")
+        slave_ssh_list_result = jh.execShell("python3 /www/server/jh-monitor/plugins/mysql-apt/index.py get_slave_ssh_list {page:1,page_size:5,tojs:getSlaveSSHPage}")
         slave_ssh_list_result = json.loads(slave_ssh_list_result[0])
         slave_ssh_list = slave_ssh_list_result.get("data")
         if len(slave_ssh_list) > 0:

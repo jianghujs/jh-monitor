@@ -16,7 +16,7 @@ import time
 import os
 import sys
 from urllib.parse import urlparse
-import mw
+import jh
 import re
 import json
 import shutil
@@ -42,38 +42,38 @@ class site_api:
 
     def __init__(self):
         # nginx conf
-        self.setupPath = mw.getServerDir() + '/web_conf'
+        self.setupPath = jh.getServerDir() + '/web_conf'
 
         self.vhostPath = vhost = self.setupPath + '/nginx/vhost'
         if not os.path.exists(vhost):
-            mw.execShell("mkdir -p " + vhost + " && chmod -R 755 " + vhost)
+            jh.execShell("mkdir -p " + vhost + " && chmod -R 755 " + vhost)
         self.rewritePath = rewrite = self.setupPath + '/nginx/rewrite'
         if not os.path.exists(rewrite):
-            mw.execShell("mkdir -p " + rewrite + " && chmod -R 755 " + rewrite)
+            jh.execShell("mkdir -p " + rewrite + " && chmod -R 755 " + rewrite)
 
         self.passPath = passwd = self.setupPath + '/nginx/pass'
         if not os.path.exists(passwd):
-            mw.execShell("mkdir -p " + passwd + " && chmod -R 755 " + passwd)
+            jh.execShell("mkdir -p " + passwd + " && chmod -R 755 " + passwd)
 
         self.redirectPath = redirect = self.setupPath + '/nginx/redirect'
         if not os.path.exists(redirect):
-            mw.execShell("mkdir -p " + redirect +
+            jh.execShell("mkdir -p " + redirect +
                          " && chmod -R 755 " + redirect)
 
         self.proxyPath = proxy = self.setupPath + '/nginx/proxy'
         if not os.path.exists(proxy):
-            mw.execShell("mkdir -p " + proxy + " && chmod -R 755 " + proxy)
+            jh.execShell("mkdir -p " + proxy + " && chmod -R 755 " + proxy)
 
-        self.logsPath = mw.getRootDir() + '/wwwlogs'
+        self.logsPath = jh.getRootDir() + '/wwwlogs'
         # ssl conf
         self.sslDir = self.setupPath + '/ssl'
         self.sslLetsDir = self.setupPath + '/letsencrypt'
         if not os.path.exists(self.sslLetsDir):
-            mw.execShell("mkdir -p " + self.sslLetsDir +
+            jh.execShell("mkdir -p " + self.sslLetsDir +
                          " && chmod -R 755 " + self.sslLetsDir)
 
     def openrestyReload(self):
-        data = mw.execShell("/www/server/openresty/bin/openresty -s reload")
+        data = jh.execShell("/www/server/openresty/bin/openresty -s reload")
         return ("重启openresty失败，请检查配置！\n" + data[0]) if data[0] else ''
 
     ##### ----- start ----- ###
@@ -84,7 +84,7 @@ class site_api:
 
         start = (int(p) - 1) * (int(limit))
 
-        siteM = mw.M('sites')
+        siteM = jh.M('sites')
         if type_id != '' and type_id == '-1' and type_id == '0':
             siteM.where('type_id=?', (type_id))
 
@@ -92,7 +92,7 @@ class site_api:
             (str(start)) + ',' + limit).order('id desc').select()
 
         for i in range(len(_list)):
-            _list[i]['backup_count'] = mw.M('backup').where(
+            _list[i]['backup_count'] = jh.M('backup').where(
                 "pid=? AND type=?", (_list[i]['id'], 0)).count()
 
         _ret = {}
@@ -105,43 +105,43 @@ class site_api:
         _page['p'] = p
         _page['row'] = limit
 
-        _ret['page'] = mw.getPage(_page)
-        return mw.getJson(_ret)
+        _ret['page'] = jh.getPage(_page)
+        return jh.getJson(_ret)
 
     def setDefaultSiteApi(self):
         name = request.form.get('name', '')
         import time
         # 清理旧的
-        default_site = mw.readFile('data/default_site.pl')
+        default_site = jh.readFile('data/default_site.pl')
         if default_site:
             path = self.getHostConf(default_site)
             if os.path.exists(path):
-                conf = mw.readFile(path)
+                conf = jh.readFile(path)
                 rep = "listen\s+80.+;"
                 conf = re.sub(rep, 'listen 80;', conf, 1)
                 rep = "listen\s+443.+;"
                 conf = re.sub(rep, 'listen 443 ssl;', conf, 1)
-                mw.writeFile(path, conf)
+                jh.writeFile(path, conf)
 
         path = self.getHostConf(name)
         if os.path.exists(path):
-            conf = mw.readFile(path)
+            conf = jh.readFile(path)
             rep = "listen\s+80\s*;"
             conf = re.sub(rep, 'listen 80 default_server;', conf, 1)
             rep = "listen\s+443\s*ssl\s*\w*\s*;"
             conf = re.sub(rep, 'listen 443 ssl default_server;', conf, 1)
-            mw.writeFile(path, conf)
+            jh.writeFile(path, conf)
 
-        mw.writeFile('data/default_site.pl', name)
-        mw.restartWeb()
-        return mw.returnJson(True, '设置成功!')
+        jh.writeFile('data/default_site.pl', name)
+        jh.restartWeb()
+        return jh.returnJson(True, '设置成功!')
 
     def getDefaultSiteApi(self):
         data = {}
-        data['sites'] = mw.M('sites').field(
+        data['sites'] = jh.M('sites').field(
             'name').order('id desc').select()
-        data['default_site'] = mw.readFile('data/default_site.pl')
-        return mw.getJson(data)
+        data['default_site'] = jh.readFile('data/default_site.pl')
+        return jh.getJson(data)
 
     def getCliPhpVersionApi(self):
         php_bin = '/usr/bin/php'
@@ -149,21 +149,21 @@ class site_api:
         php_versions = php_versions[1:]
 
         if len(php_versions) < 1:
-            return mw.returnJson(False, '未安装PHP,无法设置')
+            return jh.returnJson(False, '未安装PHP,无法设置')
 
         if os.path.exists(php_bin) and os.path.islink(php_bin):
             link_re = os.readlink(php_bin)
             for v in php_versions:
                 if link_re.find(v['version']) != -1:
-                    return mw.getJson({"select": v, "versions": php_versions})
+                    return jh.getJson({"select": v, "versions": php_versions})
 
-        return mw.getJson({
+        return jh.getJson({
             "select": php_versions[0],
             "versions": php_versions})
 
     def setCliPhpVersionApi(self):
-        if mw.isAppleSystem():
-            return mw.returnJson(False, "开发机不可设置!")
+        if jh.isAppleSystem():
+            return jh.returnJson(False, "开发机不可设置!")
 
         version = request.form.get('version', '')
 
@@ -178,40 +178,40 @@ class site_api:
         php_pear = '/usr/bin/pear'
         php_pear_src = "/www/server/php/%s/bin/pear" % version
         if not os.path.exists(php_bin_src):
-            return mw.returnJson(False, '指定PHP版本未安装!')
+            return jh.returnJson(False, '指定PHP版本未安装!')
 
-        is_chattr = mw.execShell('lsattr /usr|grep /usr/bin')[0].find('-i-')
+        is_chattr = jh.execShell('lsattr /usr|grep /usr/bin')[0].find('-i-')
         if is_chattr != -1:
-            mw.execShell('chattr -i /usr/bin')
-        mw.execShell("rm -f " + php_bin + ' ' + php_ize + ' ' +
+            jh.execShell('chattr -i /usr/bin')
+        jh.execShell("rm -f " + php_bin + ' ' + php_ize + ' ' +
                      php_fpm + ' ' + php_pecl + ' ' + php_pear)
-        mw.execShell("ln -sf %s %s" % (php_bin_src, php_bin))
-        mw.execShell("ln -sf %s %s" % (php_ize_src, php_ize))
-        mw.execShell("ln -sf %s %s" % (php_fpm_src, php_fpm))
-        mw.execShell("ln -sf %s %s" % (php_pecl_src, php_pecl))
-        mw.execShell("ln -sf %s %s" % (php_pear_src, php_pear))
+        jh.execShell("ln -sf %s %s" % (php_bin_src, php_bin))
+        jh.execShell("ln -sf %s %s" % (php_ize_src, php_ize))
+        jh.execShell("ln -sf %s %s" % (php_fpm_src, php_fpm))
+        jh.execShell("ln -sf %s %s" % (php_pecl_src, php_pecl))
+        jh.execShell("ln -sf %s %s" % (php_pear_src, php_pear))
         if is_chattr != -1:
-            mw.execShell('chattr +i /usr/bin')
-        mw.writeLog('面板设置', '设置PHP-CLI版本为: %s' % version)
-        return mw.returnJson(True, '设置成功!')
+            jh.execShell('chattr +i /usr/bin')
+        jh.writeLog('面板设置', '设置PHP-CLI版本为: %s' % version)
+        return jh.returnJson(True, '设置成功!')
 
     def getHostConfigApi(self):
-        site_list = mw.M('sites').field(
+        site_list = jh.M('sites').field(
         "id,name,path,ps,status,addtime").order("id desc").select()
-        ip = mw.getHostAddr()
-        # ip = mw.getServerIp(4)
+        ip = jh.getHostAddr()
+        # ip = jh.getServerIp(4)
         host_content = ''
         for site in site_list:
             host_content += "%(ip)s %(site)s\n" % {"ip": ip, "site": site.get('name', '')}
-        return mw.returnJson(True, 'ok',  host_content)
+        return jh.returnJson(True, 'ok',  host_content)
 
 
     def setPsApi(self):
         mid = request.form.get('id', '')
         ps = request.form.get('ps', '')
-        if mw.M('sites').where("id=?", (mid,)).setField('ps', ps):
-            return mw.returnJson(True, '修改成功!')
-        return mw.returnJson(False, '修改失败!')
+        if jh.M('sites').where("id=?", (mid,)).setField('ps', ps):
+            return jh.returnJson(True, '修改成功!')
+        return jh.returnJson(False, '修改失败!')
 
     def stopApi(self):
         mid = request.form.get('id', '')
@@ -219,135 +219,135 @@ class site_api:
         
         reload_result = self.openrestyReload()
         if reload_result:
-            return mw.returnJson(False, reload_result)
+            return jh.returnJson(False, reload_result)
 
         return self.stop(mid, name)
 
     def reloadApi(self):
         reload_result = self.openrestyReload()
         if reload_result:
-            return mw.returnJson(False, reload_result)
-        return mw.returnJson(True, '重载openresty成功!')
+            return jh.returnJson(False, reload_result)
+        return jh.returnJson(True, '重载openresty成功!')
 
     def stop(self, mid, name):
         path = self.setupPath + '/stop'
         if not os.path.exists(path):
             os.makedirs(path)
             default_text = 'The website has been closed!!!'
-            mw.writeFile(path + '/index.html', default_text)
+            jh.writeFile(path + '/index.html', default_text)
 
-        binding = mw.M('binding').where('pid=?', (mid,)).field(
+        binding = jh.M('binding').where('pid=?', (mid,)).field(
             'id,pid,domain,path,port,addtime').select()
         for b in binding:
             bpath = path + '/' + b['path']
             if not os.path.exists(bpath):
-                mw.execShell('mkdir -p ' + bpath)
-                mw.execShell('ln -sf ' + path +
+                jh.execShell('mkdir -p ' + bpath)
+                jh.execShell('ln -sf ' + path +
                              '/index.html ' + bpath + '/index.html')
 
-        sitePath = mw.M('sites').where("id=?", (mid,)).getField('path')
+        sitePath = jh.M('sites').where("id=?", (mid,)).getField('path')
 
         # nginx
         file = self.getHostConf(name)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             conf = conf.replace(sitePath, path)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.M('sites').where("id=?", (mid,)).setField('status', '0')
-        mw.restartWeb()
-        msg = mw.getInfo('网站[{1}]已被停用!', (name,))
-        mw.writeLog('网站管理', msg)
-        return mw.returnJson(True, '站点已停用!')
+        jh.M('sites').where("id=?", (mid,)).setField('status', '0')
+        jh.restartWeb()
+        msg = jh.getInfo('网站[{1}]已被停用!', (name,))
+        jh.writeLog('网站管理', msg)
+        return jh.returnJson(True, '站点已停用!')
 
     def startApi(self):
         mid = request.form.get('id', '')
         name = request.form.get('name', '')
         path = self.setupPath + '/stop'
-        sitePath = mw.M('sites').where("id=?", (mid,)).getField('path')
+        sitePath = jh.M('sites').where("id=?", (mid,)).getField('path')
 
         # nginx
         file = self.getHostConf(name)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             conf = conf.replace(path, sitePath)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.M('sites').where("id=?", (mid,)).setField('status', '1')
-        mw.restartWeb()
-        msg = mw.getInfo('网站[{1}]已被启用!', (name,))
-        mw.writeLog('网站管理', msg)
+        jh.M('sites').where("id=?", (mid,)).setField('status', '1')
+        jh.restartWeb()
+        msg = jh.getInfo('网站[{1}]已被启用!', (name,))
+        jh.writeLog('网站管理', msg)
         reload_result = self.openrestyReload()
         if reload_result:
-            return mw.returnJson(False, reload_result)
-        return mw.returnJson(True, '站点已启用!')
+            return jh.returnJson(False, reload_result)
+        return jh.returnJson(True, '站点已启用!')
 
     def getBackupApi(self):
         limit = request.form.get('limit', '')
         p = request.form.get('p', '')
         mid = request.form.get('search', '')
 
-        find = mw.M('sites').where("id=?", (mid,)).field(
+        find = jh.M('sites').where("id=?", (mid,)).field(
             "id,name,path,status,ps,addtime,edate").find()
 
         start = (int(p) - 1) * (int(limit))
-        _list = mw.M('backup').where('pid=?', (mid,)).field('id,type,name,pid,filename,size,addtime').limit(
+        _list = jh.M('backup').where('pid=?', (mid,)).field('id,type,name,pid,filename,size,addtime').limit(
             (str(start)) + ',' + limit).order('id desc').select()
         _ret = {}
         _ret['data'] = _list
 
-        count = mw.M('backup').where("id=?", (mid,)).count()
+        count = jh.M('backup').where("id=?", (mid,)).count()
         info = {}
         info['count'] = count
         info['tojs'] = 'getBackup'
         info['p'] = p
         info['row'] = limit
-        _ret['page'] = mw.getPage(info)
+        _ret['page'] = jh.getPage(info)
         _ret['site'] = find
-        return mw.getJson(_ret)
+        return jh.getJson(_ret)
 
     def toBackupApi(self):
         mid = request.form.get('id', '')
-        find = mw.M('sites').where(
+        find = jh.M('sites').where(
             "id=?", (mid,)).field('name,path,id').find()
         fileName = find['name'] + '_' + \
             time.strftime('%Y%m%d_%H%M%S', time.localtime()) + '.zip'
-        backupPath = mw.getBackupDir() + '/site'
+        backupPath = jh.getBackupDir() + '/site'
         zipName = backupPath + '/' + fileName
         if not (os.path.exists(backupPath)):
             os.makedirs(backupPath)
-        tmps = mw.getRunDir() + '/tmp/panelExec.log'
+        tmps = jh.getRunDir() + '/tmp/panelExec.log'
         execStr = "cd '" + find['path'] + "' && zip '" + \
             zipName + "' -r ./* > " + tmps + " 2>&1"
         # print execStr
-        mw.execShell(execStr)
+        jh.execShell(execStr)
 
         if os.path.exists(zipName):
             fsize = os.path.getsize(zipName)
         else:
             fsize = 0
-        sql = mw.M('backup').add('type,name,pid,filename,size,addtime',
-                                 (0, fileName, find['id'], zipName, fsize, mw.getDate()))
+        sql = jh.M('backup').add('type,name,pid,filename,size,addtime',
+                                 (0, fileName, find['id'], zipName, fsize, jh.getDate()))
 
-        msg = mw.getInfo('备份网站[{1}]成功!', (find['name'],))
-        mw.writeLog('网站管理', msg)
-        return mw.returnJson(True, '备份成功!')
+        msg = jh.getInfo('备份网站[{1}]成功!', (find['name'],))
+        jh.writeLog('网站管理', msg)
+        return jh.returnJson(True, '备份成功!')
 
     def delBackupApi(self):
         mid = request.form.get('id', '')
-        filename = mw.M('backup').where(
+        filename = jh.M('backup').where(
             "id=?", (mid,)).getField('filename')
         if os.path.exists(filename):
             os.remove(filename)
-        name = mw.M('backup').where("id=?", (mid,)).getField('name')
-        msg = mw.getInfo('删除网站[{1}]的备份[{2}]成功!', (name, filename))
-        mw.writeLog('网站管理', msg)
-        mw.M('backup').where("id=?", (mid,)).delete()
-        return mw.returnJson(True, '站点删除成功!')
+        name = jh.M('backup').where("id=?", (mid,)).getField('name')
+        msg = jh.getInfo('删除网站[{1}]的备份[{2}]成功!', (name, filename))
+        jh.writeLog('网站管理', msg)
+        jh.M('backup').where("id=?", (mid,)).delete()
+        return jh.returnJson(True, '站点删除成功!')
 
     def getPhpVersionApi(self):
         data = self.getPhpVersion()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def setPhpVersionApi(self):
         siteName = request.form.get('siteName', '')
@@ -355,17 +355,17 @@ class site_api:
 
         # nginx
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             rep = "enable-php-(.*)\.conf"
             tmp = re.search(rep, conf).group()
             conf = conf.replace(tmp, 'enable-php-' + version + '.conf')
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        msg = mw.getInfo('成功切换网站[{1}]的PHP版本为PHP-{2}', (siteName, version))
-        mw.writeLog("网站管理", msg)
-        mw.restartWeb()
-        return mw.returnJson(True, msg)
+        msg = jh.getInfo('成功切换网站[{1}]的PHP版本为PHP-{2}', (siteName, version))
+        jh.writeLog("网站管理", msg)
+        jh.restartWeb()
+        return jh.returnJson(True, msg)
 
     def getDomainApi(self):
         pid = request.form.get('pid', '')
@@ -376,9 +376,9 @@ class site_api:
         pid = request.form.get('id', '')
 
         data = {}
-        domains = mw.M('domain').where(
+        domains = jh.M('domain').where(
             'pid=?', (pid,)).field('name,id').select()
-        binding = mw.M('binding').where(
+        binding = jh.M('binding').where(
             'pid=?', (pid,)).field('domain,id').select()
         if type(binding) == str:
             return binding
@@ -388,28 +388,28 @@ class site_api:
             tmp['id'] = b['id']
             domains.append(tmp)
         data['domains'] = domains
-        data['email'] = mw.M('users').getField('email')
+        data['email'] = jh.M('users').getField('email')
         if data['email'] == 'midoks@163.com':
             data['email'] = ''
-        return mw.returnJson(True, 'OK', data)
+        return jh.returnJson(True, 'OK', data)
 
     def getDirBindingApi(self):
         mid = request.form.get('id', '')
 
-        path = mw.M('sites').where('id=?', (mid,)).getField('path')
+        path = jh.M('sites').where('id=?', (mid,)).getField('path')
         if not os.path.exists(path):
             checks = ['/', '/usr', '/etc']
             if path in checks:
                 data = {}
                 data['dirs'] = []
                 data['binding'] = []
-                return mw.returnJson(True, 'OK', data)
+                return jh.returnJson(True, 'OK', data)
             os.system('mkdir -p ' + path)
             os.system('chmod 755 ' + path)
             os.system('chown www:www ' + path)
-            siteName = mw.M('sites').where(
+            siteName = jh.M('sites').where(
                 'id=?', (get.id,)).getField('name')
-            mw.writeLog(
+            jh.writeLog(
                 '网站管理', '站点[' + siteName + '],根目录[' + path + ']不存在,已重新创建!')
 
         dirnames = []
@@ -425,15 +425,15 @@ class site_api:
 
         data = {}
         data['dirs'] = dirnames
-        data['binding'] = mw.M('binding').where('pid=?', (mid,)).field(
+        data['binding'] = jh.M('binding').where('pid=?', (mid,)).field(
             'id,pid,domain,path,port,addtime').select()
-        return mw.returnJson(True, 'OK', data)
+        return jh.returnJson(True, 'OK', data)
 
     def getDirUserIniApi(self):
         mid = request.form.get('id', '')
 
-        path = mw.M('sites').where('id=?', (mid,)).getField('path')
-        name = mw.M('sites').where("id=?", (mid,)).getField('name')
+        path = jh.M('sites').where('id=?', (mid,)).getField('path')
+        name = jh.M('sites').where("id=?", (mid,)).getField('name')
         data = {}
         data['logs'] = self.getLogsStatus(name)
         data['runPath'] = self.getSiteRunPath(mid)
@@ -449,7 +449,7 @@ class site_api:
         data['pass'] = self.getHasPwd(name)
         data['path'] = path
         data['name'] = name
-        return mw.returnJson(True, 'OK', data)
+        return jh.returnJson(True, 'OK', data)
 
     def setDirUserIniApi(self):
         path = request.form.get('path', '')
@@ -458,64 +458,64 @@ class site_api:
 
         if os.path.exists(filename):
             self.delUserInI(path)
-            mw.execShell("which chattr && chattr -i " + filename)
+            jh.execShell("which chattr && chattr -i " + filename)
             os.remove(filename)
-            return mw.returnJson(True, '已清除防跨站设置!')
+            return jh.returnJson(True, '已清除防跨站设置!')
 
         self.setDirUserINI(path, runPath)
-        mw.execShell("which chattr && chattr +i " + filename)
+        jh.execShell("which chattr && chattr +i " + filename)
 
-        return mw.returnJson(True, '已打开防跨站设置!')
+        return jh.returnJson(True, '已打开防跨站设置!')
 
     def setRewriteApi(self):
         data = request.form.get('data', '')
         path = request.form.get('path', '')
         encoding = request.form.get('encoding', '')
         if not os.path.exists(path):
-            mw.writeFile(path, '')
+            jh.writeFile(path, '')
 
-        mw.backFile(path)
-        mw.writeFile(path, data)
-        isError = mw.checkWebConfig()
+        jh.backFile(path)
+        jh.writeFile(path, data)
+        isError = jh.checkWebConfig()
         if(type(isError) == str):
-            mw.restoreFile(path)
-            return mw.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
-        mw.restartWeb()
-        return mw.returnJson(True, '设置成功!')
+            jh.restoreFile(path)
+            return jh.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
+        jh.restartWeb()
+        return jh.returnJson(True, '设置成功!')
 
     def setRewriteTplApi(self):
         data = request.form.get('data', '')
         name = request.form.get('name', '')
-        path = mw.getRunDir() + "/rewrite/nginx/" + name + ".conf"
+        path = jh.getRunDir() + "/rewrite/nginx/" + name + ".conf"
         if os.path.exists(path):
-            return mw.returnJson(False, '模版已经存在!')
+            return jh.returnJson(False, '模版已经存在!')
 
         if data == "":
-            return mw.returnJson(False, '模版内容不能为空!')
-        ok = mw.writeFile(path, data)
+            return jh.returnJson(False, '模版内容不能为空!')
+        ok = jh.writeFile(path, data)
         if not ok:
-            return mw.returnJson(False, '模版保持失败!')
+            return jh.returnJson(False, '模版保持失败!')
 
-        return mw.returnJson(True, '设置模板成功!')
+        return jh.returnJson(True, '设置模板成功!')
 
     def logsOpenApi(self):
         mid = request.form.get('id', '')
-        name = mw.M('sites').where("id=?", (mid,)).getField('name')
+        name = jh.M('sites').where("id=?", (mid,)).getField('name')
 
         # NGINX
         filename = self.getHostConf(name)
         if os.path.exists(filename):
-            conf = mw.readFile(filename)
+            conf = jh.readFile(filename)
             rep = self.logsPath + "/" + name + ".log"
             if conf.find(rep) != -1:
                 conf = conf.replace(rep + " main", "off")
             else:
                 conf = conf.replace('access_log  off',
                                     'access_log  ' + rep + " main")
-            mw.writeFile(filename, conf)
+            jh.writeFile(filename, conf)
 
-        mw.restartWeb()
-        return mw.returnJson(True, '操作成功!')
+        jh.restartWeb()
+        return jh.returnJson(True, '操作成功!')
 
     def getCertListApi(self):
         try:
@@ -537,14 +537,14 @@ class site_api:
                 if not os.path.exists(mpath):
                     continue
 
-                tmp = mw.readFile(mpath)
+                tmp = jh.readFile(mpath)
                 if not tmp:
                     continue
                 tmp1 = json.loads(tmp)
                 data.append(tmp1)
-            return mw.returnJson(True, 'OK', data)
+            return jh.returnJson(True, 'OK', data)
         except:
-            return mw.returnJson(True, 'OK', [])
+            return jh.returnJson(True, 'OK', [])
 
     
 
@@ -554,7 +554,7 @@ class site_api:
         csr_path = path + '/fullchain.pem'  # 生成证书路径
 
         file = self.getHostConf(site_name)
-        content = mw.readFile(file)
+        content = jh.readFile(file)
         key_text = 'ssl_certificate'
         status = True
         if content.find(key_text) == -1:
@@ -562,30 +562,30 @@ class site_api:
 
         if ssl_type == 'now':
             if status:
-                return mw.returnJson(False, '使用中,先关闭再删除')
+                return jh.returnJson(False, '使用中,先关闭再删除')
             if os.path.exists(path):
-                mw.execShell('rm -rf ' + path)
+                jh.execShell('rm -rf ' + path)
             else:
-                return mw.returnJson(False, '还未申请!')
+                return jh.returnJson(False, '还未申请!')
         elif ssl_type == 'lets':
             ssl_lets_dir = self.sslLetsDir + '/' + site_name
             csr_lets_path = ssl_lets_dir + '/fullchain.pem'  # 生成证书路径
-            if mw.md5(mw.readFile(csr_lets_path)) == mw.md5(mw.readFile(csr_path)):
-                return mw.returnJson(False, '使用中,先关闭再删除')
-            mw.execShell('rm -rf ' + ssl_lets_dir)
+            if jh.md5(jh.readFile(csr_lets_path)) == jh.md5(jh.readFile(csr_path)):
+                return jh.returnJson(False, '使用中,先关闭再删除')
+            jh.execShell('rm -rf ' + ssl_lets_dir)
         elif ssl_type == 'acme':
-            ssl_acme_dir = mw.getAcmeDir() + '/' + site_name
+            ssl_acme_dir = jh.getAcmeDir() + '/' + site_name
             csr_acme_path = ssl_acme_dir + '/fullchain.cer'  # 生成证书路径
-            if mw.md5(mw.readFile(csr_acme_path)) == mw.md5(mw.readFile(csr_path)):
-                return mw.returnJson(False, '使用中,先关闭再删除')
-            mw.execShell('rm -rf ' + ssl_acme_dir)
+            if jh.md5(jh.readFile(csr_acme_path)) == jh.md5(jh.readFile(csr_path)):
+                return jh.returnJson(False, '使用中,先关闭再删除')
+            jh.execShell('rm -rf ' + ssl_acme_dir)
 
     def deleteSslApi(self):
         site_name = request.form.get('site_name', '')
         ssl_type = request.form.get('ssl_type', '')
         self.deleteSsl(site_name, ssl_type)
-        # mw.restartWeb()
-        return mw.returnJson(True, '删除成功')
+        # jh.restartWeb()
+        return jh.returnJson(True, '删除成功')
 
     def getSslApi(self):
         site_name = request.form.get('site_name', '')
@@ -594,7 +594,7 @@ class site_api:
         path = self.sslDir + '/' + site_name
 
         file = self.getHostConf(site_name)
-        content = mw.readFile(file)
+        content = jh.readFile(file)
 
         key_text = 'ssl_certificate'
         status = True
@@ -604,8 +604,8 @@ class site_api:
             stype = -1
 
         to_https = self.isToHttps(site_name)
-        sid = mw.M('sites').where("name=?", (site_name,)).getField('id')
-        domains = mw.M('domain').where("pid=?", (sid,)).field('name').select()
+        sid = jh.M('sites').where("name=?", (site_name,)).getField('id')
+        domains = jh.M('domain').where("pid=?", (sid,)).field('name').select()
 
         csr_path = path + '/fullchain.pem'  # 生成证书路径
         key_path = path + '/privkey.pem'    # 密钥文件路径
@@ -615,13 +615,13 @@ class site_api:
             csr_path = self.sslLetsDir + '/' + site_name + '/fullchain.pem'  # 生成证书路径
             key_path = self.sslLetsDir + '/' + site_name + '/privkey.pem'    # 密钥文件路径
         elif ssl_type == 'acme':
-            csr_path = mw.getAcmeDir() + '/' + site_name + '/fullchain.cer'  # 生成证书路径
-            key_path = mw.getAcmeDir() + '/' + site_name + '/' + \
+            csr_path = jh.getAcmeDir() + '/' + site_name + '/fullchain.cer'  # 生成证书路径
+            key_path = jh.getAcmeDir() + '/' + site_name + '/' + \
                 site_name + '.key'    # 密钥文件路径
 
-        key = mw.readFile(key_path)
-        csr = mw.readFile(csr_path)
-        cert_data = mw.getCertName(csr_path)
+        key = jh.readFile(key_path)
+        csr = jh.readFile(csr_path)
+        cert_data = jh.getCertName(csr_path)
         data = {
             'status': status,
             'domain': domains,
@@ -631,7 +631,7 @@ class site_api:
             'httpTohttps': to_https,
             'cert_data': cert_data,
         }
-        return mw.returnJson(True, 'OK', data)
+        return jh.returnJson(True, 'OK', data)
 
     def setSslApi(self):
         siteName = request.form.get('siteName', '')
@@ -641,40 +641,40 @@ class site_api:
 
         path = self.sslDir + '/' + siteName
         if not os.path.exists(path):
-            mw.execShell('mkdir -p ' + path)
+            jh.execShell('mkdir -p ' + path)
 
         csrpath = path + "/fullchain.pem"  # 生成证书路径
         keypath = path + "/privkey.pem"  # 密钥文件路径
 
         if(key.find('KEY') == -1):
-            return mw.returnJson(False, '秘钥错误，请检查!')
+            return jh.returnJson(False, '秘钥错误，请检查!')
         if(csr.find('CERTIFICATE') == -1):
-            return mw.returnJson(False, '证书错误，请检查!')
+            return jh.returnJson(False, '证书错误，请检查!')
 
-        mw.writeFile('/tmp/cert.pl', csr)
-        if not mw.checkCert('/tmp/cert.pl'):
-            return mw.returnJson(False, '证书错误,请粘贴正确的PEM格式证书!')
+        jh.writeFile('/tmp/cert.pl', csr)
+        if not jh.checkCert('/tmp/cert.pl'):
+            return jh.returnJson(False, '证书错误,请粘贴正确的PEM格式证书!')
 
-        mw.backFile(keypath)
-        mw.backFile(csrpath)
+        jh.backFile(keypath)
+        jh.backFile(csrpath)
 
-        mw.writeFile(keypath, key)
-        mw.writeFile(csrpath, csr)
+        jh.writeFile(keypath, key)
+        jh.writeFile(csrpath, csr)
 
         # 写入配置文件
         result = self.setSslConf(siteName)
         if not result['status']:
-            return mw.getJson(result)
+            return jh.getJson(result)
 
-        isError = mw.checkWebConfig()
+        isError = jh.checkWebConfig()
         if(type(isError) == str):
-            mw.restoreFile(keypath)
-            mw.restoreFile(csrpath)
-            return mw.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
+            jh.restoreFile(keypath)
+            jh.restoreFile(csrpath)
+            return jh.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
 
-        mw.writeLog('网站管理', '证书已保存!')
-        mw.restartWeb()
-        return mw.returnJson(True, '证书已保存!')
+        jh.writeLog('网站管理', '证书已保存!')
+        jh.restartWeb()
+        return jh.returnJson(True, '证书已保存!')
 
     def setCertToSiteApi(self):
         certName = request.form.get('certName', '')
@@ -682,32 +682,32 @@ class site_api:
         try:
             path = self.sslDir + '/' + siteName.strip()
             if not os.path.exists(path):
-                return mw.returnJson(False, '证书不存在!')
+                return jh.returnJson(False, '证书不存在!')
 
             result = self.setSslConf(siteName)
             if not result['status']:
-                return mw.getJson(result)
+                return jh.getJson(result)
 
-            mw.restartWeb()
-            mw.writeLog('网站管理', '证书已部署!')
-            return mw.returnJson(True, '证书已部署!')
+            jh.restartWeb()
+            jh.writeLog('网站管理', '证书已部署!')
+            return jh.returnJson(True, '证书已部署!')
         except Exception as ex:
-            return mw.returnJson(False, '设置错误:' + str(ex))
+            return jh.returnJson(False, '设置错误:' + str(ex))
 
     def removeCertApi(self):
         certName = request.form.get('certName', '')
         try:
             path = self.sslDir + '/' + certName
             if not os.path.exists(path):
-                return mw.returnJson(False, '证书已不存在!')
+                return jh.returnJson(False, '证书已不存在!')
             os.system("rm -rf " + path)
-            return mw.returnJson(True, '证书已删除!')
+            return jh.returnJson(True, '证书已删除!')
         except:
-            return mw.returnJson(False, '删除失败!')
+            return jh.returnJson(False, '删除失败!')
 
     def closeSslConf(self, siteName):
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
 
         if conf:
             rep = "\n\s*#HTTP_TO_HTTPS_START(.|\n){1,300}#HTTP_TO_HTTPS_END"
@@ -746,16 +746,16 @@ class site_api:
             conf = re.sub(rep, '', conf)
             rep = "\s+listen\s+\[\:\:\]\:443.*;"
             conf = re.sub(rep, '', conf)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        msg = mw.getInfo('网站[{1}]关闭SSL成功!', (siteName,))
-        mw.writeLog('网站管理', msg)
-        mw.restartWeb()
+        msg = jh.getInfo('网站[{1}]关闭SSL成功!', (siteName,))
+        jh.writeLog('网站管理', msg)
+        jh.restartWeb()
 
     def closeSslConfApi(self):
         siteName = request.form.get('siteName', '')
         self.closeSslConf(siteName)
-        return mw.returnJson(True, 'SSL已关闭!')
+        return jh.returnJson(True, 'SSL已关闭!')
 
     def deploySsl(self, site_name, ssl_type):
         path = self.sslDir + '/' + site_name
@@ -769,23 +769,23 @@ class site_api:
             ssl_lets_dir = self.sslLetsDir + '/' + site_name
             lets_csrpath = ssl_lets_dir + '/fullchain.pem'
             lets_keypath = ssl_lets_dir + '/privkey.pem'
-            if mw.md5(mw.readFile(lets_csrpath)) == mw.md5(mw.readFile(csr_path)):
-                return mw.returnJson(False, '已部署Lets')
+            if jh.md5(jh.readFile(lets_csrpath)) == jh.md5(jh.readFile(csr_path)):
+                return jh.returnJson(False, '已部署Lets')
             else:
 
-                mw.buildSoftLink(lets_csrpath, csr_path, True)
-                mw.buildSoftLink(lets_keypath, key_path, True)
-                mw.execShell('echo "lets" > "' + path + '/README"')
+                jh.buildSoftLink(lets_csrpath, csr_path, True)
+                jh.buildSoftLink(lets_keypath, key_path, True)
+                jh.execShell('echo "lets" > "' + path + '/README"')
         elif ssl_type == 'acme':
-            ssl_acme_dir = mw.getAcmeDir() + '/' + site_name
+            ssl_acme_dir = jh.getAcmeDir() + '/' + site_name
             acme_csrpath = ssl_acme_dir + '/fullchain.cer'
             acme_keypath = ssl_acme_dir + '/' + site_name + '.key'
-            if mw.md5(mw.readFile(acme_csrpath)) == mw.md5(mw.readFile(csr_path)):
-                return mw.returnJson(False, '已部署ACME')
+            if jh.md5(jh.readFile(acme_csrpath)) == jh.md5(jh.readFile(csr_path)):
+                return jh.returnJson(False, '已部署ACME')
             else:
-                mw.buildSoftLink(acme_csrpath, csr_path, True)
-                mw.buildSoftLink(acme_keypath, key_path, True)
-                mw.execShell('echo "acme" > "' + path + '/README"')
+                jh.buildSoftLink(acme_csrpath, csr_path, True)
+                jh.buildSoftLink(acme_keypath, key_path, True)
+                jh.execShell('echo "acme" > "' + path + '/README"')
 
         result = self.setSslConf(site_name)
         return result
@@ -796,15 +796,15 @@ class site_api:
 
         result = self.deploySsl(site_name, ssl_type)
         if not result['status']:
-            return mw.getJson(result)
-        return mw.returnJson(True, '部署成功')
+            return jh.getJson(result)
+        return jh.returnJson(True, '部署成功')
 
     def getLetsIndex(self, site_name):
-        cfg = mw.getRunDir() + '/data/letsencrypt.json'
+        cfg = jh.getRunDir() + '/data/letsencrypt.json'
         if not os.path.exists(cfg):
             return False
 
-        data = mw.readFile(cfg)
+        data = jh.readFile(cfg)
         lets_data = json.loads(data)
         order_list = lets_data['orders']
 
@@ -825,15 +825,15 @@ class site_api:
                 data = cert_api.cert_api().renewCert(index)
                 return data
             else:
-                return mw.returnJson(False, '指定订单号不存在，无法续签!')
+                return jh.returnJson(False, '指定订单号不存在，无法续签!')
 
-        return mw.returnJson(True, '续期成功')
+        return jh.returnJson(True, '续期成功')
 
     def getLetLogsApi(self):
-        log_file = mw.getRunDir() + '/logs/letsencrypt.log'
+        log_file = jh.getRunDir() + '/logs/letsencrypt.log'
         if not os.path.exists(log_file):
-            mw.execShell('touch ' + log_file)
-        return mw.returnJson(True, 'OK', log_file)
+            jh.execShell('touch ' + log_file)
+        return jh.returnJson(True, 'OK', log_file)
 
     
     def createLet(self, crete_form):
@@ -844,23 +844,23 @@ class site_api:
         email_args = crete_form.get('email', '')
 
         domains = json.loads(domains)
-        email = mw.M('users').getField('email')
+        email = jh.M('users').getField('email')
         if email_args.strip() != '':
-            mw.M('users').setField('email', email_args)
+            jh.M('users').setField('email', email_args)
             email = email_args
 
         if not len(domains):
-            return mw.returnJson(False, '请选择域名')
+            return jh.returnJson(False, '请选择域名')
 
         file = self.getHostConf(siteName)
         if os.path.exists(file):
-            siteConf = mw.readFile(file)
+            siteConf = jh.readFile(file)
             if siteConf.find('301-END') != -1:
-                return mw.returnJson(False, '检测到您的站点做了301重定向设置，请先关闭重定向!')
+                return jh.returnJson(False, '检测到您的站点做了301重定向设置，请先关闭重定向!')
 
             # 检测存在反向代理
             data_path = self.getProxyDataPath(siteName)
-            data_content = mw.readFile(data_path)
+            data_content = jh.readFile(data_path)
             if data_content != False:
                 try:
                     data = json.loads(data_content)
@@ -870,7 +870,7 @@ class site_api:
                     proxy_dir = "{}/{}".format(self.proxyPath, siteName)
                     proxy_dir_file = proxy_dir + '/' + proxy['id'] + '.conf'
                     if os.path.exists(proxy_dir_file):
-                        return mw.returnJson(False, '检测到您的站点做了反向代理设置，请先关闭反向代理!')
+                        return jh.returnJson(False, '检测到您的站点做了反向代理设置，请先关闭反向代理!')
 
         auth_to = self.getSitePath(siteName)
         to_args = {
@@ -898,9 +898,9 @@ class site_api:
                 emsg = data['msg'][1]['challenges'][0]['error']
                 msg = msg + '<p><span>响应状态:</span>' + str(emsg['status']) + '</p><p><span>错误类型:</span>' + emsg[
                     'type'] + '</p><p><span>错误代码:</span>' + emsg['detail'] + '</p>'
-            return mw.returnJson(data['status'], msg, data['msg'])
+            return jh.returnJson(data['status'], msg, data['msg'])
 
-        src_letpath = mw.getServerDir() + '/web_conf/letsencrypt/' + siteName
+        src_letpath = jh.getServerDir() + '/web_conf/letsencrypt/' + siteName
         src_csrpath = src_letpath + "/fullchain.pem"  # 生成证书路径
         src_keypath = src_letpath + "/privkey.pem"  # 密钥文件路径
 
@@ -909,25 +909,25 @@ class site_api:
         dst_keypath = dst_letpath + '/privkey.pem'
 
         if not os.path.exists(dst_letpath):
-            mw.execShell('mkdir -p ' + dst_letpath)
-            mw.buildSoftLink(src_csrpath, dst_csrpath, True)
-            mw.buildSoftLink(src_keypath, dst_keypath, True)
-            mw.execShell('echo "lets" > "' + dst_letpath + '/README"')
+            jh.execShell('mkdir -p ' + dst_letpath)
+            jh.buildSoftLink(src_csrpath, dst_csrpath, True)
+            jh.buildSoftLink(src_keypath, dst_keypath, True)
+            jh.execShell('echo "lets" > "' + dst_letpath + '/README"')
 
         # 写入配置文件
         result = self.setSslConf(siteName)
         if not result['status']:
-            return mw.getJson(result)
+            return jh.getJson(result)
 
-        result['csr'] = mw.readFile(src_csrpath)
-        result['key'] = mw.readFile(src_keypath)
-        return mw.returnJson(data['status'], data['msg'], result)
+        result['csr'] = jh.readFile(src_csrpath)
+        result['key'] = jh.readFile(src_keypath)
+        return jh.returnJson(data['status'], data['msg'], result)
 
     def getAcmeLogsApi(self):
-        log_file = mw.getRunDir() + '/logs/acme.log'
+        log_file = jh.getRunDir() + '/logs/acme.log'
         if not os.path.exists(log_file):
-            mw.execShell('touch ' + log_file)
-        return mw.returnJson(True, 'OK', log_file)
+            jh.execShell('touch ' + log_file)
+        return jh.returnJson(True, 'OK', log_file)
 
     def createAcmeApi(self):
         siteName = request.form.get('siteName', '')
@@ -937,23 +937,23 @@ class site_api:
         email_args = request.form.get('email', '')
 
         domains = json.loads(domains)
-        email = mw.M('users').getField('email')
+        email = jh.M('users').getField('email')
         if email_args.strip() != '':
-            mw.M('users').setField('email', email_args)
+            jh.M('users').setField('email', email_args)
             email = email_args
 
         if not len(domains):
-            return mw.returnJson(False, '请选择域名')
+            return jh.returnJson(False, '请选择域名')
 
         file = self.getHostConf(siteName)
         if os.path.exists(file):
-            siteConf = mw.readFile(file)
+            siteConf = jh.readFile(file)
             if siteConf.find('301-END') != -1:
-                return mw.returnJson(False, '检测到您的站点做了301重定向设置，请先关闭重定向!')
+                return jh.returnJson(False, '检测到您的站点做了301重定向设置，请先关闭重定向!')
 
             # 检测存在反向代理
             data_path = self.getProxyDataPath(siteName)
-            data_content = mw.readFile(data_path)
+            data_content = jh.readFile(data_path)
             if data_content != False:
                 try:
                     data = json.loads(data_content)
@@ -963,27 +963,27 @@ class site_api:
                     proxy_dir = "{}/{}".format(self.proxyPath, siteName)
                     proxy_dir_file = proxy_dir + '/' + proxy['id'] + '.conf'
                     if os.path.exists(proxy_dir_file):
-                        return mw.returnJson(False, '检测到您的站点做了反向代理设置，请先关闭反向代理!')
+                        return jh.returnJson(False, '检测到您的站点做了反向代理设置，请先关闭反向代理!')
 
-        siteInfo = mw.M('sites').where(
+        siteInfo = jh.M('sites').where(
             'name=?', (siteName,)).field('id,name,path').find()
         path = self.getSitePath(siteName)
         srcPath = siteInfo['path']
 
         # 检测acme是否安装
-        acme_dir = mw.getAcmeDir()
+        acme_dir = jh.getAcmeDir()
         if not os.path.exists(acme_dir):
             try:
-                mw.execShell("curl -sS curl https://get.acme.sh | sh")
+                jh.execShell("curl -sS curl https://get.acme.sh | sh")
             except:
                 pass
         if not os.path.exists(acme_dir):
-            return mw.returnJson(False, '尝试自动安装ACME失败,请通过以下命令尝试手动安装<p>安装命令: curl https://get.acme.sh | sh</p>')
+            return jh.returnJson(False, '尝试自动安装ACME失败,请通过以下命令尝试手动安装<p>安装命令: curl https://get.acme.sh | sh</p>')
 
         # 避免频繁执行
-        checkAcmeRun = mw.execShell('ps -ef|grep acme.sh |grep -v grep')
+        checkAcmeRun = jh.execShell('ps -ef|grep acme.sh |grep -v grep')
         if checkAcmeRun[0] != '':
-            return mw.returnJson(False, '正在申请或更新SSL中...')
+            return jh.returnJson(False, '正在申请或更新SSL中...')
 
         if force == 'true':
             force_bool = True
@@ -1005,23 +1005,23 @@ class site_api:
 
         domainCount = 0
         for domain in domains:
-            if mw.checkIp(domain):
+            if jh.checkIp(domain):
                 continue
             if domain.find('*.') != -1:
-                return mw.returnJson(False, '泛域名不能使用【文件验证】的方式申请证书!')
+                return jh.returnJson(False, '泛域名不能使用【文件验证】的方式申请证书!')
             execStr += ' -w ' + path
             execStr += ' -d ' + domain
             domainCount += 1
         if domainCount == 0:
-            return mw.returnJson(False, '请选择域名(不包括IP地址与泛域名)!')
+            return jh.returnJson(False, '请选择域名(不包括IP地址与泛域名)!')
 
-        log_file = mw.getRunDir() + '/logs/acme.log'
-        mw.writeFile(log_file, "开始ACME申请...\n", "wb+")
+        log_file = jh.getRunDir() + '/logs/acme.log'
+        jh.writeFile(log_file, "开始ACME申请...\n", "wb+")
         cmd = 'export ACCOUNT_EMAIL=' + email + ' && ' + \
             execStr + ' >> ' + log_file
         # print(domains)
         # print(cmd)
-        result = mw.execShell(cmd)
+        result = jh.execShell(cmd)
 
         src_path = acme_dir + '/' + domains[0]
         src_cert = src_path + '/fullchain.cer'
@@ -1044,28 +1044,28 @@ class site_api:
                 if data['result']['status'] == 429:
                     data['msg'] = msg
             data['status'] = False
-            return mw.getJson(data)
+            return jh.getJson(data)
 
         dst_path = self.sslDir + '/' + siteName
         dst_cert = dst_path + "/fullchain.pem"  # 生成证书路径
         dst_key = dst_path + "/privkey.pem"  # 密钥文件路径
 
         if not os.path.exists(dst_path):
-            mw.execShell("mkdir -p " + dst_path)
+            jh.execShell("mkdir -p " + dst_path)
 
-        mw.buildSoftLink(src_cert, dst_cert, True)
-        mw.buildSoftLink(src_key, dst_key, True)
-        mw.execShell('echo "acme" > "' + dst_path + '/README"')
+        jh.buildSoftLink(src_cert, dst_cert, True)
+        jh.buildSoftLink(src_key, dst_key, True)
+        jh.execShell('echo "acme" > "' + dst_path + '/README"')
 
         # 写入配置文件
         result = self.setSslConf(siteName)
         if not result['status']:
-            return mw.getJson(result)
-        result['csr'] = mw.readFile(src_cert)
-        result['key'] = mw.readFile(src_key)
+            return jh.getJson(result)
+        result['csr'] = jh.readFile(src_cert)
+        result['key'] = jh.readFile(src_key)
 
-        mw.restartWeb()
-        return mw.returnJson(True, '证书已更新!', result)
+        jh.restartWeb()
+        return jh.returnJson(True, '证书已更新!', result)
 
     def httpToHttpsApi(self):
         siteName = request.form.get('siteName', '')
@@ -1073,10 +1073,10 @@ class site_api:
 
     def httpToHttps(self, site_name):
         file = self.getHostConf(site_name)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             if conf.find('ssl_certificate') == -1:
-                return mw.returnJson(False, '当前未开启SSL')
+                return jh.returnJson(False, '当前未开启SSL')
             to = "#error_page 404/404.html;\n\
     #HTTP_TO_HTTPS_START\n\
     if ($server_port !~ 44[23]){\n\
@@ -1084,10 +1084,10 @@ class site_api:
     }\n\
     #HTTP_TO_HTTPS_END"
             conf = conf.replace('#error_page 404/404.html;', to)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.restartWeb()
-        return mw.returnJson(True, '设置成功!')
+        jh.restartWeb()
+        return jh.returnJson(True, '设置成功!')
 
     def closeToHttpsApi(self):
         siteName = request.form.get('siteName', '')
@@ -1095,23 +1095,23 @@ class site_api:
 
     def closeToHttps(self, site_name):
         file = self.getHostConf(site_name)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             rep = "\n\s*#HTTP_TO_HTTPS_START(.|\n){1,300}#HTTP_TO_HTTPS_END"
             conf = re.sub(rep, '', conf)
             rep = "\s+if.+server_port.+\n.+\n\s+\s*}"
             conf = re.sub(rep, '', conf)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.restartWeb()
-        return mw.returnJson(True, '关闭HTTPS跳转成功!')
+        jh.restartWeb()
+        return jh.returnJson(True, '关闭HTTPS跳转成功!')
 
     def getIndexApi(self):
         sid = request.form.get('id', '')
         data = {}
         index = self.getIndex(sid)
         data['index'] = index
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def setIndexApi(self):
         sid = request.form.get('id', '')
@@ -1161,28 +1161,28 @@ class site_api:
     def getHostConfApi(self):
         siteName = request.form.get('siteName', '')
         host = self.getHostConf(siteName)
-        return mw.getJson({'host': host})
+        return jh.getJson({'host': host})
 
     def getRewriteConfApi(self):
         siteName = request.form.get('siteName', '')
         rewrite = self.getRewriteConf(siteName)
-        return mw.getJson({'rewrite': rewrite})
+        return jh.getJson({'rewrite': rewrite})
 
     def getRewriteTplApi(self):
         tplname = request.form.get('tplname', '')
-        file = mw.getRunDir() + '/rewrite/nginx/' + tplname + '.conf'
+        file = jh.getRunDir() + '/rewrite/nginx/' + tplname + '.conf'
         if not os.path.exists(file):
-            return mw.returnJson(False, '模版不存在!')
-        return mw.returnJson(True, 'OK', file)
+            return jh.returnJson(False, '模版不存在!')
+        return jh.returnJson(True, 'OK', file)
 
     def getRewriteListApi(self):
         rlist = self.getRewriteList()
-        return mw.getJson(rlist)
+        return jh.getJson(rlist)
 
     def getRootDirApi(self):
         data = {}
-        data['dir'] = mw.getWwwDir()
-        return mw.getJson(data)
+        data['dir'] = jh.getWwwDir()
+        return jh.getJson(data)
 
     def setEndDateApi(self):
         sid = request.form.get('id', '')
@@ -1201,30 +1201,30 @@ class site_api:
         '''
         创建站点检查web服务
         '''
-        if not mw.isInstalledWeb():
-            return mw.returnJson(False, '请安装并启动OpenResty服务!')
+        if not jh.isInstalledWeb():
+            return jh.returnJson(False, '请安装并启动OpenResty服务!')
 
         # 这个快点
-        pid = mw.getServerDir() + '/openresty/nginx/logs/nginx.pid'
+        pid = jh.getServerDir() + '/openresty/nginx/logs/nginx.pid'
         if not os.path.exists(pid):
-            return mw.returnJson(False, '请启动OpenResty服务!')
+            return jh.returnJson(False, '请启动OpenResty服务!')
 
-        # path = mw.getServerDir() + '/openresty/init.d/openresty'
-        # data = mw.execShell(path + " status")
+        # path = jh.getServerDir() + '/openresty/init.d/openresty'
+        # data = jh.execShell(path + " status")
         # if data[0].strip().find('stopped') != -1:
-        #     return mw.returnJson(False, '请启动OpenResty服务!')
+        #     return jh.returnJson(False, '请启动OpenResty服务!')
 
         # import plugins_api
         # data = plugins_api.plugins_api().run('openresty', 'status')
         # if data[0].strip() == 'stop':
-        #     return mw.returnJson(False, '请启动OpenResty服务!')
+        #     return jh.returnJson(False, '请启动OpenResty服务!')
 
-        return mw.returnJson(True, 'OK')
+        return jh.returnJson(True, 'OK')
 
     def addDomainApi(self):
-        isError = mw.checkWebConfig()
+        isError = jh.checkWebConfig()
         if isError != True:
-            return mw.returnJson(False, 'ERROR: 检测到配置文件有错误,请先排除后再操作<br><br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
+            return jh.returnJson(False, 'ERROR: 检测到配置文件有错误,请先排除后再操作<br><br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
 
         domain = request.form.get('domain', '')
         webname = request.form.get('webname', '')
@@ -1233,7 +1233,7 @@ class site_api:
 
     def addDomain(self, domain, webname, pid):
         if len(domain) < 3:
-            return mw.returnJson(False, '域名不能为空!')
+            return jh.returnJson(False, '域名不能为空!')
         domains = domain.split(',')
         for domain in domains:
             if domain == "":
@@ -1245,35 +1245,35 @@ class site_api:
 
             reg = "^([\w\-\*]{1,100}\.){1,4}([\w\-]{1,24}|[\w\-]{1,24}\.[\w\-]{1,24})$"
             if not re.match(reg, domain_name):
-                return mw.returnJson(False, '域名格式不正确!')
+                return jh.returnJson(False, '域名格式不正确!')
 
             if len(domain) == 2:
                 domain_port = domain[1]
             if domain_port == "":
                 domain_port = "80"
 
-            if not mw.checkPort(domain_port):
-                return mw.returnJson(False, '端口范围不合法!')
+            if not jh.checkPort(domain_port):
+                return jh.returnJson(False, '端口范围不合法!')
 
-            opid = mw.M('domain').where(
+            opid = jh.M('domain').where(
                 "name=? AND (port=? OR pid=?)", (domain, domain_port, pid)).getField('pid')
             if opid:
-                if mw.M('sites').where('id=?', (opid,)).count():
-                    return mw.returnJson(False, '指定域名已绑定过!')
-                mw.M('domain').where('pid=?', (opid,)).delete()
+                if jh.M('sites').where('id=?', (opid,)).count():
+                    return jh.returnJson(False, '指定域名已绑定过!')
+                jh.M('domain').where('pid=?', (opid,)).delete()
 
-            if mw.M('binding').where('domain=?', (domain,)).count():
-                return mw.returnJson(False, '您添加的域名已存在!')
+            if jh.M('binding').where('domain=?', (domain,)).count():
+                return jh.returnJson(False, '您添加的域名已存在!')
 
             self.nginxAddDomain(webname, domain_name, domain_port)
 
-            mw.restartWeb()
-            msg = mw.getInfo('网站[{1}]添加域名[{2}]成功!', (webname, domain_name))
-            mw.writeLog('网站管理', msg)
-            mw.M('domain').add('pid,name,port,addtime',
-                               (pid, domain_name, domain_port, mw.getDate()))
+            jh.restartWeb()
+            msg = jh.getInfo('网站[{1}]添加域名[{2}]成功!', (webname, domain_name))
+            jh.writeLog('网站管理', msg)
+            jh.M('domain').add('pid,name,port,addtime',
+                               (pid, domain_name, domain_port, jh.getDate()))
 
-        return mw.returnJson(True, '域名添加成功!')
+        return jh.returnJson(True, '域名添加成功!')
 
     def addDirBindApi(self):
         pid = request.form.get('id', '')
@@ -1285,99 +1285,99 @@ class site_api:
         if len(tmp) > 1:
             port = tmp[1]
         if dirName == '':
-            mw.returnJson(False, '目录不能为空!')
+            jh.returnJson(False, '目录不能为空!')
 
         reg = "^([\w\-\*]{1,100}\.){1,4}(\w{1,10}|\w{1,10}\.\w{1,10})$"
         if not re.match(reg, domain):
-            return mw.returnJson(False, '主域名格式不正确!')
+            return jh.returnJson(False, '主域名格式不正确!')
 
-        siteInfo = mw.M('sites').where(
+        siteInfo = jh.M('sites').where(
             "id=?", (pid,)).field('id,path,name').find()
         webdir = siteInfo['path'] + '/' + dirName
 
-        if mw.M('binding').where("domain=?", (domain,)).count() > 0:
-            return mw.returnJson(False, '您添加的域名已存在!')
-        if mw.M('domain').where("name=?", (domain,)).count() > 0:
-            return mw.returnJson(False, '您添加的域名已存在!')
+        if jh.M('binding').where("domain=?", (domain,)).count() > 0:
+            return jh.returnJson(False, '您添加的域名已存在!')
+        if jh.M('domain').where("name=?", (domain,)).count() > 0:
+            return jh.returnJson(False, '您添加的域名已存在!')
 
         filename = self.getHostConf(siteInfo['name'])
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         if conf:
             rep = "enable-php-([0-9]{2,3})\.conf"
             tmp = re.search(rep, conf).groups()
             version = tmp[0]
 
-            source_dirbind_tpl = mw.getRunDir() + '/data/tpl/nginx_dirbind.conf'
-            content = mw.readFile(source_dirbind_tpl)
+            source_dirbind_tpl = jh.getRunDir() + '/data/tpl/nginx_dirbind.conf'
+            content = jh.readFile(source_dirbind_tpl)
             content = content.replace('{$PORT}', port)
             content = content.replace('{$PHPVER}', version)
             content = content.replace('{$DIRBIND}', domain)
             content = content.replace('{$ROOT_DIR}', webdir)
             content = content.replace('{$SERVER_MAIN}', siteInfo['name'])
             content = content.replace('{$OR_REWRITE}', self.rewritePath)
-            content = content.replace('{$LOGPATH}', mw.getLogsDir())
+            content = content.replace('{$LOGPATH}', jh.getLogsDir())
 
             conf += "\r\n" + content
             shutil.copyfile(filename, '/tmp/backup.conf')
-            mw.writeFile(filename, conf)
-        conf = mw.readFile(filename)
+            jh.writeFile(filename, conf)
+        conf = jh.readFile(filename)
 
         # 检查配置是否有误
-        isError = mw.checkWebConfig()
+        isError = jh.checkWebConfig()
         if isError != True:
             shutil.copyfile('/tmp/backup.conf', filename)
-            return mw.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
+            return jh.returnJson(False, 'ERROR: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
 
-        mw.M('binding').add('pid,domain,port,path,addtime',
-                            (pid, domain, port, dirName, mw.getDate()))
+        jh.M('binding').add('pid,domain,port,path,addtime',
+                            (pid, domain, port, dirName, jh.getDate()))
 
-        msg = mw.getInfo('网站[{1}]子目录[{2}]绑定到[{3}]',
+        msg = jh.getInfo('网站[{1}]子目录[{2}]绑定到[{3}]',
                          (siteInfo['name'], dirName, domain))
-        mw.writeLog('网站管理', msg)
-        mw.restartWeb()
-        return mw.returnJson(True, '添加成功!')
+        jh.writeLog('网站管理', msg)
+        jh.restartWeb()
+        return jh.returnJson(True, '添加成功!')
 
     def delDirBindApi(self):
         mid = request.form.get('id', '')
-        binding = mw.M('binding').where(
+        binding = jh.M('binding').where(
             "id=?", (mid,)).field('id,pid,domain,path').find()
-        siteName = mw.M('sites').where(
+        siteName = jh.M('sites').where(
             "id=?", (binding['pid'],)).getField('name')
 
         filename = self.getHostConf(siteName)
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         if conf:
             rep = "\s*.+BINDING-" + \
                 binding['domain'] + \
                 "-START(.|\n)+BINDING-" + binding['domain'] + "-END"
             conf = re.sub(rep, '', conf)
-            mw.writeFile(filename, conf)
+            jh.writeFile(filename, conf)
 
-        mw.M('binding').where("id=?", (mid,)).delete()
+        jh.M('binding').where("id=?", (mid,)).delete()
 
         filename = self.getDirBindRewrite(siteName,  binding['path'])
         if os.path.exists(filename):
             os.remove(filename)
-        mw.restartWeb()
-        msg = mw.getInfo('删除网站[{1}]子目录[{2}]绑定',
+        jh.restartWeb()
+        msg = jh.getInfo('删除网站[{1}]子目录[{2}]绑定',
                          (siteName, binding['path']))
-        mw.writeLog('网站管理', msg)
-        return mw.returnJson(True, '删除成功!')
+        jh.writeLog('网站管理', msg)
+        return jh.returnJson(True, '删除成功!')
 
         # 取子目录Rewrite
     def getDirBindRewriteApi(self):
         mid = request.form.get('id', '')
         add = request.form.get('add', '0')
-        find = mw.M('binding').where(
+        find = jh.M('binding').where(
             "id=?", (mid,)).field('id,pid,domain,path').find()
-        site = mw.M('sites').where(
+        site = jh.M('sites').where(
             "id=?", (find['pid'],)).field('id,name,path').find()
 
         filename = self.getDirBindRewrite(site['name'], find['path'])
         if add == '1':
-            mw.writeFile(filename, '')
+            jh.writeFile(filename, '')
             file = self.getHostConf(site['name'])
-            conf = mw.readFile(file)
+            conf = jh.readFile(file)
             domain = find['domain']
             rep = "\n#BINDING-" + domain + \
                 "-START(.|\n)+BINDING-" + domain + "-END"
@@ -1385,20 +1385,20 @@ class site_api:
             dirConf = tmp.replace('rewrite/' + site['name'] + '.conf;', 'rewrite/' + site[
                 'name'] + '_' + find['path'] + '.conf;')
             conf = conf.replace(tmp, dirConf)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
         data = {}
         data['rewrite_dir'] = self.rewritePath
         data['status'] = False
         if os.path.exists(filename):
             data['status'] = True
-            data['data'] = mw.readFile(filename)
+            data['data'] = jh.readFile(filename)
             data['rlist'] = []
             for ds in os.listdir(self.rewritePath):
                 if ds == 'list.txt':
                     continue
                 data['rlist'].append(ds[0:len(ds) - 5])
             data['filename'] = filename
-        return mw.getJson(data)
+        return jh.getJson(data)
 
         # 修改物理路径
     def setPathApi(self):
@@ -1407,59 +1407,59 @@ class site_api:
 
         path = self.getPath(path)
         if path == "" or mid == '0':
-            return mw.returnJson(False,  "目录不能为空!")
+            return jh.returnJson(False,  "目录不能为空!")
 
         import files_api
         if not files_api.files_api().checkDir(path):
-            return mw.returnJson(False,  "不能以系统关键目录作为站点目录")
+            return jh.returnJson(False,  "不能以系统关键目录作为站点目录")
 
-        siteFind = mw.M("sites").where(
+        siteFind = jh.M("sites").where(
             "id=?", (mid,)).field('path,name').find()
         if siteFind["path"] == path:
-            return mw.returnJson(False,  "与原路径一致，无需修改!")
+            return jh.returnJson(False,  "与原路径一致，无需修改!")
         file = self.getHostConf(siteFind['name'])
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             conf = conf.replace(siteFind['path'], path)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
         # 创建basedir
         # userIni = path + '/.user.ini'
         # if os.path.exists(userIni):
-            # mw.execShell("chattr -i " + userIni)
-        # mw.writeFile(userIni, 'open_basedir=' + path + '/:/tmp/:/proc/')
-        # mw.execShell('chmod 644 ' + userIni)
-        # mw.execShell('chown root:root ' + userIni)
-        # mw.execShell('chattr +i ' + userIni)
+            # jh.execShell("chattr -i " + userIni)
+        # jh.writeFile(userIni, 'open_basedir=' + path + '/:/tmp/:/proc/')
+        # jh.execShell('chmod 644 ' + userIni)
+        # jh.execShell('chown root:root ' + userIni)
+        # jh.execShell('chattr +i ' + userIni)
 
-        mw.restartWeb()
-        mw.M("sites").where("id=?", (mid,)).setField('path', path)
-        msg = mw.getInfo('修改网站[{1}]物理路径成功!', (siteFind['name'],))
-        mw.writeLog('网站管理', msg)
-        return mw.returnJson(True,  "设置成功!")
+        jh.restartWeb()
+        jh.M("sites").where("id=?", (mid,)).setField('path', path)
+        msg = jh.getInfo('修改网站[{1}]物理路径成功!', (siteFind['name'],))
+        jh.writeLog('网站管理', msg)
+        return jh.returnJson(True,  "设置成功!")
 
     # 设置当前站点运行目录
     def setSiteRunPathApi(self):
         mid = request.form.get('id', '')
         runPath = request.form.get('runPath', '')
-        siteName = mw.M('sites').where('id=?', (mid,)).getField('name')
-        sitePath = mw.M('sites').where('id=?', (mid,)).getField('path')
+        siteName = jh.M('sites').where('id=?', (mid,)).getField('name')
+        sitePath = jh.M('sites').where('id=?', (mid,)).getField('path')
 
         newPath = sitePath + runPath
 
         # 处理Nginx
         filename = self.getHostConf(siteName)
         if os.path.exists(filename):
-            conf = mw.readFile(filename)
+            conf = jh.readFile(filename)
             rep = '\s*root\s*(.+);'
             path = re.search(rep, conf).groups()[0]
             conf = conf.replace(path, newPath)
-            mw.writeFile(filename, conf)
+            jh.writeFile(filename, conf)
 
         self.setDirUserINI(sitePath, runPath)
 
-        mw.restartWeb()
-        return mw.returnJson(True, '设置成功!')
+        jh.restartWeb()
+        return jh.returnJson(True, '设置成功!')
 
     # 设置目录加密
     def setHasPwdApi(self):
@@ -1469,15 +1469,15 @@ class site_api:
         mid = request.form.get('id', '')
 
         if len(username.strip()) == 0 or len(password.strip()) == 0:
-            return mw.returnJson(False, '用户名或密码不能为空!')
+            return jh.returnJson(False, '用户名或密码不能为空!')
 
         if siteName == '':
-            siteName = mw.M('sites').where('id=?', (mid,)).getField('name')
+            siteName = jh.M('sites').where('id=?', (mid,)).getField('name')
 
         # self.closeHasPwd(get)
         filename = self.passPath + '/' + siteName + '.pass'
         # print(filename)
-        passconf = username + ':' + mw.hasPwd(password)
+        passconf = username + ':' + jh.hasPwd(password)
 
         if siteName == 'phpmyadmin':
             configFile = self.getHostConf('phpmyadmin')
@@ -1485,7 +1485,7 @@ class site_api:
             configFile = self.getHostConf(siteName)
 
         # 处理Nginx配置
-        conf = mw.readFile(configFile)
+        conf = jh.readFile(configFile)
         if conf:
             rep = '#error_page   404   /404.html;'
             if conf.find(rep) == -1:
@@ -1496,24 +1496,24 @@ class site_api:
     auth_basic_user_file %s;
     #AUTH_END''' % (filename,)
             conf = conf.replace(rep, rep + data)
-            mw.writeFile(configFile, conf)
+            jh.writeFile(configFile, conf)
         # 写密码配置
         passDir = self.passPath
         if not os.path.exists(passDir):
-            mw.execShell('mkdir -p ' + passDir)
-        mw.writeFile(filename, passconf)
+            jh.execShell('mkdir -p ' + passDir)
+        jh.writeFile(filename, passconf)
 
-        mw.restartWeb()
-        msg = mw.getInfo('设置网站[{1}]为需要密码认证!', (siteName,))
-        mw.writeLog("网站管理", msg)
-        return mw.returnJson(True, '设置成功!')
+        jh.restartWeb()
+        msg = jh.getInfo('设置网站[{1}]为需要密码认证!', (siteName,))
+        jh.writeLog("网站管理", msg)
+        return jh.returnJson(True, '设置成功!')
 
     # 取消目录加密
     def closeHasPwdApi(self):
         siteName = request.form.get('siteName', '')
         mid = request.form.get('id', '')
         if siteName == '':
-            siteName = mw.M('sites').where('id=?', (mid,)).getField('name')
+            siteName = jh.M('sites').where('id=?', (mid,)).getField('name')
 
         if siteName == 'phpmyadmin':
             configFile = self.getHostConf('phpmyadmin')
@@ -1521,15 +1521,15 @@ class site_api:
             configFile = self.getHostConf(siteName)
 
         if os.path.exists(configFile):
-            conf = mw.readFile(configFile)
+            conf = jh.readFile(configFile)
             rep = "\n\s*#AUTH_START(.|\n){1,200}#AUTH_END"
             conf = re.sub(rep, '', conf)
-            mw.writeFile(configFile, conf)
+            jh.writeFile(configFile, conf)
 
-        mw.restartWeb()
-        msg = mw.getInfo('清除网站[{1}]的密码认证!', (siteName,))
-        mw.writeLog("网站管理", msg)
-        return mw.returnJson(True, '设置成功!')
+        jh.restartWeb()
+        msg = jh.getInfo('清除网站[{1}]的密码认证!', (siteName,))
+        jh.writeLog("网站管理", msg)
+        return jh.returnJson(True, '设置成功!')
 
     def delDomainApi(self):
         domain = request.form.get('domain', '')
@@ -1537,15 +1537,15 @@ class site_api:
         port = request.form.get('port', '')
         pid = request.form.get('id', '')
 
-        find = mw.M('domain').where("pid=? AND name=?",
+        find = jh.M('domain').where("pid=? AND name=?",
                                     (pid, domain)).field('id,name').find()
 
-        domain_count = mw.M('domain').where("pid=?", (pid,)).count()
+        domain_count = jh.M('domain').where("pid=?", (pid,)).count()
         if domain_count == 1:
-            return mw.returnJson(False, '最后一个域名不能删除!')
+            return jh.returnJson(False, '最后一个域名不能删除!')
 
         file = self.getHostConf(webname)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             # 删除域名
             rep = "server_name\s+(.+);"
@@ -1557,19 +1557,19 @@ class site_api:
             # 删除端口
             rep = "listen\s+([0-9]+);"
             tmp = re.findall(rep, conf)
-            port_count = mw.M('domain').where(
+            port_count = jh.M('domain').where(
                 'pid=? AND port=?', (pid, port)).count()
-            if mw.inArray(tmp, port) == True and port_count < 2:
+            if jh.inArray(tmp, port) == True and port_count < 2:
                 rep = "\n*\s+listen\s+" + port + ";"
                 conf = re.sub(rep, '', conf)
             # 保存配置
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.M('domain').where("id=?", (find['id'],)).delete()
-        msg = mw.getInfo('网站[{1}]删除域名[{2}]成功!', (webname, domain))
-        mw.writeLog('网站管理', msg)
-        mw.restartWeb()
-        return mw.returnJson(True, '站点删除成功!')
+        jh.M('domain').where("id=?", (find['id'],)).delete()
+        msg = jh.getInfo('网站[{1}]删除域名[{2}]成功!', (webname, domain))
+        jh.writeLog('网站管理', msg)
+        jh.restartWeb()
+        return jh.returnJson(True, '站点删除成功!')
 
     def deleteApi(self):
         sid = request.form.get('id', '')
@@ -1580,7 +1580,7 @@ class site_api:
     # 操作 重定向配置
     def operateRedirectConf(self, siteName, method='start'):
         vhost_file = self.vhostPath + '/' + siteName + '.conf'
-        content = mw.readFile(vhost_file)
+        content = jh.readFile(vhost_file)
 
         cnf_301 = '''#301-START
     include %s/*.conf;
@@ -1596,7 +1596,7 @@ class site_api:
             if method == 'start':
                 content = re.sub(cnf_301_source, cnf_301, content)
 
-        mw.writeFile(vhost_file, content)
+        jh.writeFile(vhost_file, content)
 
     # get_redirect_status
     def getRedirectApi(self):
@@ -1604,59 +1604,59 @@ class site_api:
 
         # read data base
         data_path = self.getRedirectDataPath(_siteName)
-        data_content = mw.readFile(data_path)
+        data_content = jh.readFile(data_path)
         if data_content == False:
-            mw.execShell("mkdir {}/{}".format(self.redirectPath, _siteName))
-            return mw.returnJson(True, "", {"result": [], "count": 0})
+            jh.execShell("mkdir {}/{}".format(self.redirectPath, _siteName))
+            return jh.returnJson(True, "", {"result": [], "count": 0})
         # get
         # conf_path = "{}/{}/*.conf".format(self.redirectPath, siteName)
         # conf_list = glob.glob(conf_path)
         # if conf_list == []:
-        #     return mw.returnJson(True, "", {"result": [], "count": 0})
+        #     return jh.returnJson(True, "", {"result": [], "count": 0})
         try:
             data = json.loads(data_content)
         except:
-            mw.execShell("rm -rf {}/{}".format(self.redirectPath, _siteName))
-            return mw.returnJson(True, "", {"result": [], "count": 0})
+            jh.execShell("rm -rf {}/{}".format(self.redirectPath, _siteName))
+            return jh.returnJson(True, "", {"result": [], "count": 0})
 
         # 处理301信息
-        return mw.returnJson(True, "ok", {"result": data, "count": len(data)})
+        return jh.returnJson(True, "ok", {"result": data, "count": len(data)})
 
     def getRedirectConfApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
-        data = mw.readFile(
+        data = jh.readFile(
             "{}/{}/{}.conf".format(self.redirectPath, _siteName, _id))
         if data == False:
-            return mw.returnJson(False, "获取失败!")
-        return mw.returnJson(True, "ok", {"result": data})
+            return jh.returnJson(False, "获取失败!")
+        return jh.returnJson(True, "ok", {"result": data})
 
     def saveRedirectConfApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         _config = request.form.get("config", "")
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
-        _old_config = mw.readFile(
+        _old_config = jh.readFile(
             "{}/{}/{}.conf".format(self.redirectPath, _siteName, _id))
         if _old_config == False:
-            return mw.returnJson(False, "非法操作")
+            return jh.returnJson(False, "非法操作")
 
-        mw.writeFile("{}/{}/{}.conf".format(self.redirectPath,
+        jh.writeFile("{}/{}/{}.conf".format(self.redirectPath,
                                             _siteName, _id), _config)
-        rule_test = mw.checkWebConfig()
+        rule_test = jh.checkWebConfig()
         if rule_test != True:
-            mw.writeFile("{}/{}/{}.conf".format(self.redirectPath,
+            jh.writeFile("{}/{}/{}.conf".format(self.redirectPath,
                                                 _siteName, _id), _old_config)
-            return mw.returnJson(False, "OpenResty 配置测试不通过, 请重试: {}".format(rule_test))
+            return jh.returnJson(False, "OpenResty 配置测试不通过, 请重试: {}".format(rule_test))
 
         self.operateRedirectConf(_siteName, 'start')
-        mw.restartWeb()
-        return mw.returnJson(True, "ok")
+        jh.restartWeb()
+        return jh.returnJson(True, "ok")
 
     # get redirect status
     def setRedirectApi(self):
@@ -1669,10 +1669,10 @@ class site_api:
         _keepPath = request.form.get("keep_path", '')  # keep path
 
         if _siteName == '' or _from == '' or _to == '' or _type == '' or _rType == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
         data_path = self.getRedirectDataPath(_siteName)
-        data_content = mw.readFile(
+        data_content = jh.readFile(
             data_path) if os.path.exists(data_path) else ""
         data = json.loads(data_content) if data_content != "" else []
 
@@ -1682,9 +1682,9 @@ class site_api:
 
         # check if domain exists in site
         if _typeCode == 1:
-            pid = mw.M('domain').where("name=?", (_siteName,)).field(
+            pid = jh.M('domain').where("name=?", (_siteName,)).field(
                 'id,pid,name,port,addtime').select()
-            site_domain_lists = mw.M('domain').where("pid=?", (pid[0]['pid'],)).field(
+            site_domain_lists = jh.M('domain').where("pid=?", (pid[0]['pid'],)).field(
                 'name').select()
             found = False
             for item in site_domain_lists:
@@ -1692,7 +1692,7 @@ class site_api:
                     found = True
                     break
             if found == False:
-                return mw.returnJson(False, "域名不存在!")
+                return jh.returnJson(False, "域名不存在!")
 
         file_content = ""
         # path
@@ -1715,38 +1715,38 @@ class site_api:
             _return = "return {} {}; ".format(redirect_type, _to)
             file_content = _if + "{\r\n    " + _return + "\r\n}"
 
-        _id = mw.md5("{}+{}".format(file_content, _siteName))
+        _id = jh.md5("{}+{}".format(file_content, _siteName))
 
         # 防止规则重复
         for item in data:
             if item["r_from"] == _from:
-                return mw.returnJson(False, "重复的规则!")
+                return jh.returnJson(False, "重复的规则!")
 
         rep = "http(s)?\:\/\/([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z0-9][a-zA-Z0-9]{0,62})+.?"
         if not re.match(rep, _to):
-            return mw.returnJson(False, "错误的目标地址")
+            return jh.returnJson(False, "错误的目标地址")
 
         # write data json file
         data.append({"r_from": _from, "type": _typeCode, "r_type": _rTypeCode,
                      "r_to": _to, 'keep_path': _keepPath, 'id': _id})
-        mw.writeFile(data_path, json.dumps(data))
-        mw.writeFile(
+        jh.writeFile(data_path, json.dumps(data))
+        jh.writeFile(
             "{}/{}.conf".format(self.getRedirectPath(_siteName), _id), file_content)
 
         self.operateRedirectConf(_siteName, 'start')
-        mw.restartWeb()
-        return mw.returnJson(True, "ok")
+        jh.restartWeb()
+        return jh.returnJson(True, "ok")
 
     # 删除指定重定向
     def delRedirectApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
         try:
             data_path = self.getRedirectDataPath(_siteName)
-            data_content = mw.readFile(
+            data_content = jh.readFile(
                 data_path) if os.path.exists(data_path) else ""
             data = json.loads(data_content) if data_content != "" else []
             for item in data:
@@ -1754,21 +1754,21 @@ class site_api:
                     data.remove(item)
                     break
             # write database
-            mw.writeFile(data_path, json.dumps(data))
+            jh.writeFile(data_path, json.dumps(data))
             # data is empty ,should stop
             if len(data) == 0:
                 self.operateRedirectConf(_siteName, 'stop')
             # remove conf file
-            mw.execShell(
+            jh.execShell(
                 "rm -rf {}/{}.conf".format(self.getRedirectPath(_siteName), _id))
         except:
-            return mw.returnJson(False, "删除失败!")
-        return mw.returnJson(True, "删除成功!")
+            return jh.returnJson(False, "删除失败!")
+        return jh.returnJson(True, "删除成功!")
 
     # 操作 反向代理配置
     def operateProxyConf(self, siteName, method='start'):
         vhost_file = self.vhostPath + '/' + siteName + '.conf'
-        content = mw.readFile(vhost_file)
+        content = jh.readFile(vhost_file)
 
         proxy_cnf = '''#PROXY-START
     include %s/*.conf;
@@ -1784,83 +1784,83 @@ class site_api:
             if method == 'start':
                 content = re.sub(proxy_cnf_source, proxy_cnf, content)
 
-        mw.writeFile(vhost_file, content)
+        jh.writeFile(vhost_file, content)
 
     def getProxyConfApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
         conf_file = "{}/{}/{}.conf".format(self.proxyPath, _siteName, _id)
         if not os.path.exists(conf_file):
             conf_file = "{}/{}/{}.conf.txt".format(
                 self.proxyPath, _siteName, _id)
 
-        data = mw.readFile(conf_file)
+        data = jh.readFile(conf_file)
         if data == False:
-            return mw.returnJson(False, "获取失败!")
-        return mw.returnJson(True, "ok", {"result": data})
+            return jh.returnJson(False, "获取失败!")
+        return jh.returnJson(True, "ok", {"result": data})
 
     def setProxyStatusApi(self):
         _siteName = request.form.get("siteName", '')
         _status = request.form.get("status", '')
         _id = request.form.get("id", '')
         if _status == '' or _siteName == '' or _id == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
         conf_file = "{}/{}/{}.conf".format(self.proxyPath, _siteName, _id)
         conf_txt = "{}/{}/{}.conf.txt".format(self.proxyPath, _siteName, _id)
 
         if _status == '1':
-            mw.execShell('mv ' + conf_txt + ' ' + conf_file)
+            jh.execShell('mv ' + conf_txt + ' ' + conf_file)
         else:
-            mw.execShell('mv ' + conf_file + ' ' + conf_txt)
+            jh.execShell('mv ' + conf_file + ' ' + conf_txt)
 
-        mw.restartWeb()
-        return mw.returnJson(True, "OK")
+        jh.restartWeb()
+        return jh.returnJson(True, "OK")
 
     def saveProxyConfApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         _config = request.form.get("config", "")
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
-        _old_config = mw.readFile(
+        _old_config = jh.readFile(
             "{}/{}/{}.conf".format(self.proxyPath, _siteName, _id))
         if _old_config == False:
-            return mw.returnJson(False, "非法操作")
+            return jh.returnJson(False, "非法操作")
 
-        mw.writeFile("{}/{}/{}.conf".format(self.proxyPath,
+        jh.writeFile("{}/{}/{}.conf".format(self.proxyPath,
                                             _siteName, _id), _config)
-        rule_test = mw.checkWebConfig()
+        rule_test = jh.checkWebConfig()
         if rule_test != True:
-            mw.writeFile("{}/{}/{}.conf".format(self.proxyPath,
+            jh.writeFile("{}/{}/{}.conf".format(self.proxyPath,
                                                 _siteName, _id), _old_config)
-            return mw.returnJson(False, "OpenResty 配置测试不通过, 请重试: {}".format(rule_test))
+            return jh.returnJson(False, "OpenResty 配置测试不通过, 请重试: {}".format(rule_test))
 
         self.operateRedirectConf(_siteName, 'start')
-        mw.restartWeb()
-        return mw.returnJson(True, "ok")
+        jh.restartWeb()
+        return jh.returnJson(True, "ok")
 
     # 读取 网站 反向代理列表
     def getProxyListApi(self):
         _siteName = request.form.get('siteName', '')
 
         data_path = self.getProxyDataPath(_siteName)
-        data_content = mw.readFile(data_path)
+        data_content = jh.readFile(data_path)
 
         # not exists
         if data_content == False:
-            mw.execShell("mkdir {}/{}".format(self.proxyPath, _siteName))
-            return mw.returnJson(True, "", {"result": [], "count": 0})
+            jh.execShell("mkdir {}/{}".format(self.proxyPath, _siteName))
+            return jh.returnJson(True, "", {"result": [], "count": 0})
 
         try:
             data = json.loads(data_content)
         except:
-            mw.execShell("rm -rf {}/{}".format(self.proxyPath, _siteName))
-            return mw.returnJson(True, "", {"result": [], "count": 0})
+            jh.execShell("rm -rf {}/{}".format(self.proxyPath, _siteName))
+            return jh.returnJson(True, "", {"result": [], "count": 0})
 
         tmp = []
         for proxy in data:
@@ -1872,7 +1872,7 @@ class site_api:
                 proxy['status'] = False
             tmp.append(proxy)
 
-        return mw.returnJson(True, "ok", {"result": data, "count": len(data)})
+        return jh.returnJson(True, "ok", {"result": data, "count": len(data)})
 
     # 设置 网站 反向代理列表
     def setProxyApi(self):
@@ -1883,16 +1883,16 @@ class site_api:
         _open_proxy = request.form.get('open_proxy', '')
 
         if _siteName == "" or _from == "" or _to == "" or _host == "":
-            return mw.returnJson(False, "必填项不能为空")
+            return jh.returnJson(False, "必填项不能为空")
 
         data_path = self.getProxyDataPath(_siteName)
-        data_content = mw.readFile(
+        data_content = jh.readFile(
             data_path) if os.path.exists(data_path) else ""
         data = json.loads(data_content) if data_content != "" else []
 
         rep = "http(s)?\:\/\/([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z0-9][a-zA-Z0-9]{0,62})+.?"
         if not re.match(rep, _to):
-            return mw.returnJson(False, "错误的目标地址!")
+            return jh.returnJson(False, "错误的目标地址!")
 
         # _to = _to.strip("/")
         # get host from url
@@ -1901,7 +1901,7 @@ class site_api:
                 host_tmp = urlparse(_to)
                 _host = host_tmp.netloc
         except:
-            return mw.returnJson(False, "错误的目标地址")
+            return jh.returnJson(False, "错误的目标地址")
 
         # location ~* ^{from}(.*)$ {
         tpl = "#PROXY-START\n\
@@ -1936,12 +1936,12 @@ location ^~ {from} {\n\
         tpl = tpl.replace("{to}", _to)
         tpl = tpl.replace("{host}", _host, 999)
 
-        _id = mw.md5("{}+{}+{}".format(_from, _to, _siteName))
+        _id = jh.md5("{}+{}+{}".format(_from, _to, _siteName))
         for item in data:
             if item["id"] == _id:
-                return mw.returnJson(False, "已存在该规则!")
+                return jh.returnJson(False, "已存在该规则!")
             if item["from"] == _from:
-                return mw.returnJson(False, "代理目录已存在!")
+                return jh.returnJson(False, "代理目录已存在!")
         data.append({
             "from": _from,
             "to": _to,
@@ -1954,22 +1954,22 @@ location ^~ {from} {\n\
             conf_file = "{}/{}.conf.txt".format(
                 self.getProxyPath(_siteName), _id)
 
-        mw.writeFile(data_path, json.dumps(data))
-        mw.writeFile(conf_file, tpl)
+        jh.writeFile(data_path, json.dumps(data))
+        jh.writeFile(conf_file, tpl)
 
         self.operateProxyConf(_siteName, 'start')
-        mw.restartWeb()
-        return mw.returnJson(True, "ok", {"hash": _id})
+        jh.restartWeb()
+        return jh.returnJson(True, "ok", {"hash": _id})
 
     def delProxyApi(self):
         _siteName = request.form.get("siteName", '')
         _id = request.form.get("id", '')
         if _id == '' or _siteName == '':
-            return mw.returnJson(False, "必填项不能为空!")
+            return jh.returnJson(False, "必填项不能为空!")
 
         try:
             data_path = self.getProxyDataPath(_siteName)
-            data_content = mw.readFile(
+            data_content = jh.readFile(
                 data_path) if os.path.exists(data_path) else ""
             data = json.loads(data_content) if data_content != "" else []
             for item in data:
@@ -1977,7 +1977,7 @@ location ^~ {from} {\n\
                     data.remove(item)
                     break
             # write database
-            mw.writeFile(data_path, json.dumps(data))
+            jh.writeFile(data_path, json.dumps(data))
 
             # data is empty,should stop
             if len(data) == 0:
@@ -1985,66 +1985,66 @@ location ^~ {from} {\n\
             # remove conf file
             cmd = "rm -rf {}/{}.conf*".format(
                 self.getProxyPath(_siteName), _id)
-            mw.execShell(cmd)
+            jh.execShell(cmd)
         except:
-            return mw.returnJson(False, "删除失败!")
+            return jh.returnJson(False, "删除失败!")
 
-        mw.restartWeb()
-        return mw.returnJson(True, "删除成功!")
+        jh.restartWeb()
+        return jh.returnJson(True, "删除成功!")
 
     def getSiteTypesApi(self):
         # 取网站分类
-        data = mw.M("site_types").field("id,name").order("id asc").select()
+        data = jh.M("site_types").field("id,name").order("id asc").select()
         data.insert(0, {"id": 0, "name": "默认分类"})
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getSiteDocApi(self):
         stype = request.form.get('type', '0').strip()
         vlist = []
         vlist.append('')
-        vlist.append(mw.getServerDir() +
+        vlist.append(jh.getServerDir() +
                      '/openresty/nginx/html/index.html')
-        vlist.append(mw.getServerDir() + '/openresty/nginx/html/404.html')
-        vlist.append(mw.getServerDir() +
+        vlist.append(jh.getServerDir() + '/openresty/nginx/html/404.html')
+        vlist.append(jh.getServerDir() +
                      '/openresty/nginx/html/index.html')
-        vlist.append(mw.getServerDir() + '/web_conf/stop/index.html')
+        vlist.append(jh.getServerDir() + '/web_conf/stop/index.html')
         data = {}
         data['path'] = vlist[int(stype)]
-        return mw.returnJson(True, 'ok', data)
+        return jh.returnJson(True, 'ok', data)
 
     def addSiteTypeApi(self):
         name = request.form.get('name', '').strip()
         if not name:
-            return mw.returnJson(False, "分类名称不能为空")
+            return jh.returnJson(False, "分类名称不能为空")
         if len(name) > 18:
-            return mw.returnJson(False, "分类名称长度不能超过6个汉字或18位字母")
-        if mw.M('site_types').count() >= 10:
-            return mw.returnJson(False, '最多添加10个分类!')
-        if mw.M('site_types').where('name=?', (name,)).count() > 0:
-            return mw.returnJson(False, "指定分类名称已存在!")
-        mw.M('site_types').add("name", (name,))
-        return mw.returnJson(True, '添加成功!')
+            return jh.returnJson(False, "分类名称长度不能超过6个汉字或18位字母")
+        if jh.M('site_types').count() >= 10:
+            return jh.returnJson(False, '最多添加10个分类!')
+        if jh.M('site_types').where('name=?', (name,)).count() > 0:
+            return jh.returnJson(False, "指定分类名称已存在!")
+        jh.M('site_types').add("name", (name,))
+        return jh.returnJson(True, '添加成功!')
 
     def removeSiteTypeApi(self):
         mid = request.form.get('id', '')
-        if mw.M('site_types').where('id=?', (mid,)).count() == 0:
-            return mw.returnJson(False, "指定分类不存在!")
-        mw.M('site_types').where('id=?', (mid,)).delete()
-        mw.M("sites").where("type_id=?", (mid,)).save("type_id", (0,))
-        return mw.returnJson(True, "分类已删除!")
+        if jh.M('site_types').where('id=?', (mid,)).count() == 0:
+            return jh.returnJson(False, "指定分类不存在!")
+        jh.M('site_types').where('id=?', (mid,)).delete()
+        jh.M("sites").where("type_id=?", (mid,)).save("type_id", (0,))
+        return jh.returnJson(True, "分类已删除!")
 
     def modifySiteTypeNameApi(self):
         # 修改网站分类名称
         name = request.form.get('name', '').strip()
         mid = request.form.get('id', '')
         if not name:
-            return mw.returnJson(False, "分类名称不能为空")
+            return jh.returnJson(False, "分类名称不能为空")
         if len(name) > 18:
-            return mw.returnJson(False, "分类名称长度不能超过6个汉字或18位字母")
-        if mw.M('site_types').where('id=?', (mid,)).count() == 0:
-            return mw.returnJson(False, "指定分类不存在!")
-        mw.M('site_types').where('id=?', (mid,)).setField('name', name)
-        return mw.returnJson(True, "修改成功!")
+            return jh.returnJson(False, "分类名称长度不能超过6个汉字或18位字母")
+        if jh.M('site_types').where('id=?', (mid,)).count() == 0:
+            return jh.returnJson(False, "指定分类不存在!")
+        jh.M('site_types').where('id=?', (mid,)).setField('name', name)
+        return jh.returnJson(True, "修改成功!")
 
     def setSiteTypeApi(self):
         # 设置指定站点的分类
@@ -2052,8 +2052,8 @@ location ^~ {from} {\n\
         mid = request.form.get('id', '')
         site_ids = json.loads(site_ids)
         for sid in site_ids:
-            print(mw.M('sites').where('id=?', (sid,)).setField('type_id', mid))
-        return mw.returnJson(True, "设置成功!")
+            print(jh.M('sites').where('id=?', (sid,)).setField('type_id', mid))
+        return jh.returnJson(True, "设置成功!")
 
     ##### ----- end   ----- ###
 
@@ -2098,7 +2098,7 @@ location ^~ {from} {\n\
     def getSitePath(self, siteName):
         file = self.getHostConf(siteName)
         if os.path.exists(file):
-            conf = mw.readFile(file)
+            conf = jh.readFile(file)
             rep = '\s*root\s*(.+);'
             path = re.search(rep, conf).groups()[0]
             return path
@@ -2106,13 +2106,13 @@ location ^~ {from} {\n\
 
     # 取当站点前运行目录
     def getSiteRunPath(self, mid):
-        siteName = mw.M('sites').where('id=?', (mid,)).getField('name')
-        sitePath = mw.M('sites').where('id=?', (mid,)).getField('path')
+        siteName = jh.M('sites').where('id=?', (mid,)).getField('name')
+        sitePath = jh.M('sites').where('id=?', (mid,)).getField('path')
         path = sitePath
 
         filename = self.getHostConf(siteName)
         if os.path.exists(filename):
-            conf = mw.readFile(filename)
+            conf = jh.readFile(filename)
             rep = '\s*root\s*(.+);'
             path = re.search(rep, conf).groups()[0]
 
@@ -2159,29 +2159,29 @@ location ^~ {from} {\n\
         return self.rewritePath + '/' + siteName + '_' + dirname + '.conf'
 
     def getIndexConf(self):
-        return mw.getServerDir() + '/openresty/nginx/conf/nginx.conf'
+        return jh.getServerDir() + '/openresty/nginx/conf/nginx.conf'
 
     def getDomain(self, pid):
-        _list = mw.M('domain').where("pid=?", (pid,)).field(
+        _list = jh.M('domain').where("pid=?", (pid,)).field(
             'id,pid,name,port,addtime').select()
-        return mw.getJson(_list)
+        return jh.getJson(_list)
 
     def getLogs(self, siteName):
-        logPath = mw.getLogsDir() + '/' + siteName + '.log'
+        logPath = jh.getLogsDir() + '/' + siteName + '.log'
         if not os.path.exists(logPath):
-            return mw.returnJson(False, '日志为空')
-        return mw.returnJson(True, mw.getLastLine(logPath, 100))
+            return jh.returnJson(False, '日志为空')
+        return jh.returnJson(True, jh.getLastLine(logPath, 100))
 
     def getErrorLogs(self, siteName):
-        logPath = mw.getLogsDir() + '/' + siteName + '.error.log'
+        logPath = jh.getLogsDir() + '/' + siteName + '.error.log'
         if not os.path.exists(logPath):
-            return mw.returnJson(False, '日志为空')
-        return mw.returnJson(True, mw.getLastLine(logPath, 100))
+            return jh.returnJson(False, '日志为空')
+        return jh.returnJson(True, jh.getLastLine(logPath, 100))
 
     # 取日志状态
     def getLogsStatus(self, siteName):
         filename = self.getHostConf(siteName)
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         if conf.find('#ErrorLog') != -1:
             return False
         if conf.find("access_log  off") != -1:
@@ -2191,55 +2191,55 @@ location ^~ {from} {\n\
     # 取目录加密状态
     def getHasPwd(self, siteName):
         filename = self.getHostConf(siteName)
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         if conf.find('#AUTH_START') != -1:
             return True
         return False
 
     def getSitePhpVersion(self, siteName):
-        conf = mw.readFile(self.getHostConf(siteName))
+        conf = jh.readFile(self.getHostConf(siteName))
         rep = "enable-php-(.*)\.conf"
         tmp = re.search(rep, conf).groups()
         data = {}
         data['phpversion'] = tmp[0]
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getIndex(self, sid):
-        siteName = mw.M('sites').where("id=?", (sid,)).getField('name')
+        siteName = jh.M('sites').where("id=?", (sid,)).getField('name')
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         rep = "\s+index\s+(.+);"
         tmp = re.search(rep, conf).groups()
         return tmp[0].replace(' ', ',')
 
     def setIndex(self, sid, index):
         if index.find('.') == -1:
-            return mw.returnJson(False,  '默认文档格式不正确，例：index.html')
+            return jh.returnJson(False,  '默认文档格式不正确，例：index.html')
 
         index = index.replace(' ', '')
         index = index.replace(',,', ',')
 
         if len(index) < 3:
-            return mw.returnJson(False,  '默认文档不能为空!')
+            return jh.returnJson(False,  '默认文档不能为空!')
 
-        siteName = mw.M('sites').where("id=?", (sid,)).getField('name')
+        siteName = jh.M('sites').where("id=?", (sid,)).getField('name')
         index_l = index.replace(",", " ")
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             rep = "\s+index\s+.+;"
             conf = re.sub(rep, "\n\tindex " + index_l + ";", conf)
-            mw.writeFile(file, conf)
+            jh.writeFile(file, conf)
 
-        mw.writeLog('TYPE_SITE', 'SITE_INDEX_SUCCESS', (siteName, index_l))
-        return mw.returnJson(True,  '设置成功!')
+        jh.writeLog('TYPE_SITE', 'SITE_INDEX_SUCCESS', (siteName, index_l))
+        return jh.returnJson(True,  '设置成功!')
 
     def getLimitNet(self, sid):
-        siteName = mw.M('sites').where("id=?", (sid,)).getField('name')
+        siteName = jh.M('sites').where("id=?", (sid,)).getField('name')
         filename = self.getHostConf(siteName)
         # 站点总并发
         data = {}
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         try:
             rep = "\s+limit_conn\s+perserver\s+([0-9]+);"
             tmp = re.search(rep, conf).groups()
@@ -2259,15 +2259,15 @@ location ^~ {from} {\n\
             data['perip'] = 0
             data['limit_rate'] = 0
 
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def checkIndexConf(self):
         limit = self.getIndexConf()
-        nginxConf = mw.readFile(limit)
+        nginxConf = jh.readFile(limit)
         limitConf = "limit_conn_zone $binary_remote_addr zone=perip:10m;\n\t\tlimit_conn_zone $server_name zone=perserver:10m;"
         nginxConf = nginxConf.replace(
             "#limit_conn_zone $binary_remote_addr zone=perip:10m;", limitConf)
-        mw.writeFile(limit, nginxConf)
+        jh.writeFile(limit, nginxConf)
 
     def saveLimitNet(self, sid, perserver, perip, limit_rate):
 
@@ -2275,10 +2275,10 @@ location ^~ {from} {\n\
         str_perip = 'limit_conn perip ' + perip + ';'
         str_limit_rate = 'limit_rate ' + limit_rate + 'k;'
 
-        siteName = mw.M('sites').where("id=?", (sid,)).getField('name')
+        siteName = jh.M('sites').where("id=?", (sid,)).getField('name')
         filename = self.getHostConf(siteName)
 
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         if(conf.find('limit_conn perserver') != -1):
             # 替换总并发
             rep = "limit_conn\s+perserver\s+([0-9]+);"
@@ -2295,15 +2295,15 @@ location ^~ {from} {\n\
             conf = conf.replace('#error_page 404/404.html;', "#error_page 404/404.html;\n    " +
                                 str_perserver + "\n    " + str_perip + "\n    " + str_limit_rate)
 
-        mw.writeFile(filename, conf)
-        mw.restartWeb()
-        mw.writeLog('TYPE_SITE', 'SITE_NETLIMIT_OPEN_SUCCESS', (siteName,))
-        return mw.returnJson(True, '设置成功!')
+        jh.writeFile(filename, conf)
+        jh.restartWeb()
+        jh.writeLog('TYPE_SITE', 'SITE_NETLIMIT_OPEN_SUCCESS', (siteName,))
+        return jh.returnJson(True, '设置成功!')
 
     def closeLimitNet(self, sid):
-        siteName = mw.M('sites').where("id=?", (sid,)).getField('name')
+        siteName = jh.M('sites').where("id=?", (sid,)).getField('name')
         filename = self.getHostConf(siteName)
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         # 清理总并发
         rep = "\s+limit_conn\s+perserver\s+([0-9]+);"
         conf = re.sub(rep, '', conf)
@@ -2315,15 +2315,15 @@ location ^~ {from} {\n\
         # 清理请求流量限制
         rep = "\s+limit_rate\s+([0-9]+)\w+;"
         conf = re.sub(rep, '', conf)
-        mw.writeFile(filename, conf)
-        mw.restartWeb()
-        mw.writeLog(
+        jh.writeFile(filename, conf)
+        jh.restartWeb()
+        jh.writeLog(
             'TYPE_SITE', 'SITE_NETLIMIT_CLOSE_SUCCESS', (siteName,))
-        return mw.returnJson(True, '已关闭流量限制!')
+        return jh.returnJson(True, '已关闭流量限制!')
 
     def getSecurity(self, sid, name):
         filename = self.getHostConf(name)
-        conf = mw.readFile(filename)
+        conf = jh.readFile(filename)
         data = {}
         if conf.find('SECURITY-START') != -1:
             rep = "#SECURITY-START(\n|.){1,500}#SECURITY-END"
@@ -2335,25 +2335,25 @@ location ^~ {from} {\n\
             data['status'] = True
         else:
             data['fix'] = 'jpg,jpeg,gif,png,js,css'
-            domains = mw.M('domain').where(
+            domains = jh.M('domain').where(
                 'pid=?', (sid,)).field('name').select()
             tmp = []
             for domain in domains:
                 tmp.append(domain['name'])
             data['domains'] = ','.join(tmp)
             data['status'] = False
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def setSecurity(self, sid, name, fix, domains, status):
         if len(fix) < 2:
-            return mw.returnJson(False, 'URL后缀不能为空!')
+            return jh.returnJson(False, 'URL后缀不能为空!')
         file = self.getHostConf(name)
         if os.path.exists(file):
-            conf = mw.readFile(file)
+            conf = jh.readFile(file)
             if conf.find('SECURITY-START') != -1:
                 rep = "\s{0,4}#SECURITY-START(\n|.){1,500}#SECURITY-END\n?"
                 conf = re.sub(rep, '', conf)
-                mw.writeLog('网站管理', '站点[' + name + ']已关闭防盗链设置!')
+                jh.writeLog('网站管理', '站点[' + name + ']已关闭防盗链设置!')
             else:
                 pre_path = self.setupPath + "/php/conf"
                 re_path = "include\s+" + pre_path + "/enable-php-"
@@ -2370,10 +2370,10 @@ location ^~ {from} {\n\
     #SECURITY-END
     include %s/enable-php-''' % (fix.strip().replace(',', '|'), domains.strip().replace(',', ' '), pre_path)
                 conf = re.sub(re_path, rconf, conf)
-                mw.writeLog('网站管理', '站点[' + name + ']已开启防盗链!')
-            mw.writeFile(file, conf)
-        mw.restartWeb()
-        return mw.returnJson(True, '设置成功!')
+                jh.writeLog('网站管理', '站点[' + name + ']已开启防盗链!')
+            jh.writeFile(file, conf)
+        jh.restartWeb()
+        return jh.returnJson(True, '设置成功!')
 
     def getPhpVersion(self):
         phpVersions = ('00', '52', '53', '54', '55',
@@ -2387,14 +2387,14 @@ location ^~ {from} {\n\
                 data.append(tmp)
 
             # 标准判断
-            checkPath = mw.getServerDir() + '/php/' + val + '/bin/php'
+            checkPath = jh.getServerDir() + '/php/' + val + '/bin/php'
             if os.path.exists(checkPath):
                 tmp['version'] = val
                 tmp['name'] = 'PHP-' + val
                 data.append(tmp)
 
         # 其他PHP安装类型
-        conf_dir = mw.getServerDir() + "/web_conf/php/conf"
+        conf_dir = jh.getServerDir() + "/web_conf/php/conf"
         conf_list = os.listdir(conf_dir)
         l = len(conf_list)
         rep = "enable-php-(.*?)\.conf"
@@ -2417,7 +2417,7 @@ location ^~ {from} {\n\
     # 是否跳转到https
     def isToHttps(self, siteName):
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if conf:
             # if conf.find('HTTP_TO_HTTPS_START') != -1:
             #     return True
@@ -2439,16 +2439,16 @@ location ^~ {from} {\n\
         if not os.path.exists(path):
             autoInit = True
             os.makedirs(path)
-        if not mw.isAppleSystem():
-            mw.execShell('chown -R www:www ' + path)
+        if not jh.isAppleSystem():
+            jh.execShell('chown -R www:www ' + path)
 
         if autoInit:
-            mw.writeFile(path + '/index.html', 'Work has started!!!')
-            mw.execShell('chmod -R 755 ' + path)
+            jh.writeFile(path + '/index.html', 'Work has started!!!')
+            jh.execShell('chmod -R 755 ' + path)
 
     def nginxAddDomain(self, webname, domain, port):
         file = self.getHostConf(webname)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
         if not conf:
             return
 
@@ -2456,25 +2456,25 @@ location ^~ {from} {\n\
         rep = "server_name\s*(.*);"
         tmp = re.search(rep, conf).group()
         domains = tmp.split(' ')
-        if not mw.inArray(domains, domain):
+        if not jh.inArray(domains, domain):
             newServerName = tmp.replace(';', ' ' + domain + ';')
             conf = conf.replace(tmp, newServerName)
 
         # 添加端口
         rep = "listen\s+([0-9]+)\s*[default_server]*\s*;"
         tmp = re.findall(rep, conf)
-        if not mw.inArray(tmp, port):
+        if not jh.inArray(tmp, port):
             listen = re.search(rep, conf).group()
             conf = conf.replace(
                 listen, listen + "\n\tlisten " + port + ';')
         # 保存配置文件
-        mw.writeFile(file, conf)
+        jh.writeFile(file, conf)
         return True
 
     def nginxAddConf(self):
-        source_tpl = mw.getRunDir() + '/data/tpl/nginx.conf'
+        source_tpl = jh.getRunDir() + '/data/tpl/nginx.conf'
         vhost_file = self.vhostPath + '/' + self.siteName + '.conf'
-        content = mw.readFile(source_tpl)
+        content = jh.readFile(source_tpl)
 
         content = content.replace('{$PORT}', self.sitePort)
         content = content.replace('{$SERVER_NAME}', self.siteName)
@@ -2485,9 +2485,9 @@ location ^~ {from} {\n\
         # content = content.replace('{$OR_REDIRECT}', self.redirectPath)
         # content = content.replace('{$OR_PROXY}', self.proxyPath)
 
-        logsPath = mw.getLogsDir()
+        logsPath = jh.getLogsDir()
         content = content.replace('{$LOGPATH}', logsPath)
-        mw.writeFile(vhost_file, content)
+        jh.writeFile(vhost_file, content)
 
 # 和反代配置冲突 && 默认伪静态为空
 #         rewrite_content = '''
@@ -2503,7 +2503,7 @@ location ^~ {from} {\n\
 # }
 # '''
         rewrite_file = self.rewritePath + '/' + self.siteName + '.conf'
-        mw.writeFile(rewrite_file, '')
+        jh.writeFile(rewrite_file, '')
 
     def add(self, webname, port, ps, path, version):
         siteMenu = json.loads(webname)
@@ -2514,17 +2514,17 @@ location ^~ {from} {\n\
         self.sitePort = port.strip().replace(' ', '')
         self.phpVersion = version
 
-        if mw.M('sites').where("name=?", (self.siteName,)).count():
-            return mw.returnJson(False, '您添加的站点已存在!')
+        if jh.M('sites').where("name=?", (self.siteName,)).count():
+            return jh.returnJson(False, '您添加的站点已存在!')
 
         # 写入数据库
-        pid = mw.M('sites').add('name,path,status,ps,edate,addtime,type_id',
-                                (self.siteName, self.sitePath, '1', ps, '0000-00-00', mw.getDate(), 0,))
-        opid = mw.M('domain').where("name=?", (self.siteName,)).getField('pid')
+        pid = jh.M('sites').add('name,path,status,ps,edate,addtime,type_id',
+                                (self.siteName, self.sitePath, '1', ps, '0000-00-00', jh.getDate(), 0,))
+        opid = jh.M('domain').where("name=?", (self.siteName,)).getField('pid')
         if opid:
-            if mw.M('sites').where('id=?', (opid,)).count():
-                return mw.returnJson(False, '您添加的域名已存在!')
-            mw.M('domain').where('pid=?', (opid,)).delete()
+            if jh.M('sites').where('id=?', (opid,)).count():
+                return jh.returnJson(False, '您添加的域名已存在!')
+            jh.M('domain').where('pid=?', (opid,)).delete()
 
         self.createRootDir(self.sitePath)
         self.nginxAddConf()
@@ -2533,17 +2533,17 @@ location ^~ {from} {\n\
         for domain in siteMenu['domainlist']:
             self.addDomain(domain, self.siteName, pid)
 
-        mw.M('domain').add('pid,name,port,addtime',
-                           (pid, self.siteName, self.sitePort, mw.getDate()))
+        jh.M('domain').add('pid,name,port,addtime',
+                           (pid, self.siteName, self.sitePort, jh.getDate()))
 
         data = {}
         data['siteStatus'] = False
-        mw.restartWeb()
-        return mw.returnJson(True, '添加成功')
+        jh.restartWeb()
+        return jh.returnJson(True, '添加成功')
 
     def deleteWSLogs(self, webname):
-        assLogPath = mw.getLogsDir() + '/' + webname + '.log'
-        errLogPath = mw.getLogsDir() + '/' + webname + '.error.log'
+        assLogPath = jh.getLogsDir() + '/' + webname + '.log'
+        errLogPath = jh.getLogsDir() + '/' + webname + '.error.log'
         confFile = self.setupPath + '/nginx/vhost/' + webname + '.conf'
         rewriteFile = self.setupPath + '/nginx/rewrite/' + webname + '.conf'
         passFile = self.setupPath + '/nginx/pass/' + webname + '.conf'
@@ -2557,51 +2557,51 @@ location ^~ {from} {\n\
                 keyPath,
                 certPath]
         for i in logs:
-            mw.deleteFile(i)
+            jh.deleteFile(i)
 
         # 重定向目录
         redirectDir = self.setupPath + '/nginx/redirect/' + webname
         if os.path.exists(redirectDir):
-            mw.execShell('rm -rf ' + redirectDir)
+            jh.execShell('rm -rf ' + redirectDir)
         # 代理目录
         proxyDir = self.setupPath + '/nginx/proxy/' + webname
         if os.path.exists(proxyDir):
-            mw.execShell('rm -rf ' + proxyDir)
+            jh.execShell('rm -rf ' + proxyDir)
 
     def delete(self, sid, webname, path):
         self.deleteWSLogs(webname)
         if path == '1':
-            rootPath = mw.getWwwDir() + '/' + webname
-            mw.execShell('rm -rf ' + rootPath)
+            rootPath = jh.getWwwDir() + '/' + webname
+            jh.execShell('rm -rf ' + rootPath)
 
         # ssl
         ssl_dir = self.sslDir + '/' + webname
         if os.path.exists(ssl_dir):
-            mw.execShell('rm -rf ' + ssl_dir)
+            jh.execShell('rm -rf ' + ssl_dir)
 
         ssl_lets_dir = self.sslLetsDir + '/' + webname
         if os.path.exists(ssl_lets_dir):
-            mw.execShell('rm -rf ' + ssl_lets_dir)
+            jh.execShell('rm -rf ' + ssl_lets_dir)
 
-        ssl_acme_dir = mw.getAcmeDir() + '/' + webname
+        ssl_acme_dir = jh.getAcmeDir() + '/' + webname
         if os.path.exists(ssl_acme_dir):
-            mw.execShell('rm -rf ' + ssl_acme_dir)
+            jh.execShell('rm -rf ' + ssl_acme_dir)
 
-        mw.M('sites').where("id=?", (sid,)).delete()
-        mw.restartWeb()
-        return mw.returnJson(True, '站点删除成功!')
+        jh.M('sites').where("id=?", (sid,)).delete()
+        jh.restartWeb()
+        return jh.returnJson(True, '站点删除成功!')
 
     def setEndDate(self, sid, edate):
-        result = mw.M('sites').where(
+        result = jh.M('sites').where(
             'id=?', (sid,)).setField('edate', edate)
-        siteName = mw.M('sites').where('id=?', (sid,)).getField('name')
-        mw.writeLog('TYPE_SITE', '设置成功,站点到期后将自动停止!', (siteName, edate))
-        return mw.returnJson(True, '设置成功,站点到期后将自动停止!')
+        siteName = jh.M('sites').where('id=?', (sid,)).getField('name')
+        jh.writeLog('TYPE_SITE', '设置成功,站点到期后将自动停止!', (siteName, edate))
+        return jh.returnJson(True, '设置成功,站点到期后将自动停止!')
 
     # ssl相关方法 start
     def setSslConf(self, siteName):
         file = self.getHostConf(siteName)
-        conf = mw.readFile(file)
+        conf = jh.readFile(file)
 
         keyPath = self.sslDir + '/' + siteName + '/privkey.pem'
         certPath = self.sslDir + '/' + siteName + '/fullchain.pem'
@@ -2617,47 +2617,47 @@ location ^~ {from} {\n\
     ssl_session_timeout 10m;
     error_page 497  https://$host$request_uri;""" % (certPath, keyPath)
             if(conf.find('ssl_certificate') != -1):
-                return mw.returnData(True, 'SSL开启成功!')
+                return jh.returnData(True, 'SSL开启成功!')
 
             conf = conf.replace('#error_page 404/404.html;', sslStr)
 
             rep = "listen\s+([0-9]+)\s*[default_server]*;"
             tmp = re.findall(rep, conf)
-            if not mw.inArray(tmp, '443'):
+            if not jh.inArray(tmp, '443'):
                 listen = re.search(rep, conf).group()
                 http_ssl = "\n\tlisten 443 ssl http2;"
                 http_ssl = http_ssl + "\n\tlisten [::]:443 ssl http2;"
                 conf = conf.replace(listen, listen + http_ssl)
 
-            mw.backFile(file)
-            mw.writeFile(file, conf)
-            isError = mw.checkWebConfig()
+            jh.backFile(file)
+            jh.writeFile(file, conf)
+            isError = jh.checkWebConfig()
             if(isError != True):
-                mw.restoreFile(file)
-                return mw.returnData(False, '证书错误: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
+                jh.restoreFile(file)
+                return jh.returnData(False, '证书错误: <br><a style="color:red;">' + isError.replace("\n", '<br>') + '</a>')
 
         self.saveCert(keyPath, certPath)
 
-        msg = mw.getInfo('网站[{1}]开启SSL成功!', siteName)
-        mw.writeLog('网站管理', msg)
+        msg = jh.getInfo('网站[{1}]开启SSL成功!', siteName)
+        jh.writeLog('网站管理', msg)
 
-        mw.restartWeb()
-        return mw.returnData(True, 'SSL开启成功!')
+        jh.restartWeb()
+        return jh.returnData(True, 'SSL开启成功!')
 
     def saveCert(self, keyPath, certPath):
         try:
-            certInfo = mw.getCertName(certPath)
+            certInfo = jh.getCertName(certPath)
             if not certInfo:
-                return mw.returnData(False, '证书解析失败!')
+                return jh.returnData(False, '证书解析失败!')
             vpath = self.sslDir + '/' + certInfo['subject'].strip()
             if not os.path.exists(vpath):
                 os.system('mkdir -p ' + vpath)
-            mw.writeFile(vpath + '/privkey.pem', mw.readFile(keyPath))
-            mw.writeFile(vpath + '/fullchain.pem', mw.readFile(certPath))
-            mw.writeFile(vpath + '/info.json', json.dumps(certInfo))
-            return mw.returnData(True, '证书保存成功!')
+            jh.writeFile(vpath + '/privkey.pem', jh.readFile(keyPath))
+            jh.writeFile(vpath + '/fullchain.pem', jh.readFile(certPath))
+            jh.writeFile(vpath + '/info.json', json.dumps(certInfo))
+            return jh.returnData(True, '证书保存成功!')
         except Exception as e:
-            return mw.returnData(False, '证书保存失败!')
+            return jh.returnData(False, '证书保存失败!')
 
     # 清除多余user.ini
     def delUserInI(self, path, up=0):
@@ -2672,8 +2672,8 @@ location ^~ {from} {\n\
                 useriniPath = npath + '/.user.ini'
                 if not os.path.exists(useriniPath):
                     continue
-                mw.execShell('which chattr && chattr -i ' + useriniPath)
-                mw.execShell('rm -f ' + useriniPath)
+                jh.execShell('which chattr && chattr -i ' + useriniPath)
+                jh.execShell('rm -f ' + useriniPath)
             except:
                 continue
         return True
@@ -2684,19 +2684,19 @@ location ^~ {from} {\n\
 
         filename = newPath + '/.user.ini'
         if os.path.exists(filename):
-            mw.execShell("chattr -i " + filename)
+            jh.execShell("chattr -i " + filename)
             os.remove(filename)
-            return mw.returnJson(True, '已清除防跨站设置!')
+            return jh.returnJson(True, '已清除防跨站设置!')
 
         self.delUserInI(newPath)
         openPath = 'open_basedir={}/:{}/'.format(newPath, sitePath)
         if runPath == '/':
             openPath = 'open_basedir={}/'.format(sitePath)
 
-        mw.writeFile(filename, openPath + ':/www/server/php:/tmp/:/proc/')
-        mw.execShell("chattr +i " + filename)
+        jh.writeFile(filename, openPath + ':/www/server/php:/tmp/:/proc/')
+        jh.execShell("chattr +i " + filename)
 
-        return mw.returnJson(True, '已打开防跨站设置!')
+        return jh.returnJson(True, '已打开防跨站设置!')
 
     # 转换时间
     def strfToTime(self, sdate):

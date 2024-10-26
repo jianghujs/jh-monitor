@@ -29,7 +29,7 @@ cd /www/server/jh-monitor/scripts && bash lib.sh
 chmod 755 /www/server/jh-monitor/data
 
 
-echo -e "stop mw"
+echo -e "stop jh"
 isStart=`ps -ef|grep 'gunicorn -c setting.py app:app' |grep -v grep|awk '{print $2}'`
 
 port=7200
@@ -50,20 +50,20 @@ do
 done
 
 
-echo -e "start mw"
+echo -e "start jh"
 cd /www/server/jh-monitor && bash cli.sh start
 isStart=`ps -ef|grep 'gunicorn -c setting.py app:app' |grep -v grep|awk '{print $2}'`
 n=0
-while [[ ! -f /etc/rc.d/init.d/mw ]];
+while [[ ! -f /etc/rc.d/init.d/jhm ]];
 do
     echo -e ".\c"
     sleep 1
     let n+=1
     if [ $n -gt 20 ];then
-        echo -e "start mw fail"
+        echo -e "start jh fail"
         exit 1
     fi
 done
-echo -e "start mw success"
+echo -e "start jh success"
 
 systemctl daemon-reload

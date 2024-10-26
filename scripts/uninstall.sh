@@ -139,8 +139,8 @@ UNINSTALL_MW()
         echo -e "------------"
         echo "取消卸载面板"
     else
-        rm -rf /usr/bin/mw
-        rm -rf /etc/init.d/mw
+        rm -rf /usr/bin/jhm
+        rm -rf /etc/init.d/jhm
         systemctl daemon-reload
         rm -rf /www/server/jh-monitor
         echo "卸载面板成功"

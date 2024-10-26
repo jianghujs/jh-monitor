@@ -19,13 +19,13 @@ sys.path.append(chdir + '/class/core')
 # sys.setdefaultencoding('utf-8')
 
 
-import mw
+import jh
 import db
 import time
 def updateDatabase():
     # 监控相关
     sql = db.Sql().dbfile('system')
-    csql = mw.readFile('data/sql/system.sql')
+    csql = jh.readFile('data/sql/system.sql')
         csql_list = csql.split(';')
         for index in range(len(csql_list)):
             sql.execute(csql_list[index], ())

@@ -30,7 +30,7 @@ from flask_session import Session
 sys.path.append(os.getcwd() + "/class/core")
 
 import db
-import mw
+import jh
 import config_api
 
 app = Flask(__name__, template_folder='templates/default')
@@ -54,7 +54,7 @@ except:
         str(sys.version_info[0])
     app.config['SESSION_FILE_THRESHOLD'] = 1024
     app.config['SESSION_FILE_MODE'] = 384
-    mw.execShell("pip install flask_sqlalchemy &")
+    jh.execShell("pip install flask_sqlalchemy &")
 
 app.secret_key = uuid.UUID(int=uuid.getnode()).hex[-12:]
 app.config['SESSION_PERMANENT'] = True
@@ -69,7 +69,7 @@ basic_auth_conf = 'data/basic_auth.json'
 app.config['BASIC_AUTH_OPEN'] = False
 if os.path.exists(basic_auth_conf):
     try:
-        ba_conf = json.loads(mw.readFile(basic_auth_conf))
+        ba_conf = json.loads(jh.readFile(basic_auth_conf))
         print(ba_conf)
         app.config['BASIC_AUTH_USERNAME'] = ba_conf['basic_user']
         app.config['BASIC_AUTH_PASSWORD'] = ba_conf['basic_pwd']
@@ -91,7 +91,7 @@ socketio.init_app(app)
 
 # debug macosx dev
 app.config.jhpanelVersion = app.config.version
-if mw.isDebugMode():
+if jh.isDebugMode():
     app.debug = True
     app.config.version = app.config.version + str(time.time())
     # app.config.version = app.config.version + ' / 开发模式; ' + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -102,7 +102,7 @@ common.init()
 
 # ----------  error function start -----------------
 def getErrorNum(key, limit=None):
-    key = mw.md5(key)
+    key = jh.md5(key)
     num = cache.get(key)
     if not num:
         num = 0
@@ -114,7 +114,7 @@ def getErrorNum(key, limit=None):
 
 
 def setErrorNum(key, empty=False, expire=3600):
-    key = mw.md5(key)
+    key = jh.md5(key)
     num = cache.get(key)
     if not num:
         num = 0
@@ -138,7 +138,7 @@ def funConvert(fun):
 
 def sendAuthenticated():
     # 发送http认证信息
-    request_host = mw.getHostAddr()
+    request_host = jh.getHostAddr()
     result = Response(
         '', 401, {'WWW-Authenticate': 'Basic realm="%s"' % request_host.strip()})
     if not 'login' in session and not 'admin_auth' in session:
@@ -157,11 +157,11 @@ def requestCheck():
         if not auth:
             return sendAuthenticated()
         salt = '_md_salt'
-        if mw.md5(auth.username.strip() + salt) != app.config['BASIC_AUTH_USERNAME'] \
-                or mw.md5(auth.password.strip() + salt) != app.config['BASIC_AUTH_PASSWORD']:
+        if jh.md5(auth.username.strip() + salt) != app.config['BASIC_AUTH_USERNAME'] \
+                or jh.md5(auth.password.strip() + salt) != app.config['BASIC_AUTH_PASSWORD']:
             return sendAuthenticated()
 
-    domain_check = mw.checkDomainPanel()
+    domain_check = jh.checkDomainPanel()
     if domain_check:
         return domain_check
 
@@ -169,7 +169,7 @@ def requestCheck():
 def isLogined():
     # print('isLogined', session)
     if 'login' in session and 'username' in session and session['login'] == True:
-        userInfo = mw.M('users').where(
+        userInfo = jh.M('users').where(
             "id=?", (1,)).field('id,username,password').find()
         # print(userInfo)
         if userInfo['username'] != session['username']:
@@ -189,7 +189,7 @@ def isLogined():
         return True
 
     # if os.path.exists('data/api_login.txt'):
-    #     content = mw.readFile('data/api_login.txt')
+    #     content = jh.readFile('data/api_login.txt')
     #     session['login'] = True
     #     session['username'] = content
     #     os.remove('data/api_login.txt')
@@ -204,21 +204,21 @@ def publicObject(toObject, func, action=None, get=None):
             data = eval(efunc)
             return data
         data = {'msg': '404,not find api[' + name + ']', "status": False}
-        return mw.getJson(data)
+        return jh.getJson(data)
     except Exception as e:
         # API发生错误记录
         print(traceback.print_exc())
         data = {'msg': '访问异常:' + str(e) + '!', "status": False}
-        return mw.getJson(data)
+        return jh.getJson(data)
 
 
 # @app.route("/debug")
 # def debug():
 #     print(sys.version_info)
 #     print(session)
-#     os = mw.getOs()
+#     os = jh.getOs()
 #     print(os)
-#     return mw.getLocalIp()
+#     return jh.getLocalIp()
 
 # 仅针对webhook插件
 @app.route("/hook")
@@ -228,9 +228,9 @@ def webhook():
         'params': request.args.get('params', '').strip()
     }
 
-    wh_install_path = mw.getServerDir() + '/webhook'
+    wh_install_path = jh.getServerDir() + '/webhook'
     if not os.path.exists(wh_install_path):
-        return mw.returnJson(False, '请先安装WebHook插件!')
+        return jh.returnJson(False, '请先安装WebHook插件!')
 
     sys.path.append('plugins/webhook')
     import index
@@ -242,7 +242,7 @@ def close():
     if not os.path.exists('data/close.pl'):
         return redirect('/')
     data = {}
-    data['cmd'] = 'rm -rf ' + mw.getRunDir() + '/data/close.pl'
+    data['cmd'] = 'rm -rf ' + jh.getRunDir() + '/data/close.pl'
     return render_template('close.html', data=data)
 
 
@@ -261,7 +261,7 @@ def code():
 
     # print(codeImage[1])
 
-    session['code'] = mw.md5(''.join(codeImage[1]).lower())
+    session['code'] = jh.md5(''.join(codeImage[1]).lower())
 
     img = Response(out.getvalue(), headers={'Content-Type': 'image/png'})
     return make_response(img)
@@ -281,36 +281,36 @@ def doLogin():
 
     filename = 'data/close.pl'
     if os.path.exists(filename):
-        return mw.returnJson(False, '面板已经关闭!')
+        return jh.returnJson(False, '面板已经关闭!')
 
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '').strip()
     code = request.form.get('code', '').strip()
     # print(session)
     if 'code' in session:
-        if session['code'] != mw.md5(code):
+        if session['code'] != jh.md5(code):
             if login_cache_limit == None:
                 login_cache_limit = 1
             else:
                 login_cache_limit = int(login_cache_limit) + 1
 
             if login_cache_limit >= login_cache_count:
-                mw.writeFile(filename, 'True')
-                return mw.returnJson(False, '面板已经关闭!')
+                jh.writeFile(filename, 'True')
+                return jh.returnJson(False, '面板已经关闭!')
 
             cache.set('login_cache_limit', login_cache_limit, timeout=10000)
             login_cache_limit = cache.get('login_cache_limit')
-            code_msg = mw.getInfo("验证码错误,您还可以尝试[{1}]次!", (str(
+            code_msg = jh.getInfo("验证码错误,您还可以尝试[{1}]次!", (str(
                 login_cache_count - login_cache_limit)))
-            mw.writeLog('用户登录', code_msg)
-            return mw.returnJson(False, code_msg)
+            jh.writeLog('用户登录', code_msg)
+            return jh.returnJson(False, code_msg)
 
-    userInfo = mw.M('users').where(
+    userInfo = jh.M('users').where(
         "id=?", (1,)).field('id,username,password').find()
 
     # print(userInfo)
     # print(password)
-    password = mw.md5(password)
+    password = jh.md5(password)
     # print('md5-pass', password)
 
     if userInfo['username'] != username or userInfo['password'] != password:
@@ -323,13 +323,13 @@ def doLogin():
             login_cache_limit = int(login_cache_limit) + 1
 
         if login_cache_limit >= login_cache_count:
-            mw.writeFile(filename, 'True')
-            return mw.returnJson(False, '面板已经关闭!')
+            jh.writeFile(filename, 'True')
+            return jh.returnJson(False, '面板已经关闭!')
 
         cache.set('login_cache_limit', login_cache_limit, timeout=10000)
         login_cache_limit = cache.get('login_cache_limit')
-        mw.writeLog('用户登录', mw.getInfo(msg))
-        return mw.returnJson(False, mw.getInfo("用户名或密码错误,您还可以尝试[{1}]次!", (str(login_cache_count - login_cache_limit))))
+        jh.writeLog('用户登录', jh.getInfo(msg))
+        return jh.returnJson(False, jh.getInfo("用户名或密码错误,您还可以尝试[{1}]次!", (str(login_cache_count - login_cache_limit))))
 
     cache.delete('login_cache_limit')
     session['login'] = True
@@ -338,8 +338,8 @@ def doLogin():
     # session['overdue'] = int(time.time()) + 7
 
     # # fix 跳转时,数据消失，可能是跨域问题
-    # mw.writeFile('data/api_login.txt', userInfo['username'])
-    return mw.returnJson(True, '登录成功,正在跳转...')
+    # jh.writeFile('data/api_login.txt', userInfo['username'])
+    return jh.returnJson(True, '登录成功,正在跳转...')
 
 
 @app.errorhandler(404)
@@ -350,7 +350,7 @@ def page_unauthorized(error):
 def get_admin_safe():
     path = 'data/admin_path.pl'
     if os.path.exists(path):
-        cont = mw.readFile(path)
+        cont = jh.readFile(path)
         cont = cont.strip().strip('/')
         return (True, cont)
     return (False, '')
@@ -373,12 +373,12 @@ def login_temp_user(token):
     if len(token) != 48:
         return '错误的参数!'
 
-    skey = mw.getClientIp() + '_temp_login'
+    skey = jh.getClientIp() + '_temp_login'
     if not getErrorNum(skey, 10):
         return '连续10次验证失败，禁止1小时'
 
     stime = int(time.time())
-    data = mw.M('temp_login').where('state=? and expire>?',
+    data = jh.M('temp_login').where('state=? and expire>?',
                                     (0, stime)).field('id,token,salt,expire,addtime').find()
     if not data:
         setErrorNum(skey)
@@ -388,12 +388,12 @@ def login_temp_user(token):
         setErrorNum(skey)
         return "过期"
 
-    r_token = mw.md5(token + data['salt'])
+    r_token = jh.md5(token + data['salt'])
     if r_token != data['token']:
         setErrorNum(skey)
         return '验证失败!'
 
-    userInfo = mw.M('users').where(
+    userInfo = jh.M('users').where(
         "id=?", (1,)).field('id,username').find()
     session['login'] = True
     session['username'] = userInfo['username']
@@ -402,10 +402,10 @@ def login_temp_user(token):
     session['tmp_login_expire'] = int(data['expire'])
     session['uid'] = data['id']
 
-    login_addr = mw.getClientIp() + ":" + str(request.environ.get('REMOTE_PORT'))
-    mw.writeLog('用户登录', "登录成功,帐号:{1},登录IP:{2}",
+    login_addr = jh.getClientIp() + ":" + str(request.environ.get('REMOTE_PORT'))
+    jh.writeLog('用户登录', "登录成功,帐号:{1},登录IP:{2}",
                 (userInfo['username'], login_addr))
-    mw.M('temp_login').where('id=?', (data['id'],)).update(
+    jh.M('temp_login').where('id=?', (data['id'],)).update(
         {"login_time": stime, 'state': 1, 'login_addr': login_addr})
 
     # print(session)
@@ -422,25 +422,25 @@ def api(reqClass=None, reqAction=None, reqData=None):
     import config_api
     isOk, data = config_api.config_api().checkPanelToken()
     if not isOk:
-        return mw.returnJson(False, '未开启API')
+        return jh.returnJson(False, '未开启API')
 
     request_time = request.form.get('request_time', '')
     request_token = request.form.get('request_token', '')
     request_ip = request.remote_addr
 
-    token_md5 = mw.md5(str(request_time) + mw.md5(data['token_crypt']))
+    token_md5 = jh.md5(str(request_time) + jh.md5(data['token_crypt']))
 
     if not (token_md5 == request_token):
-        return mw.returnJson(False, '密钥错误')
+        return jh.returnJson(False, '密钥错误')
 
-    if not mw.inArray(data['limit_addr'], request_ip):
-        return mw.returnJson(False, '非法请求')
+    if not jh.inArray(data['limit_addr'], request_ip):
+        return jh.returnJson(False, '非法请求')
 
     if reqClass == None:
-        return mw.returnJson(False, '请指定请求方法类')
+        return jh.returnJson(False, '请指定请求方法类')
 
     if reqAction == None:
-        return mw.returnJson(False, '请指定请求方法')
+        return jh.returnJson(False, '请指定请求方法')
 
     classFile = ('config_api', 'crontab_api', 'files_api', 'firewall_api',
                  'plugins_api', 'system_api', 'site_api', 'task_api')
@@ -454,7 +454,7 @@ def api(reqClass=None, reqAction=None, reqData=None):
     try:
         return publicObject(newInstance, reqAction)
     except Exception as e:
-        return mw.getTracebackInfo()
+        return jh.getTracebackInfo()
 
 
 @app.route('/<reqClass>/<reqAction>', methods=['POST', 'GET'])
@@ -544,9 +544,9 @@ class SSHSession:
     def connect(self):
         self.status = 'connecting'
         print("正在创建SSH终端连接", str(time.time()), self.session_id)
-        port = mw.getSSHPort()
+        port = jh.getSSHPort()
         try:
-            ips = ['127.0.0.1', mw.getLocalIp(), mw.getHostAddr()]
+            ips = ['127.0.0.1', jh.getLocalIp(), jh.getHostAddr()]
             for ip in ips:
                 print(f"尝试连接{ip}", port)
                 self.ssh.connect(hostname=ip, port=port, username='root', timeout=2)
@@ -634,7 +634,7 @@ def disconnect_to_ssh(message):
         session_ssh_dict.pop(session_id)
 
 
-if not mw.isAppleSystem():
+if not jh.isAppleSystem():
     try:
         # 在程序启动时预先创建RSA密钥
         if not os.path.exists('/root/.ssh/id_rsa') or not os.path.exists('/root/.ssh/id_rsa.pub'):
@@ -643,14 +643,14 @@ if not mw.isAppleSystem():
             os.system('chmod 600 /root/.ssh/authorized_keys')
 
         # 检查是否写入authorized_keys
-        data = mw.execShell("cat /root/.ssh/id_rsa.pub | awk '{print $3}'")
+        data = jh.execShell("cat /root/.ssh/id_rsa.pub | awk '{print $3}'")
         if data[0] != "":
-            ak_data = mw.execShell(
+            ak_data = jh.execShell(
                 "cat /root/.ssh/authorized_keys | grep " + data[0])
             if ak_data[0] == "":
-                mw.execShell(
+                jh.execShell(
                     'cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys')
-                mw.execShell('chmod 600 /root/.ssh/authorized_keys')
+                jh.execShell('chmod 600 /root/.ssh/authorized_keys')
 
     except Exception as e:
         print(e)

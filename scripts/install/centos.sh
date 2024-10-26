@@ -23,10 +23,6 @@ fi
 
 # 创建www目录
 mkdir -p /www/server
-mkdir -p /www/wwwroot
-mkdir -p /www/wwwlogs
-mkdir -p /www/backup/database
-mkdir -p /www/backup/site
 
 # git clone jh-monitor from github
 echo "git clone https://github.com/jianghujs/jh-monitor /www/server/jh-monitor"
@@ -66,7 +62,7 @@ if [ -f /etc/init.d/iptables ];then
 	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
 	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 888 -j ACCEPT
 	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 10022 -j ACCEPT
-	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 10744 -j ACCEPT
+	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 10844 -j ACCEPT
 	iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 33067 -j ACCEPT
 	# iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 7200 -j ACCEPT
 	# iptables -I INPUT -p tcp -m state --state NEW -m tcp --dport 3306 -j ACCEPT
@@ -89,17 +85,8 @@ if [ ! -f /etc/init.d/iptables ];then
 	#取消服务锁定
 	systemctl unmask firewalld
 	systemctl start firewalld
-
-	firewall-cmd --permanent --zone=public --add-port=22/tcp
-	firewall-cmd --permanent --zone=public --add-port=80/tcp
-	firewall-cmd --permanent --zone=public --add-port=443/tcp
-	firewall-cmd --permanent --zone=public --add-port=888/tcp
-	firewall-cmd --permanent --zone=public --add-port=10022/tcp
-	firewall-cmd --permanent --zone=public --add-port=10744/tcp
-	firewall-cmd --permanent --zone=public --add-port=33067/tcp
-	# firewall-cmd --permanent --zone=public --add-port=7200/tcp
-	# firewall-cmd --permanent --zone=public --add-port=3306/tcp
-	# firewall-cmd --permanent --zone=public --add-port=30000-40000/tcp
+  
+	firewall-cmd --permanent --zone=public --add-port=10844/tcp
 
 
 	sed -i 's#AllowZoneDrifting=yes#AllowZoneDrifting=no#g' /etc/firewalld/firewalld.conf

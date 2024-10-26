@@ -4,9 +4,9 @@
 - 面板相关命令
 
 ```
-/etc/init.d/mw default
+/etc/init.d/jhm default
 
-service mw [start|stop|reload|restart|status]
+service jh [start|stop|reload|restart|status]
 ```
 
 - OpenResty

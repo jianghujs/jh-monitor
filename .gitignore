@@ -140,7 +140,7 @@ include
 share
 pip-selfcheck.json
 
-scripts/init.d/mw
+scripts/init.d/jhm
 scripts/jh-monitor
 
 data/api_login.txt

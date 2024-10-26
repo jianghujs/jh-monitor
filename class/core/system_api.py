@@ -25,7 +25,7 @@ from flask import Flask, session
 from flask import request
 
 import db
-import mw
+import jh
 
 import config_api
 import crontab_api
@@ -50,12 +50,12 @@ class system_api:
     pids = None
 
     def __init__(self):
-        self.setupPath = mw.getServerDir()
+        self.setupPath = jh.getServerDir()
 
     ##### ----- start ----- ###
     def networkApi(self):
         data = self.getNetWork()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def updateServerApi(self):
         stype = request.args.get('type', 'check')
@@ -63,16 +63,16 @@ class system_api:
         return self.updateServer(stype, version)
 
     def updateServerCodeApi(self):
-        mw.execShell("cd /www/server/jh-monitor && pip3 install -r /www/server/jh-monitor/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple")
-        return mw.returnJson(True, '更新成功, 请手动重启面板!')
+        jh.execShell("cd /www/server/jh-monitor && pip3 install -r /www/server/jh-monitor/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple")
+        return jh.returnJson(True, '更新成功, 请手动重启面板!')
 
     def systemTotalApi(self):
         data = self.getSystemTotal()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def diskInfoApi(self):
         diskInfo = self.getDiskInfo()
-        return mw.getJson(diskInfo)
+        return jh.getJson(diskInfo)
 
     def setControlApi(self):
         stype = request.form.get('type', '')
@@ -84,66 +84,66 @@ class system_api:
         start = request.args.get('start', '')
         end = request.args.get('end', '')
         data = self.getLoadAverageData(start, end)
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getCpuIoApi(self):
         start = request.args.get('start', '')
         end = request.args.get('end', '')
         data = self.getCpuIoData(start, end)
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getDiskIoApi(self):
         start = request.args.get('start', '')
         end = request.args.get('end', '')
         data = self.getDiskIoData(start, end)
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def getNetworkIoApi(self):
         start = request.args.get('start', '')
         end = request.args.get('end', '')
         data = self.getNetWorkIoData(start, end)
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     def rememoryApi(self):
         os.system('sync')
-        scriptFile = mw.getRunDir() + '/script/rememory.sh'
-        mw.execShell("/bin/bash " + scriptFile)
+        scriptFile = jh.getRunDir() + '/script/rememory.sh'
+        jh.execShell("/bin/bash " + scriptFile)
         data = self.getMemInfo()
-        return mw.getJson(data)
+        return jh.getJson(data)
 
     # 重启面板
     def restartApi(self):
         self.restartMw(True)
-        return mw.returnJson(True, '面板已重启!')
+        return jh.returnJson(True, '面板已重启!')
 
     def restartStatusApi(self):
         restartTip = 'data/restart.pl'
-        return mw.returnJson(True, os.path.exists(restartTip))
+        return jh.returnJson(True, os.path.exists(restartTip))
 
     def restartServerApi(self):
-        if mw.isAppleSystem():
-            return mw.returnJson(False, "开发环境不可重起")
+        if jh.isAppleSystem():
+            return jh.returnJson(False, "开发环境不可重起")
         self.restartServer()
-        return mw.returnJson(True, '正在重启服务器!')
+        return jh.returnJson(True, '正在重启服务器!')
     ##### ----- end ----- ###
 
     def restartTask(self):
-        initd = mw.getRunDir() + '/scripts/init.d/mw'
+        initd = jh.getRunDir() + '/scripts/init.d/jhm'
         if os.path.exists(initd):
             os.system(initd + ' ' + 'restart_task')
         return True
 
     def restartMw(self, restartAll=False):
         pl = 'restart.pl' if restartAll else 'restart_panel.pl'
-        mw.writeFile('data/' + pl, 'True')
+        jh.writeFile('data/' + pl, 'True')
         return True
 
     @mw_async
     def restartServer(self):
-        if not mw.isRestart():
-            return mw.returnJson(False, '请等待所有安装任务完成再执行!')
-        mw.execShell("sync && init 6 &")
-        return mw.returnJson(True, '命令发送成功!')
+        if not jh.isRestart():
+            return jh.returnJson(False, '请等待所有安装任务完成再执行!')
+        jh.execShell("sync && init 6 &")
+        return jh.returnJson(True, '命令发送成功!')
 
         # 名取PID
     def getPid(self, pname):
@@ -181,30 +181,30 @@ class system_api:
 
     def getPanelInfo(self, get=None):
         # 取面板配置
-        address = mw.GetLocalIp()
+        address = jh.GetLocalIp()
         try:
             try:
                 port = web.ctx.host.split(':')[1]
             except:
-                port = mw.readFile('data/port.pl')
+                port = jh.readFile('data/port.pl')
         except:
             port = '7200'
         domain = ''
         if os.path.exists('data/domain.conf'):
-            domain = mw.readFile('data/domain.conf')
+            domain = jh.readFile('data/domain.conf')
 
         autoUpdate = ''
         if os.path.exists('data/autoUpdate.pl'):
             autoUpdate = 'checked'
         limitip = ''
         if os.path.exists('data/limitip.conf'):
-            limitip = mw.readFile('data/limitip.conf')
+            limitip = jh.readFile('data/limitip.conf')
 
         templates = []
         for template in os.listdir('templates/'):
             if os.path.isdir('templates/' + template):
                 templates.append(template)
-        template = mw.readFile('data/templates.pl')
+        template = jh.readFile('data/templates.pl')
 
         check502 = ''
         if os.path.exists('data/502Task.pl'):
@@ -219,7 +219,7 @@ class system_api:
         data['cpuRealUsed'] = cpu[0]
         data['time'] = self.getBootTime()
         data['system'] = self.getSystemVersion()
-        data['isuser'] = mw.M('users').where(
+        data['isuser'] = jh.M('users').where(
             'username=?', ('admin',)).count()
         data['version'] = '0.0.1'
         return data
@@ -256,13 +256,13 @@ class system_api:
         titlePl = 'data/title.pl'
         title = '江湖云控'
         if os.path.exists(titlePl):
-            title = mw.readFile(titlePl).strip()
+            title = jh.readFile(titlePl).strip()
         return title
 
     def getSystemVersion(self):
         # 取操作系统版本
-        if mw.getOs() == 'darwin':
-            data = mw.execShell('sw_vers')[0]
+        if jh.getOs() == 'darwin':
+            data = jh.execShell('sw_vers')[0]
             data_list = data.strip().split("\n")
             mac_version = ''
             for x in data_list:
@@ -271,13 +271,13 @@ class system_api:
 
         redhat_series = '/etc/redhat-release'
         if os.path.exists(redhat_series):
-            version = mw.readFile('/etc/redhat-release')
+            version = jh.readFile('/etc/redhat-release')
             version = version.replace('release ', '').strip()
             return version
 
         os_series = '/etc/os-release'
         if os.path.exists(os_series):
-            version = mw.execShell(
+            version = jh.execShell(
                 "cat /etc/*-release | grep PRETTY_NAME | awk -F = '{print $2}' | awk -F '\"' '{print $2}'")
             return version[0].strip()
 
@@ -285,7 +285,7 @@ class system_api:
 
     def getBootTime(self):
         # 取系统启动时间
-        uptime = mw.readFile('/proc/uptime')
+        uptime = jh.readFile('/proc/uptime')
         if uptime == False:
             start_time = psutil.boot_time()
             run_time = time.time() - start_time
@@ -297,7 +297,7 @@ class system_api:
         days = math.floor(hours / 24)
         hours = math.floor(hours - (days * 24))
         min = math.floor(min - (days * 60 * 24) - (hours * 60))
-        return mw.getInfo('已不间断运行: {1}天{2}小时{3}分钟', (str(int(days)), str(int(hours)), str(int(min))))
+        return jh.getInfo('已不间断运行: {1}天{2}小时{3}分钟', (str(int(days)), str(int(hours)), str(int(min))))
 
     def getCpuInfo(self, interval=1):
         # 取CPU信息
@@ -306,18 +306,18 @@ class system_api:
         used = psutil.cpu_percent(interval=interval)
 
         if os.path.exists('/proc/cpuinfo'):
-            c_tmp = mw.readFile('/proc/cpuinfo')
+            c_tmp = jh.readFile('/proc/cpuinfo')
             d_tmp = re.findall("physical id.+", c_tmp)
             cpuLogicalNum = len(set(d_tmp))
 
         used_all = psutil.cpu_percent(percpu=True)
-        cpu_name = mw.getCpuType() + " * {}".format(cpuLogicalNum)
+        cpu_name = jh.getCpuType() + " * {}".format(cpuLogicalNum)
         return used, cpuCount, used_all, cpu_name, cpuCount, cpuLogicalNum
 
     def getMemInfo(self):
         # 取内存信息
         mem = psutil.virtual_memory()
-        if mw.getOs() == 'darwin':
+        if jh.getOs() == 'darwin':
             memInfo = {
                 'memTotal': mem.total / 1024 / 1024
             }
@@ -341,7 +341,7 @@ class system_api:
             import psutil
             mem = psutil.virtual_memory()
 
-            if mw.getOs() == 'darwin':
+            if jh.getOs() == 'darwin':
                 return mem.percent
 
             memInfo = {'memTotal': mem.total / 1024 / 1024, 'memFree': mem.free / 1024 / 1024,
@@ -370,16 +370,16 @@ class system_api:
             tmp = {}
             tmp['path'] = disk[1]
             size_tmp = psutil.disk_usage(disk[1])
-            tmp['size'] = [mw.toSize(size_tmp[0]), mw.toSize(
-                size_tmp[1]), mw.toSize(size_tmp[2]), str(size_tmp[3]) + '%']
+            tmp['size'] = [jh.toSize(size_tmp[0]), jh.toSize(
+                size_tmp[1]), jh.toSize(size_tmp[2]), str(size_tmp[3]) + '%']
             diskInfo.append(tmp)
         return diskInfo
 
     def getDiskInfo2(self):
         # 取磁盘分区信息
-        temp = mw.execShell(
+        temp = jh.execShell(
             "df -h -P|grep '/'|grep -v tmpfs | grep -v devfs")[0]
-        tempInodes = mw.execShell(
+        tempInodes = jh.execShell(
             "df -i -P|grep '/'|grep -v tmpfs | grep -v devfs")[0]
         temp1 = temp.split('\n')
         tempInodes1 = tempInodes.split('\n')
@@ -468,7 +468,7 @@ class system_api:
                 else:
                     os.remove(filename)
                 count += 1
-        mw.restartWeb()
+        jh.restartWeb()
         os.system('echo > /tmp/panelBoot.pl')
         return total, count
 
@@ -533,24 +533,24 @@ class system_api:
 
     def getNetWorkIoData(self, start, end):
         # 取指定时间段的网络Io
-        data = mw.M('network').dbfile('system').where("addtime>=? AND addtime<=?", (start, end)).field(
+        data = jh.M('network').dbfile('system').where("addtime>=? AND addtime<=?", (start, end)).field(
             'id,up,down,total_up,total_down,down_packets,up_packets,addtime').order('id asc').select()
         return self.toAddtime(data)
 
     def getDiskIoData(self, start, end):
         # 取指定时间段的磁盘Io
-        data = mw.M('diskio').dbfile('system').where("addtime>=? AND addtime<=?", (start, end)).field(
+        data = jh.M('diskio').dbfile('system').where("addtime>=? AND addtime<=?", (start, end)).field(
             'id,read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime').order('id asc').select()
         return self.toAddtime(data)
 
     def getCpuIoData(self, start, end):
         # 取指定时间段的CpuIo
-        data = mw.M('cpuio').dbfile('system').where("addtime>=? AND addtime<=?",
+        data = jh.M('cpuio').dbfile('system').where("addtime>=? AND addtime<=?",
                                                     (start, end)).field('id,pro,mem,addtime').order('id asc').select()
         return self.toAddtime(data, True)
 
     def getLoadAverageData(self, start, end):
-        data = mw.M('load_average').dbfile('system').where("addtime>=? AND addtime<=?", (
+        data = jh.M('load_average').dbfile('system').where("addtime>=? AND addtime<=?", (
             start, end)).field('id,pro,one,five,fifteen,addtime').order('id asc').select()
         return self.toAddtime(data)
 
@@ -600,36 +600,36 @@ class system_api:
         stat_pl = 'data/only_netio_counters.pl'
 
         if stype == '0':
-            mw.execShell("rm -rf " + control_file)
+            jh.execShell("rm -rf " + control_file)
         elif stype == '1':
             _day = int(day)
             if _day < 1:
-                return mw.returnJson(False, "设置失败!")
-            mw.writeFile(control_file, day)
+                return jh.returnJson(False, "设置失败!")
+            jh.writeFile(control_file, day)
         elif stype == '2':
-            mw.execShell("rm -rf " + stat_pl)
+            jh.execShell("rm -rf " + stat_pl)
         elif stype == '3':
-            mw.execShell("echo 'True' > " + stat_pl)
+            jh.execShell("echo 'True' > " + stat_pl)
         elif stype == '4':
-            mw.execShell("rm -rf " + control_notify_pl)
+            jh.execShell("rm -rf " + control_notify_pl)
         elif stype == '5':
-            mw.execShell("echo 'True' > " + control_notify_pl)
+            jh.execShell("echo 'True' > " + control_notify_pl)
         elif stype == 'del':
-            if not mw.isRestart():
-                return mw.returnJson(False, '请等待所有安装任务完成再执行')
+            if not jh.isRestart():
+                return jh.returnJson(False, '请等待所有安装任务完成再执行')
             os.remove("data/system.db")
 
             sql = db.Sql().dbfile('system')
-            csql = mw.readFile('data/sql/system.sql')
+            csql = jh.readFile('data/sql/system.sql')
             csql_list = csql.split(';')
             for index in range(len(csql_list)):
                 sql.execute(csql_list[index], ())
-            return mw.returnJson(True, "监控服务已关闭")
+            return jh.returnJson(True, "监控服务已关闭")
         else:
             data = {}
             if os.path.exists(control_file):
                 try:
-                    data['day'] = int(mw.readFile(control_file))
+                    data['day'] = int(jh.readFile(control_file))
                 except:
                     data['day'] = 30
                 data['status'] = True
@@ -652,9 +652,9 @@ class system_api:
             else:
                 data['stat_all_status'] = False
 
-            return mw.getJson(data)
+            return jh.getJson(data)
 
-        return mw.returnJson(True, "设置成功!")
+        return jh.returnJson(True, "设置成功!")
 
     def versionDiff(self, old, new):
         '''
@@ -694,8 +694,8 @@ class system_api:
     def updateServer(self, stype, version=''):
         # 更新服务
         try:
-            if not mw.isRestart():
-                return mw.returnJson(False, '请等待所有安装任务完成再执行!')
+            if not jh.isRestart():
+                return jh.returnJson(False, '请等待所有安装任务完成再执行!')
 
             version_new_info = self.getServerInfo()
             version_now = config_api.config_api().getVersion()
@@ -704,70 +704,70 @@ class system_api:
 
             if stype == 'check':
                 if not 'name' in version_new_info:
-                    return mw.returnJson(False, '服务器数据或网络有问题!')
+                    return jh.returnJson(False, '服务器数据或网络有问题!')
 
                 diff = self.versionDiff(version_now, new_ver)
                 if diff == 'new':
-                    return mw.returnJson(True, '有新版本!', new_ver)
+                    return jh.returnJson(True, '有新版本!', new_ver)
                 elif diff == 'test':
-                    return mw.returnJson(True, '有测试版本!', new_ver)
+                    return jh.returnJson(True, '有测试版本!', new_ver)
                 else:
-                    return mw.returnJson(False, '已经是最新,无需更新!')
+                    return jh.returnJson(False, '已经是最新,无需更新!')
 
             if stype == 'info':
                 if not 'name' in version_new_info:
-                    return mw.returnJson(False, '服务器数据有问题!')
+                    return jh.returnJson(False, '服务器数据有问题!')
                 diff = self.versionDiff(version_now, new_ver)
                 data = {}
                 data['version'] = new_ver
                 data['content'] = version_new_info[
                     'body'].replace("\n", "<br/>")
-                return mw.returnJson(True, '更新信息!', data)
+                return jh.returnJson(True, '更新信息!', data)
 
             if stype == 'update':
                 if version == '':
-                    return mw.returnJson(False, '缺少版本信息!')
+                    return jh.returnJson(False, '缺少版本信息!')
 
                 if new_ver != version:
-                    return mw.returnJson(False, '更新失败,请重试!')
+                    return jh.returnJson(False, '更新失败,请重试!')
 
-                toPath = mw.getRootDir() + '/temp'
+                toPath = jh.getRootDir() + '/temp'
                 if not os.path.exists(toPath):
-                    mw.execShell('mkdir -p ' + toPath)
+                    jh.execShell('mkdir -p ' + toPath)
 
                 newUrl = "https://github.com/jianghujs/jh-monitor/archive/refs/tags/" + version + ".zip"
 
-                dist_mw = toPath + '/mw.zip'
+                dist_mw = toPath + '/jh.zip'
                 if not os.path.exists(dist_mw):
-                    mw.execShell(
+                    jh.execShell(
                         'wget --no-check-certificate -O ' + dist_mw + ' ' + newUrl)
 
                 dist_to = toPath + "/jh-monitor-" + version
                 if not os.path.exists(dist_to):
                     os.system('unzip -o ' + toPath +
-                              '/mw.zip' + ' -d ' + toPath)
+                              '/jh.zip' + ' -d ' + toPath)
 
                 cmd_cp = 'cp -rf ' + toPath + '/jh-monitor-' + \
-                    version + '/* ' + mw.getServerDir() + '/jh-monitor'
-                mw.execShell(cmd_cp)
+                    version + '/* ' + jh.getServerDir() + '/jh-monitor'
+                jh.execShell(cmd_cp)
 
-                mw.execShell('rm -rf ' + toPath + '/jh-monitor-' + version)
-                mw.execShell('rm -rf ' + toPath + '/mw.zip')
+                jh.execShell('rm -rf ' + toPath + '/jh-monitor-' + version)
+                jh.execShell('rm -rf ' + toPath + '/jh.zip')
 
                 self.restartMw(True)
-                return mw.returnJson(True, '安装更新成功!')
+                return jh.returnJson(True, '安装更新成功!')
 
-            return mw.returnJson(False, '已经是最新,无需更新!')
+            return jh.returnJson(False, '已经是最新,无需更新!')
         except Exception as ex:
             # print('updateServer', ex)
-            return mw.returnJson(False, "连接服务器失败!" + str(ex))
+            return jh.returnJson(False, "连接服务器失败!" + str(ex))
 
     # 修复面板
     def repPanel(self, get):
         vp = ''
-        if mw.readFile('/www/server/jh-monitor/class/common.py').find('checkSafe') != -1:
+        if jh.readFile('/www/server/jh-monitor/class/common.py').find('checkSafe') != -1:
             vp = '_pro'
-        mw.ExecShell("wget -O update.sh " + mw.get_url() +
+        jh.ExecShell("wget -O update.sh " + jh.get_url() +
                      "/install/update" + vp + ".sh && bash update.sh")
         if hasattr(web.ctx.session, 'getCloudPlugin'):
             del(web.ctx.session['getCloudPlugin'])
@@ -776,9 +776,9 @@ class system_api:
     def getNotifyValueApi(self):
         control_notify_value_file = 'data/control_notify_value.conf'
         if not os.path.exists(control_notify_value_file):
-            mw.writeFile(control_notify_value_file, '{}')
-        config_data = json.loads(mw.readFile(control_notify_value_file))
-        return mw.returnData(True, 'ok', config_data)
+            jh.writeFile(control_notify_value_file, '{}')
+        config_data = json.loads(jh.readFile(control_notify_value_file))
+        return jh.returnData(True, 'ok', config_data)
 
     def setNotifyValue(self, notify_value):
         cpu = notify_value.get('cpu', '')
@@ -790,8 +790,8 @@ class system_api:
 
         control_notify_value_file = 'data/control_notify_value.conf'
         if not os.path.exists(control_notify_value_file):
-            mw.writeFile(control_notify_value_file, '{}')
-        config_data = json.loads(mw.readFile(control_notify_value_file))
+            jh.writeFile(control_notify_value_file, '{}')
+        config_data = json.loads(jh.readFile(control_notify_value_file))
 
         if cpu != '':
             config_data['cpu'] = int(cpu)
@@ -805,20 +805,20 @@ class system_api:
             config_data['mysql_slave_status_notice'] = int(mysql_slave_status_notice)
         if rsync_status_notice != '':
             config_data['rsync_status_notice'] = int(rsync_status_notice)
-        mw.writeFile(control_notify_value_file, json.dumps(config_data))
+        jh.writeFile(control_notify_value_file, json.dumps(config_data))
         return config_data
   
 
     def setNotifyValueApi(self):
         self.setNotifyValue(request.form)
-        return mw.returnJson(True, '设置成功!')
+        return jh.returnJson(True, '设置成功!')
 
     def getReportCycleApi(self):
         control_report_cycle_file = 'data/control_report_cycle.conf'
         if not os.path.exists(control_report_cycle_file):
-            mw.writeFile(control_report_cycle_file, '{}')
-        config_data = json.loads(mw.readFile(control_report_cycle_file))
-        return mw.returnData(True, 'ok', config_data)
+            jh.writeFile(control_report_cycle_file, '{}')
+        config_data = json.loads(jh.readFile(control_report_cycle_file))
+        return jh.returnData(True, 'ok', config_data)
     
 
     def setReportCycleFileApi(self):
@@ -838,8 +838,8 @@ class system_api:
         
         control_report_cycle_file = 'data/control_report_cycle.conf'
 
-        mw.writeFile(control_report_cycle_file, json.dumps(params))
+        jh.writeFile(control_report_cycle_file, json.dumps(params))
 
-        return mw.returnJson(True, '设置成功!')
+        return jh.returnJson(True, '设置成功!')
 
     
