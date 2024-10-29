@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS `host_detail` (
   `backup_info` TEXT NOT NULL DEFAULT '{}',
   `temperature_info` TEXT NOT NULL DEFAULT '{}',  
   `process_info` TEXT NOT NULL DEFAULT '{}',
+  `last_update` TEXT, 
   `addtime` TEXT
 );
 

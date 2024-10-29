@@ -34,15 +34,9 @@
                     <div id="task" class="task cw" onclick="messageBox();"></div>
                     <h3 class="mypcip"><span class="f14 cw">{{data['ip']}}</span></h3>
                     <ul class="menu">
-                        <li id="memuA"> <a class="menu_home" href="/">首页</a></li>
-                        <li id="memuAsite"><a class="menu_web" href="/site">网站</a></li>
-                        <li id="memuAcontrol"><a class="menu_control" href="/control">监控</a></li>
-                        <li id="memuAfirewall"><a class="menu_firewall" href="/firewall">安全</a></li>
-                        <li id="memuAfiles"><a class="menu_folder" href="/files">文件</a></li>
-                        <li id="memuAcrontab"><a class="menu_day" href="/crontab">计划任务</a></li>
-                        <li id="memuAsoft"><a class="menu_soft" href="/soft">软件管理</a><span class="softnum">1</span></li>
+                        <li id="memuA"> <a class="menu_home" href="/">首页概览</a></li>
+                        <li id="memuAhost"><a class="menu_web" href="/host">主机管理</a></li>
                         <li id="memuAconfig"><a class="menu_set" href="/config">面板设置</a></li>
-                        <!-- <li><a class="menu_exit" href="javascript:;" id="signout">退出</a></li> -->
                     </ul>
                     <ul class="menu" id="menusoft"></ul>
                     <ul class="menu">
@@ -82,10 +76,7 @@
     </div>
     </div>
 </body>
-<script type="text/javascript" src="/static/app/soft.js?v={{config.version}}"></script>
 <script type="text/javascript">
-
-indexSoft();
 
 function GetUrlRelativePath() {
     var url = document.location.toString();
