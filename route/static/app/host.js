@@ -3,7 +3,7 @@
  * @param {Number} page   当前页
  * @param {String} search 搜索条件
  */
- function getWeb(page, search, type_id) {
+ function getTableData(page, search, type_id) {
 	search = $("#SearchValue").prop("value");
 	page = page == undefined ? '1':page;
 	var order = getCookie('order');
@@ -30,11 +30,11 @@
 		var body = '';
 		$("#webBody").html(body);
 		for (var i = 0; i < data.data.length; i++) {
-			//当前站点状态
+			//当前主机状态
 			if (data.data[i].status == '正在运行' || data.data[i].status == '1') {
-				var status = "<a href='javascript:;' title='停用这个站点' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
+				var status = "<a href='javascript:;' title='停用这个主机' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
 			} else {
-				var status = "<a href='javascript:;' title='启用这个站点' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
+				var status = "<a href='javascript:;' title='启用这个主机' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
 			}
 
 			//是否有备份
@@ -60,7 +60,7 @@
 					<td>\
 						<a class='btlink webtips' href='http://"+data.data[i].name+"' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "',event)\" title='"+data.data[i].name+"'>" 
 							+ shortwebname + "\
-							<a href='http://"+data.data[i].name+"' target='_blank'><span style='color:rgb(92, 184, 92); margin-left: 10px;' title='打开站点' class='glyphicon glyphicon-new-window'></span></a></td>\
+							<a href='http://"+data.data[i].name+"' target='_blank'><span style='color:rgb(92, 184, 92); margin-left: 10px;' title='打开主机' class='glyphicon glyphicon-new-window'></span></a></td>\
 					<td>" + status + "</td>\
 					<td>" + backup + "</td>\
 					<td><a class='btlink' title='打开目录"+data.data[i].path+"' href=\"javascript:openPath('"+data.data[i].path+"');\">" + shortpath + "</a></td>\
@@ -68,7 +68,7 @@
 					<td><a class='btlinkbed' href='javascript:;' data-id='"+data.data[i].id+"'>" + data.data[i].ps + "</a></td>\
 					<td style='text-align:right; color:#bbb'>\
 					<a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
-                        | <a href='javascript:;' class='btlink' onclick=\"webDelete('" + data.data[i].id + "','" + data.data[i].name + "')\" title='删除站点'>删除</a>\
+                        | <a href='javascript:;' class='btlink' onclick=\"webDelete('" + data.data[i].id + "','" + data.data[i].name + "')\" title='删除主机'>删除</a>\
 					</td></tr>"
 			
 			$("#webBody").append(body);
@@ -110,7 +110,7 @@
             });
 		}
 		if(body.length < 10){
-			body = "<tr><td colspan='9'>当前没有站点数据</td></tr>";
+			body = "<tr><td colspan='9'>当前没有主机数据</td></tr>";
 			// $(".dataTables_paginate").hide();
 			$("#webBody").html(body);
 		}
@@ -122,7 +122,7 @@
 		});
 		//输出分页
 		// $("#webPage").html(data.page);
-		// $("#webPage").html('<div class="site_type"><span>站点分类:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分类</option><option value="0">默认分类</option></select></div>');
+		// $("#webPage").html('<div class="site_type"><span>主机分类:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分类</option><option value="0">默认分类</option></select></div>');
 		
 		$(".btlinkbed").click(function(){
 			var dataid = $(this).attr("data-id");
@@ -156,7 +156,7 @@ function setWebPs(b, e, a) {
 	var c = 'ps=' + a;
 	$.post('/site/set_ps', 'id=' + e + "&" + c, function(data) {
 		if(data['status']) {
-			getWeb(1);
+			getTableData(1);
 			layer.closeAll();
 			layer.msg('修改成功!', {icon: 1});
 		} else {
@@ -166,7 +166,7 @@ function setWebPs(b, e, a) {
 	},'json');
 }
 
-//创建站点前,检查服务是否开启
+//创建主机前,检查服务是否开启
 function webAdd(type){
 	loading = layer.msg('正在检查是否开启OpenResty服务!',{icon:16,time:0,shade: [0.3, "#000"]})
 	$.post('/site/check_web_status', function(data){
@@ -179,7 +179,7 @@ function webAdd(type){
 	},'json');
 }
 
-//添加站点
+//添加主机
 function webAddPage(type) {
 
 	if (type == 1) {
@@ -209,9 +209,9 @@ function webAddPage(type) {
 
 		$.post('/site/add', data, function(ret) {
 			if (ret.status == true) {
-				getWeb(1);
+				getTableData(1);
 				layer.closeAll();
-				layer.msg('成功创建站点',{icon:1})
+				layer.msg('成功创建主机',{icon:1})
 			} else {
 				layer.msg(ret.msg, {icon: 2});
 			}
@@ -287,7 +287,7 @@ function webAddPage(type) {
 			//验证PHP版本
 			$("select[name='version']").change(function(){
 				if($(this).val() == '52'){
-					var msgerr = 'PHP5.2在您的站点有漏洞时有跨站风险，请尽量使用PHP5.3以上版本!';
+					var msgerr = 'PHP5.2在您的主机有漏洞时有跨站风险，请尽量使用PHP5.3以上版本!';
 					$('#php_w').text(msgerr);
 				}else{
 					$('#php_w').text('');
@@ -496,18 +496,18 @@ function setIndexEdit(id){
 }
 
 /**
- * 停止一个站点
+ * 停止一个主机
  * @param {Int} wid  网站ID
  * @param {String} wname 网站名称
  */
 function webStop(wid, wname) {
-	layer.confirm('站点停用后将无法访问，您真的要停用这个站点吗？', {icon:3,closeBtn:2},function(index) {
+	layer.confirm('主机停用后将无法访问，您真的要停用这个主机吗？', {icon:3,closeBtn:2},function(index) {
 		if (index > 0) {
 			var loadT = layer.load();
 			$.post("/site/stop","id=" + wid + "&name=" + wname, function(ret) {
 				layer.msg(ret.msg,{icon:ret.status?1:2})
 				layer.close(loadT);
-				getWeb(1);
+				getTableData(1);
 			},'json');
 		}
 	});
@@ -519,13 +519,13 @@ function webStop(wid, wname) {
  * @param {String} wname 网站名称
  */
 function webStart(wid, wname) {
-	layer.confirm('即将启动站点，您真的要启用这个站点吗？',{icon:3,closeBtn:2}, function(index) {
+	layer.confirm('即将启动主机，您真的要启用这个主机吗？',{icon:3,closeBtn:2}, function(index) {
 		if (index > 0) {
 			var loadT = layer.load()
 			$.post("/site/start","id=" + wid + "&name=" + wname, function(ret) {
 				layer.msg(ret.msg,{icon:ret.status?1:2})
 				layer.close(loadT);
-				getWeb(1);
+				getTableData(1);
 			},'json');
 		}
 	});
@@ -541,7 +541,7 @@ function webDelete(wid, wname){
 	    	<label><input type='checkbox' id='delpath' name='path'><span>根目录</span></label>\
 	    	</div>";
 	var info = '是否要删除同名根目录';
-	safeMessage('删除站点'+"["+wname+"]",info, function(){
+	safeMessage('删除主机'+"["+wname+"]",info, function(){
 		var path='';
 		if($("#delpath").is(":checked")){
 			path='&path=1';
@@ -550,7 +550,7 @@ function webDelete(wid, wname){
 		$.post("/site/delete","id=" + wid + "&webname=" + wname + path, function(ret){
 			layer.closeAll();
 			layer.msg(ret.msg,{icon:ret.status?1:2})
-			getWeb(1);
+			getTableData(1);
 		},'json');
 	},thtml);
 }
@@ -900,7 +900,7 @@ function setIndex(id){
 	});
 }
 
-//设置默认站点
+//设置默认主机
 function setDefaultSite(){
 	var name = $("#default_site").val();
 	var loadT = layer.msg('正在处理,请稍候...',{icon:16,time:0,shade: [0.3, '#000']});
@@ -911,10 +911,10 @@ function setDefaultSite(){
 }
 
 
-//默认站点
+//默认主机
 function getDefaultSite(){
 	$.post('/site/get_default_site','',function(rdata){
-		var opt = '<option value="off">未设置默认站点</option>';
+		var opt = '<option value="off">未设置默认主机</option>';
 		var selected = '';
 		for(var i=0;i<rdata.sites.length;i++){
 			selected = '';
@@ -925,17 +925,17 @@ function getDefaultSite(){
 		layer.open({
 			type: 1,
 			area: '530px',
-			title: '设置默认站点',
+			title: '设置默认主机',
 			closeBtn: 1,
 			shift: 5,
 			shadeClose: true,
 			content:'<div class="bt-form ptb15 pb70">\
 						<p class="line">\
-							<span class="tname text-right">默认站点</span>\
+							<span class="tname text-right">默认主机</span>\
 							<select id="default_site" class="bt-input-text" style="width: 300px;">'+opt+'</select>\
 						</p>\
 						<ul class="help-info-text c6 plr20">\
-						    <li>设置默认站点后,所有未绑定的域名和IP都被定向到默认站点</li>\
+						    <li>设置默认主机后,所有未绑定的域名和IP都被定向到默认主机</li>\
 						    <li>可有效防止恶意解析</li>\
 					    </ul>\
 						<div class="bt-form-submit-btn">\
@@ -1040,14 +1040,14 @@ function setIndexList(id){
 }
 
 
-/*站点修改*/
+/*主机修改*/
 function webEdit(id,website,endTime,addtime,event){
 	event && event.preventDefault();
 	
 	layer.open({
 		type: 1,
 		area: '700px',
-		title: '站点修改['+website+']  --  添加时间['+addtime+']',
+		title: '主机修改['+website+']  --  添加时间['+addtime+']',
 		closeBtn: 1,
 		shift: 0,
 		content: "<div class='bt-form'>\
@@ -1064,8 +1064,8 @@ function webEdit(id,website,endTime,addtime,event){
 				<p onclick=\"to301('"+website+"')\" title='重定向'>重定向</p>\
 				<p onclick=\"toProxy('"+website+"')\" title='反向代理'>反向代理</p>\
 				<p id='site_"+id+"' onclick=\"security('"+id+"','"+website+"')\" title='防盗链'>防盗链</p>\
-				<p id='site_"+id+"' onclick=\"getSiteLogs('"+website+"')\" title='查看站点请求日志'>响应日志</p>\
-				<p id='site_"+id+"' onclick=\"getSiteErrorLogs('"+website+"')\" title='查看站点错误日志'>错误日志</p>\
+				<p id='site_"+id+"' onclick=\"getSiteLogs('"+website+"')\" title='查看主机请求日志'>响应日志</p>\
+				<p id='site_"+id+"' onclick=\"getSiteErrorLogs('"+website+"')\" title='查看主机错误日志'>错误日志</p>\
 			</div>\
 			<div id='webedit-con' class='bt-w-con webedit-con pd15' style='height: 565px;overflow: scroll;'></div>\
 		</div>",
@@ -1622,7 +1622,7 @@ function toProxy(siteName, type, obj) {
 				"<div class='help-info-text c7'>" +
 					"<ul class='help-info-text c7'>" +
 					"<li>代理目录：访问这个目录时将会把目标URL的内容返回并显示</li>" +
-					"<li>目标URL：可以填写你需要代理的站点，目标URL必须为可正常访问的URL，否则将返回错误</li>" +
+					"<li>目标URL：可以填写你需要代理的主机，目标URL必须为可正常访问的URL，否则将返回错误</li>" +
 					"<li>发送域名：将域名添加到请求头传递到代理服务器，默认为目标URL域名，若设置不当可能导致代理无法正常运行</li>" +
 					"</ul>" +
 				"</div>" +
@@ -1836,7 +1836,7 @@ function setCertSsl(certName,siteName){
 
 //ssl
 function setSSL(id,siteName){
-	var sslHtml = '<div class="warning_info mb10" style="display:none;"><p class="">温馨提示：当前站点未开启SSL证书访问，站点访问可能存在风险。<button class="btn btn-success btn-xs ml10 cutTabView">申请证书</button></p></div>\
+	var sslHtml = '<div class="warning_info mb10" style="display:none;"><p class="">温馨提示：当前主机未开启SSL证书访问，主机访问可能存在风险。<button class="btn btn-success btn-xs ml10 cutTabView">申请证书</button></p></div>\
 				<div class="tab-nav" style="margin-top: 10px;">\
 					<span class="on" id="now_ssl" onclick="opSSL(\'now\','+id+',\''+siteName+'\')">当前证书 - <i class="error">[未部署SSL]</i></span>\
 					<span onclick="opSSL(\'lets\','+id+',\''+siteName+'\')">Let\'s Encrypt</span>\
@@ -1918,7 +1918,7 @@ function opSSL(type, id, siteName, callback){
 				<ul class="help-info-text c7 pull-left">\
 					<li>粘贴您的*.key以及*.pem内容，然后保存即可。</li>\
 					<li>如果浏览器提示证书链不完整,请检查是否正确拼接PEM证书</li><li>PEM格式证书 = 域名证书.crt + 根证书(root_bundle).crt</li>\
-					<li>在未指定SSL默认站点时,未开启SSL的站点使用HTTPS会直接访问到已开启SSL的站点</li>\
+					<li>在未指定SSL默认主机时,未开启SSL的主机使用HTTPS会直接访问到已开启SSL的主机</li>\
 				</ul>';	
 
 	var lets =  '<div class="apply_ssl">\
@@ -1953,8 +1953,8 @@ function opSSL(type, id, siteName, callback){
 				  	<ul class="help-info-text c7" id="lets_help">\
 				  		<li>申请之前，请确保域名已解析，如未解析会导致审核失败</li>\
 				  		<li>Let\'s Encrypt免费证书，有效期3个月，支持多域名。默认会自动续签</li>\
-				  		<li>若您的站点使用了CDN或301重定向会导致续签失败</li>\
-				  		<li>在未指定SSL默认站点时,未开启SSL的站点使用HTTPS会直接访问到已开启SSL的站点</li>\
+				  		<li>若您的主机使用了CDN或301重定向会导致续签失败</li>\
+				  		<li>在未指定SSL默认主机时,未开启SSL的主机使用HTTPS会直接访问到已开启SSL的主机</li>\
 				  	</ul>\
 			  </div>';
 
@@ -1990,8 +1990,8 @@ function opSSL(type, id, siteName, callback){
 				  	<ul class="help-info-text c7" id="lets_help">\
 				  		<li>申请之前，请确保域名已解析，如未解析会导致审核失败</li>\
 			  			<li>由ACME免费申请证书，有效期3个月，支持多域名。默认会自动续签</li>\
-			  			<li>若您的站点使用了CDN或301重定向会导致续签失败</li>\
-			  			<li>在未指定SSL默认站点时,未开启SSL的站点使用HTTPS会直接访问到已开启SSL的站点</li></ul>\
+			  			<li>若您的主机使用了CDN或301重定向会导致续签失败</li>\
+			  			<li>在未指定SSL默认主机时,未开启SSL的主机使用HTTPS会直接访问到已开启SSL的主机</li></ul>\
 				  	</ul>\
 			  </div>';
 
@@ -2252,7 +2252,7 @@ function ocSSL(action,siteName){
 		}
 		layer.msg(rdata.msg,{icon:rdata.status?1:2});
 		if(action == 'close_ssl_conf'){
-			layer.msg('已关闭SSL,请务必清除浏览器缓存后再访问站点!',{icon:1,time:5000});
+			layer.msg('已关闭SSL,请务必清除浏览器缓存后再访问主机!',{icon:1,time:5000});
 		}
 		$(".tab-nav .on").click();
 	},'json');
@@ -2350,7 +2350,7 @@ function phpVersion(siteName){
 			//验证PHP版本
 			$("select[name='phpVersion']").change(function(){
 				if($(this).val() == '52'){
-					var msgerr = 'PHP5.2在您的站点有漏洞时有跨站风险，请尽量使用PHP5.3以上版本!';
+					var msgerr = 'PHP5.2在您的主机有漏洞时有跨站风险，请尽量使用PHP5.3以上版本!';
 					$('#php_w').text(msgerr);
 				}else{
 					$('#php_w').text('');
@@ -2380,7 +2380,7 @@ function configFile(webSite){
 			<div class='info-r'>\
 				<button id='SaveConfigFileBtn' class='btn btn-success btn-sm' style='margin-top:15px;'>保存</button>\
 				<ul class='help-info-text c7 ptb10'>\
-					<li>此处为站点主配置文件,若您不了解配置规则,请勿随意修改.</li>\
+					<li>此处为主机主配置文件,若您不了解配置规则,请勿随意修改.</li>\
 				</ul>\
 			</div>\
 		</div>";
@@ -2561,7 +2561,7 @@ function siteDefaultPage(){
 						<button class="btn btn-default btn-sm mg10" style="width:188px" onclick="changeDefault(1)">默认文档</button>\
 						<button class="btn btn-default btn-sm mg10" style="width:188px" onclick="changeDefault(2)">404错误页</button>\
 						<button class="btn btn-default btn-sm mg10" style="width:188px" onclick="changeDefault(3)">空白页</button>\
-						<button class="btn btn-default btn-sm mg10" style="width:188px" onclick="changeDefault(4)">默认站点停止页</button>\
+						<button class="btn btn-default btn-sm mg10" style="width:188px" onclick="changeDefault(4)">默认主机停止页</button>\
 				</div>'
 	});
 }
@@ -2590,7 +2590,7 @@ function getClassType(){
 		$(select).bind('change',function(){
 			var select_id = $(this).val();
 			// console.log(select_id);
-			getWeb(1,'',select_id);
+			getTableData(1,'',select_id);
 		})
 	},'json');
 }
@@ -2697,44 +2697,6 @@ function editClassType(id,name){
 
 	});
 }
-
-function openWebsite(){
-	$('table').find('td').find('input').each(function(i,obj){
-			checked = $(this).prop('checked');
-			if (checked) {
-				window.open("http://" + $(this).prop('title'))
-			}
-	});
-}
-
-function moveClassTYpe(){
-	$.post('/site/get_site_types',function(rdata){
-		var option = '';
-		for (var i = 0; i<rdata.length; i++) {
-			option +='<option value="'+rdata[i]['id']+'">'+rdata[i]['name']+'</option>';
-		}
-
-		layer.open({
-			type: 1,
-			area: '350px',
-			title: '设置站点分类',
-			closeBtn: 1,
-			shift: 0,
-			content: '<div class="bt-form edit_site_type">\
-					<div class="divtable mtb15" style="overflow:auto;height:80px;">\
-						<div class="line"><span class="tname">默认站点</span>\
-							<div class="info-r">\
-							<select class="bt-input-text mr5" name="type_id" style="width:200px">'+option+'\
-							</select>\
-							</div>\
-						</div>\
-					</div>\
-					<div class="bt-form-submit-btn"><button onclick="setSizeClassType();" type="button" class="btn btn-sm btn-success">提交</button></div>\
-				</div>'
-		});
-	},'json');
-}
-
 
 function setSizeClassType(){
 	var data = {};
