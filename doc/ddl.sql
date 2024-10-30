@@ -116,3 +116,30 @@ CREATE TABLE IF NOT EXISTS `host_log` (
   `log` TEXT,
   `addtime` TEXT
 );
+
+
+-------------------------------
+-- 删除表
+
+DROP TABLE IF EXISTS host;
+DROP TABLE IF EXISTS host_group;
+DROP TABLE IF EXISTS host_detail;
+DROP TABLE IF EXISTS host_alarm;
+DROP TABLE IF EXISTS host_danger_cmd;
+DROP TABLE IF EXISTS host_log;
+
+-------------------------------
+
+-- 测试数据
+INSERT INTO `host` (`host_name`, `host_group`, `ip`, `os`, `remark`, `ssh_port`, `ssh_user`, `ssh_pkey`, `is_jhpanel`, `is_pve`, `is_master`, `backup_host_id`, `backup_host_name`, `backup_ip`, `addtime`) VALUES
+('host1', 'group1', '127.0.0.1', 'CentOS 7', 'remark', 22, 'root', '/', true, false, false, 0, '', '', '2022-02-02 00:00:00');
+
+INSERT INTO `host_group` (`name`, `addtime`) VALUES
+('group1', '2022-02-02 00:00:00');
+
+INSERT INTO `host_detail` (`host_id`, `host_name`, `host_status`, `uptime`, `host_info`, `cpu_info`, `mem_info`, `disk_info`, `net_info`, `load_avg`, `firewall_info`, `port_info`, `backup_info`, `temperature_info`, `last_update`, `addtime`) VALUES
+(1, 'host1', 'running', '1 day', '{}', '{}', '{}', '[]', '[]', '{}', '{}', '{}', '{}', '{}', 1727625601, 1727625601),
+(1, 'host1', 'running', '1 day', '{}', '{}', '{}', '[]', '[]', '{}', '{}', '{}', '{}', '{}', 1727625601, 1727625601);
+
+INSERT INTO `host_alarm` (`host_id`, `host_name`, `alarm_type`, `alarm_level`, `alarm_content`, `addtime`) VALUES
+(1, 'host1', 'cpu', 'warning', 'CPU usage is too high', 1727625601);

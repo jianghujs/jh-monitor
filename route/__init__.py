@@ -442,7 +442,7 @@ def api(reqClass=None, reqAction=None, reqData=None):
     if reqAction == None:
         return jh.returnJson(False, '请指定请求方法')
 
-    classFile = ('config_api', 'crontab_api', 'files_api', 'firewall_api',
+    classFile = ('host_api', 'config_api', 'crontab_api', 'files_api', 'firewall_api',
                  'plugins_api', 'system_api', 'site_api', 'task_api')
     className = reqClass + '_api'
     if not className in classFile:
@@ -514,7 +514,7 @@ def index(reqClass=None, reqAction=None, reqData=None):
         return 'error request!'
 
     # API请求
-    classFile = ('config_api', 'crontab_api', 'files_api', 'firewall_api',
+    classFile = ('host_api', 'config_api', 'crontab_api', 'files_api', 'firewall_api',
                  'plugins_api', 'system_api', 'site_api', 'task_api')
     className = reqClass + '_api'
     if not className in classFile:

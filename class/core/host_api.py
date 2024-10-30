@@ -33,13 +33,17 @@ import time
 app = Flask(__name__)
 
 class host_api:
-    def listHostApi():
+    
+    host_field = 'id,host_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime'
+    host_detail_field = 'id,host_id,host_name,host_status,uptime,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,last_update,addtime'
+
+    def listApi(self):
         limit = request.form.get('limit', '10')
         p = request.form.get('p', '1')
         start = (int(p) - 1) * (int(limit))
 
         hostM = jh.M('host')
-        _list = hostM.field('id, host_name, ip, os, remark').limit(
+        _list = hostM.field(self.host_field).limit(
             (str(start)) + ',' + limit).order('id desc').select()
         
         _ret = {}
@@ -55,72 +59,86 @@ class host_api:
         _ret['page'] = jh.getPage(_page)
         return jh.getJson(_ret)
 
-    def addHostApi():
+    def addApi(self):
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
         with open('/etc/ansible/hosts', 'a') as f:
             f.write(f"{ip}\n")
 
-        jh.M('host').add("host_name, ip, addtime", (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
+        jh.M('host').add("host_name,ip,addtime", (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
         return jh.returnJson(True, '主机添加成功!')
 
-    def deleteHostApi():
+    def deleteApi(self):
         host_id = request.form.get('id', '')
         jh.M('host').where('id=?', (host_id,)).delete()
         return jh.returnJson(True, '主机删除成功!')
 
-    def getHostDetail(host_id):
-        host_detail = jh.M('host_detail').where('host_id=?', (host_id,)).order('id desc').limit(1).select()
+    def detailApi(self):
+        host_id = request.form.get('id', '')
+        host_detail = jh.M('host_detail').where('id=?', (host_id,)).field(self.host_detail_field).find()
         if host_detail:
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
 
-    
     def getHostLoadAverageApi(self):
-        start = request.args.get('start', '')
-        end = request.args.get('end', '')
-        data = self.getLoadAverageData(start, end)
+        host_id = request.form.get('id', '')
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        data = self.getHostLoadAverageData(host_id, start, end)
         return jh.getJson(data)
 
     def getHostCpuIoApi(self):
-        start = request.args.get('start', '')
-        end = request.args.get('end', '')
-        data = self.getCpuIoData(start, end)
+        host_id = request.form.get('id', '')
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        data = self.getHostCpuIoData(host_id, start, end)
         return jh.getJson(data)
 
     def getHostDiskIoApi(self):
-        start = request.args.get('start', '')
-        end = request.args.get('end', '')
-        data = self.getDiskIoData(start, end)
+        host_id = request.form.get('id', '')
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        data = self.getHostDiskIoData(host_id, start, end)
         return jh.getJson(data)
 
     def getHostNetworkIoApi(self):
-        start = request.args.get('start', '')
-        end = request.args.get('end', '')
-        data = self.getNetWorkIoData(start, end)
+        host_id = request.form.get('id', '')
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        data = self.getHostNetWorkIoData(host_id, host_id, start, end)
         return jh.getJson(data)
 
     def getHostNetWorkIoData(self, host_id, start, end):
         # 取指定时间段的网络Io
-        data = jh.M('host_detail').dbfile('system').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            'id,up,down,total_up,total_down,down_packets,up_packets,addtime').order('id asc').select()
+        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
+            # 'id,up,down,total_up,total_down,down_packets,up_packets,addtime'
+            self.host_detail_field
+        ).order('id asc').select()
+        
+        print("data", data)
         return self.toAddtime(data)
 
     def getHostDiskIoData(self, host_id, start, end):
         # 取指定时间段的磁盘Io
-        data = jh.M('host_detail').dbfile('system').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            'id,read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime').order('id asc').select()
+        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
+            # 'id,read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime'
+            self.host_detail_field
+        ).order('id asc').select()
         return self.toAddtime(data)
 
     def getHostCpuIoData(self, host_id, start, end):
         # 取指定时间段的CpuIo
-        data = jh.M('host_detail').dbfile('system').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            'id,pro,mem,addtime').order('id asc').select()
-        return self.toAddtime(data, True)
+        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
+            # 'id,pro,mem,addtime'
+            self.host_detail_field
+        ).order('id asc').select()
+        return self.toAddtime(data, False)
 
     def getHostLoadAverageData(self, host_id, start, end):
-        data = jh.M('host_detail').dbfile('system').where("host_id=? AND addtime>=? AND addtime<=?", ( host_id, start, end)).field(
-            'id,pro,one,five,fifteen,addtime').order('id asc').select()
+        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", ( host_id, start, end)).field(
+            # 'id,pro,one,five,fifteen,addtime'
+            self.host_detail_field
+        ).order('id asc').select()
         return self.toAddtime(data)
 
     # 格式化addtime列
