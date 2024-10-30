@@ -8,15 +8,15 @@
 							<a class="plr10 c4" href="/">首页</a>/<span class="plr10 c4">主机管理</span>
 						</div>
 					<div class="search pull-right">
-						<form target="hid" onsubmit='getTableData(1,$("#SearchValue").prop("value"))'>
+						<form target="hid" onsubmit='getWeb(1,$("#SearchValue").prop("value"))'>
 							<input type="text" id="SearchValue" class="ser-text pull-left" placeholder="主机搜索"/>
-							<button type="button" class="ser-sub pull-left" onclick='getTableData(1,$("#SearchValue").prop("value"))'></button>
+							<button type="button" class="ser-sub pull-left" onclick='getWeb(1,$("#SearchValue").prop("value"))'></button>
 						</form>
 						<iframe name='hid' id="hid" style="display:none"></iframe>
 					</div>
 				</div>
 				<div class="safe bgw mtb15 pd15">
-					<button onclick="hostAdd(0)" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
+					<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
 					
 					<span>
 						<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
@@ -28,16 +28,16 @@
 							<thead>
 								<tr>
 									<th width="30"><input type="checkbox" onclick="checkSelect();" id="setBox"></th>
-									<th width="150" onclick="listOrder('name','site',this)" style="cursor: pointer;">主机名称/IP<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th onclick="listOrder('status','site',this)" style="cursor: pointer;" width="98">状态<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">分组名称<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">负载<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">CPU<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">内存<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">总流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">磁盘读写<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('name','site',this)" style="cursor: pointer;">磁盘状态<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="150" onclick="listOrder('host_name','host',this)" style="cursor: pointer;">主机名称/IP<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th onclick="listOrder('status','host',this)" style="cursor: pointer;" width="98">状态<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">分组名称<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">负载<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">CPU<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">内存<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">总流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">磁盘读写<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" style="cursor: pointer;">磁盘状态<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th width='130' class='text-right'>操作</th>
 								</tr>
 							</thead>
@@ -65,7 +65,7 @@
 <script type="text/javascript" src="/static/app/host.js?v={{config.version}}"></script>
 <script type="text/javascript">		
 setTimeout(function(){
-	getTableData(1);
+	getWeb(1);
 },500);
 </script>
 {% endblock %}

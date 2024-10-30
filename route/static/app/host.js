@@ -1,9 +1,9 @@
 /**
- * 取回网站数据列表
+ * 主机数据列表
  * @param {Number} page   当前页
  * @param {String} search 搜索条件
  */
-function getTableData(page, search, type_id) {
+function getWeb(page, search, type_id) {
 	search = $("#SearchValue").prop("value");
 	page = page == undefined ? '1':page;
 	var order = getCookie('order');
@@ -20,7 +20,7 @@ function getTableData(page, search, type_id) {
 		type = '&type_id='+type_id;
 	}
 
-	var sUrl = '/site/list';
+	var sUrl = '/host/list';
 	var pdata = 'limit=1000&p=' + page + '&search=' + search + order + type;
 	var loadT = layer.load();
 	//取回数据
@@ -37,38 +37,24 @@ function getTableData(page, search, type_id) {
 				var status = "<a href='javascript:;' title='启用这个主机' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
 			}
 
-			//是否有备份
-			if (data.data[i].backup_count > 0) {
-				var backup = "<a href='javascript:;' class='btlink' onclick=\"getBackup(" + data.data[i].id + ")\">有备份</a>";
-			} else {
-				var backup = "<a href='javascript:;' class='btlink' onclick=\"getBackup(" + data.data[i].id + ")\">无备份</a>";
-			}
-			//是否设置有效期
-			var web_end_time = (data.data[i].edate == "0000-00-00") ? '永久': data.data[i].edate;
-			//表格主体
-			var shortwebname = data.data[i].name;
-			var shortpath = data.data[i].path;
-			if(data.data[i].name.length > 30) {
-				shortwebname = data.data[i].name.substring(0, 30) + "...";
-			}
-			if(data.data[i].path.length > 30){
-				shortpath = data.data[i].path.substring(0, 30) + "...";
-			}
-			var idname = data.data[i].name.replace(/\./g,'_');
-			
-			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
+			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>\
 						<a class='btlink webtips' href='http://"+data.data[i].name+"' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "',event)\" title='"+data.data[i].name+"'>" 
-							+ shortwebname + "\
-							<a href='http://"+data.data[i].name+"' target='_blank'><span style='color:rgb(92, 184, 92); margin-left: 10px;' title='打开主机' class='glyphicon glyphicon-new-window'></span></a></td>\
+							+ data.data[i].host_name + '/' + data.data[i].ip + "\
+            </a>\
+          </td>\
 					<td>" + status + "</td>\
-					<td>" + backup + "</td>\
-					<td><a class='btlink' title='打开目录"+data.data[i].path+"' href=\"javascript:openPath('"+data.data[i].path+"');\">" + shortpath + "</a></td>\
-					<td><a class='btlink setTimes' id='site_"+data.data[i].id+"' data-ids='"+data.data[i].id+"'>" + web_end_time + "</a></td>\
-					<td><a class='btlinkbed' href='javascript:;' data-id='"+data.data[i].id+"'>" + data.data[i].ps + "</a></td>\
+					<td>" + '' + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
+					<td>" + "" + "</td>\
 					<td style='text-align:right; color:#bbb'>\
-					<a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
-                        | <a href='javascript:;' class='btlink' onclick=\"webDelete('" + data.data[i].id + "','" + data.data[i].name + "')\" title='删除主机'>删除</a>\
+					    <a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
+              | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
 					</td></tr>"
 			
 			$("#webBody").append(body);
@@ -139,6 +125,124 @@ function getTableData(page, search, type_id) {
 }
 
 
+
+//添加主机
+function openHostAdd() {
+  layer.open({
+    type: 1,
+    skin: 'demo-class',
+    area: '640px',
+    title: '添加主机',
+    closeBtn: 1,
+    shift: 0,
+    shadeClose: false,
+    content: "<form class='bt-form pd20 pb70' id='addhost'>\
+        <div class='line'>\
+          <span class='tname'>主机名</span>\
+          <div class='info-r c4'>\
+            <input id='hostName' class='bt-input-text' type='text' name='host_name' placeholder='主机名' style='width:458px' />\
+          </div>\
+        </div>\
+        <div class='line'>\
+          <span class='tname'>IP</span>\
+          <div class='info-r c4'>\
+            <input id='ip' class='bt-input-text' type='text' name='ip' placeholder='IP地址' style='width:458px' />\
+          </div>\
+        </div>\
+        <div class='line'>\
+          <span class='tname'>SSH公钥</span>\
+          <div class='info-r c4'>\
+            <input id='sshPkey' class='bt-input-text' type='text' name='ssh_pkey' placeholder='SSH公钥' style='width:458px' />\
+          </div>\
+        </div>\
+        <div class='bt-form-submit-btn'>\
+          <button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>\
+          <button type='button' class='btn btn-success btn-sm btn-title' onclick=\"hostAdd()\">提交</button>\
+        </div>\
+    </form>",
+  });
+
+  $(function() {
+    var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
+    $('#mainDomain').after(placeholder);
+    $(".placeholder").click(function(){
+      $(this).hide();
+      $('#mainDomain').focus();
+    })
+    $('#mainDomain').focus(function() {
+        $(".placeholder").hide();
+    });
+    
+    $('#mainDomain').blur(function() {
+      if($(this).val().length==0){
+        $(".placeholder").show();
+      }  
+    });
+
+    //获取当前时间时间戳，截取后6位
+    var timestamp = new Date().getTime().toString();
+    var dtpw = timestamp.substring(7);
+  });
+}
+
+
+//添加主机
+function hostAdd() {
+  var loadT = layer.msg(lan.public.the_get,{icon:16,time:0,shade: [0.3, "#000"]})
+  var data = $("#addhost").serialize();
+  $.post('/host/add', data, function(ret) {
+    if (ret.status == true) {
+      getWeb(1);
+      layer.closeAll();
+      layer.msg('成功创建主机',{icon:1})
+    } else {
+      layer.msg(ret.msg, {icon: 2});
+    }
+    layer.close(loadT);
+  },'json');
+}
+
+
+
+/**
+ * 删除一个主机
+ * @param {Number} id 主机ID
+ * @param {String} name 主机名称
+ */
+function hostDelete(id, name){
+	safeMessage("确认", "确定要删除主机"+"["+name+"]吗？", function(){
+		var loadT = layer.msg('正在处理,请稍候...',{icon:16,time:10000,shade: [0.3, '#000']});
+		$.post("/host/delete","id=" + id, function(ret){
+			layer.closeAll();
+			layer.msg(ret.msg,{icon:ret.status?1:2})
+			getWeb(1);
+		},'json');
+	});
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function getBakPost(b) {
 	$(".baktext").hide().prev().show();
 	var c = $(".baktext").attr("data-id");
@@ -156,7 +260,7 @@ function setWebPs(b, e, a) {
 	var c = 'ps=' + a;
 	$.post('/site/set_ps', 'id=' + e + "&" + c, function(data) {
 		if(data['status']) {
-			getTableData(1);
+			getWeb(1);
 			layer.closeAll();
 			layer.msg('修改成功!', {icon: 1});
 		} else {
@@ -164,175 +268,6 @@ function setWebPs(b, e, a) {
 			layer.msg('修改失败!', {icon: 2});
 		}
 	},'json');
-}
-
-//创建主机前,检查服务是否开启
-function hostAdd(type){
-	loading = layer.msg('正在检查是否开启OpenResty服务!',{icon:16,time:0,shade: [0.3, "#000"]})
-	$.post('/site/check_web_status', function(data){
-		layer.close(loading);
-		if (data.status){
-			hostAddPage(type)
-		} else {
-			layer.msg(data.msg,{icon:0,time:3000,shade: [0.3, "#000"]})
-		}
-	},'json');
-}
-
-//添加主机
-function hostAddPage(type) {
-
-	if (type == 1) {
-		var array;
-		var str="";
-		var domainlist='';
-		var domain = array = $("#mainDomain").val().replace('http://','').replace('https://','').split("\n");
-		var webport=[];
-		var checkDomain = domain[0].split('.');
-		if(checkDomain.length < 1){
-			layer.msg(lan.site.domain_err_txt,{icon:2});
-			return;
-		}
-		for(var i=1; i<domain.length; i++){
-			domainlist += '"'+domain[i]+'",';
-		}
-
-		webport = domain[0].split(":")[1];//主域名端口
-		if(webport == undefined){
-			webport="80";
-		}
-
-		domainlist = domainlist.substring(0,domainlist.length-1);//子域名json
-		domain ='{"domain":"'+domain[0]+'","domainlist":['+domainlist+'],"count":'+domain.length+'}';//拼接joson
-		var loadT = layer.msg(lan.public.the_get,{icon:16,time:0,shade: [0.3, "#000"]})
-		var data = $("#addweb").serialize()+"&port="+webport+"&webinfo="+domain;
-
-		$.post('/site/add', data, function(ret) {
-			if (ret.status == true) {
-				getTableData(1);
-				layer.closeAll();
-				layer.msg('成功创建主机',{icon:1})
-			} else {
-				layer.msg(ret.msg, {icon: 2});
-			}
-			layer.close(loadT);
-		},'json');
-		return;
-	}
-	
-	$.post('/site/get_php_version',function(rdata){
-	
-		var defaultPath = $("#defaultPath").html();
-		var php_version = "<div class='line'><span class='tname'>"+lan.site.php_ver+"</span><select class='bt-input-text' name='version' id='c_k3' style='width:100px'>";
-		for (var i=rdata.length-1;i>=0;i--) {
-            php_version += "<option value='"+rdata[i].version+"'>"+rdata[i].name+"</option>";
-        }
-
-        var www = syncPost('/site/get_root_dir');
-
-		php_version += "</select><span id='php_w' style='color:red;margin-left: 10px;'></span></div>";
-		layer.open({
-			type: 1,
-			skin: 'demo-class',
-			area: '640px',
-			title: '添加网站',
-			closeBtn: 1,
-			shift: 0,
-			shadeClose: false,
-			content: "<form class='bt-form pd20 pb70' id='addweb'>\
-						<div class='line'>\
-		                    <span class='tname'>"+lan.site.domain+"</span>\
-		                    <div class='info-r c4'>\
-								<textarea id='mainDomain' class='bt-input-text' name='webname' style='width:458px;height:100px;line-height:22px' /></textarea>\
-							</div>\
-						</div>\
-	                    <div class='line'>\
-	                    <span class='tname'>备注</span>\
-	                    <div class='info-r c4'>\
-	                    	<input id='Wbeizhu' class='bt-input-text' type='text' name='ps' placeholder='网站备注' style='width:458px' />\
-	                    </div>\
-	                    </div>\
-	                    <div class='line'>\
-	                    <span class='tname'>根目录</span>\
-	                    <div class='info-r c4'>\
-	                    	<input id='inputPath' class='bt-input-text mr5' type='text' name='path' value='"+www['dir']+"/' placeholder='"+www['dir']+"' style='width:458px' />\
-	                    	<span class='glyphicon glyphicon-folder-open cursor' onclick='changePath(\"inputPath\")'></span>\
-	                    </div>\
-	                    </div>\
-						"+php_version+"\
-	                    <div class='bt-form-submit-btn'>\
-							<button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>\
-							<button type='button' class='btn btn-success btn-sm btn-title' onclick=\"hostAdd(1)\">提交</button>\
-						</div>\
-	                  </form>",
-		});
-
-		$(function() {
-			var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
-			$('#mainDomain').after(placeholder);
-			$(".placeholder").click(function(){
-				$(this).hide();
-				$('#mainDomain').focus();
-			})
-			$('#mainDomain').focus(function() {
-			    $(".placeholder").hide();
-			});
-			
-			$('#mainDomain').blur(function() {
-				if($(this).val().length==0){
-					$(".placeholder").show();
-				}  
-			});
-			
-			//验证PHP版本
-			$("select[name='version']").change(function(){
-				if($(this).val() == '52'){
-					var msgerr = 'PHP5.2在您的主机有漏洞时有跨站风险，请尽量使用PHP5.3以上版本!';
-					$('#php_w').text(msgerr);
-				}else{
-					$('#php_w').text('');
-				}
-			})
-
-			$('#mainDomain').on('input', function() {
-				var array;
-				var res,ress;
-				var str = $(this).val().replace('http://','').replace('https://','');
-				var len = str.replace(/[^\x00-\xff]/g, "**").length;
-				array = str.split("\n");
-				ress =array[0].split(":")[0];
-				res = ress.replace(new RegExp(/([-.])/g), '_');
-				if(res.length > 15){ 
-					res = res.substr(0,15);
-				}
-
-				var placeholder = $("#inputPath").attr('placeholder');
-				$("#inputPath").val(placeholder+'/'+ress);
-				
-				if(res.length > 15){
-					res = res.substr(0,15);
-				}
-
-				$("#Wbeizhu").val(ress);
-			})
-
-			//备注
-			$('#Wbeizhu').on('input', function() {
-				var str = $(this).val();
-				var len = str.replace(/[^\x00-\xff]/g, "**").length;
-				if (len > 20) {
-					str = str.substring(0, 20);
-					$(this).val(str);
-					layer.msg('不能超出20个字符!', {
-						icon: 0
-					});
-				}
-			})
-			//获取当前时间时间戳，截取后6位
-			var timestamp = new Date().getTime().toString();
-			var dtpw = timestamp.substring(7);
-		});
-	}, 'json');
 }
 
 //修改网站目录
@@ -507,7 +442,7 @@ function webStop(wid, wname) {
 			$.post("/site/stop","id=" + wid + "&name=" + wname, function(ret) {
 				layer.msg(ret.msg,{icon:ret.status?1:2})
 				layer.close(loadT);
-				getTableData(1);
+				getWeb(1);
 			},'json');
 		}
 	});
@@ -525,34 +460,10 @@ function webStart(wid, wname) {
 			$.post("/site/start","id=" + wid + "&name=" + wname, function(ret) {
 				layer.msg(ret.msg,{icon:ret.status?1:2})
 				layer.close(loadT);
-				getTableData(1);
+				getWeb(1);
 			},'json');
 		}
 	});
-}
-
-/**
- * 删除一个网站
- * @param {Number} wid 网站ID
- * @param {String} wname 网站名称
- */
-function webDelete(wid, wname){
-	var thtml = "<div class='options'>\
-	    	<label><input type='checkbox' id='delpath' name='path'><span>根目录</span></label>\
-	    	</div>";
-	var info = '是否要删除同名根目录';
-	safeMessage('删除主机'+"["+wname+"]",info, function(){
-		var path='';
-		if($("#delpath").is(":checked")){
-			path='&path=1';
-		}
-		var loadT = layer.msg('正在处理,请稍候...',{icon:16,time:10000,shade: [0.3, '#000']});
-		$.post("/site/delete","id=" + wid + "&webname=" + wname + path, function(ret){
-			layer.closeAll();
-			layer.msg(ret.msg,{icon:ret.status?1:2})
-			getTableData(1);
-		},'json');
-	},thtml);
 }
 
 
@@ -2590,7 +2501,7 @@ function getClassType(){
 		$(select).bind('change',function(){
 			var select_id = $(this).val();
 			// console.log(select_id);
-			getTableData(1,'',select_id);
+			getWeb(1,'',select_id);
 		})
 	},'json');
 }
@@ -2750,3 +2661,4 @@ function tryRestartPHP(siteName){
 	    },'json');
 	},'json');
 }
+
