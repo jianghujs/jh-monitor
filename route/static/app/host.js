@@ -3,7 +3,7 @@
  * @param {Number} page   当前页
  * @param {String} search 搜索条件
  */
- function getTableData(page, search, type_id) {
+function getTableData(page, search, type_id) {
 	search = $("#SearchValue").prop("value");
 	page = page == undefined ? '1':page;
 	var order = getCookie('order');
@@ -167,12 +167,12 @@ function setWebPs(b, e, a) {
 }
 
 //创建主机前,检查服务是否开启
-function webAdd(type){
+function hostAdd(type){
 	loading = layer.msg('正在检查是否开启OpenResty服务!',{icon:16,time:0,shade: [0.3, "#000"]})
 	$.post('/site/check_web_status', function(data){
 		layer.close(loading);
 		if (data.status){
-			webAddPage(type)
+			hostAddPage(type)
 		} else {
 			layer.msg(data.msg,{icon:0,time:3000,shade: [0.3, "#000"]})
 		}
@@ -180,7 +180,7 @@ function webAdd(type){
 }
 
 //添加主机
-function webAddPage(type) {
+function hostAddPage(type) {
 
 	if (type == 1) {
 		var array;
@@ -262,7 +262,7 @@ function webAddPage(type) {
 						"+php_version+"\
 	                    <div class='bt-form-submit-btn'>\
 							<button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>\
-							<button type='button' class='btn btn-success btn-sm btn-title' onclick=\"webAdd(1)\">提交</button>\
+							<button type='button' class='btn btn-success btn-sm btn-title' onclick=\"hostAdd(1)\">提交</button>\
 						</div>\
 	                  </form>",
 		});
@@ -557,7 +557,7 @@ function webDelete(wid, wname){
 
 
 //批量删除
-function allDeleteSite(){
+function batchDelete(){
 	var checkList = $("input[name=id]");
 	var dataList = new Array();
 	for(var i=0;i<checkList.length;i++){
