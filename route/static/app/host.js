@@ -53,7 +53,8 @@ function getWeb(page, search, type_id) {
 					<td>" + "" + "</td>\
 					<td>" + "" + "</td>\
 					<td style='text-align:right; color:#bbb'>\
-					    <a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
+					    <a href='javascript:;' class='btlink' onclick=\"hostDetail(" + data.data[i].id + ",'" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
+					    | <a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
               | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
 					</td></tr>"
 			
@@ -220,6 +221,65 @@ function hostDelete(id, name){
 	});
 }
 
+
+
+/*主机详情*/
+function hostDetail(id,host_name,endTime,addtime,event){
+	event && event.preventDefault();
+	
+	layer.open({
+		type: 1,
+		area: '80%',
+		title: '主机详情['+host_name+']  --  添加时间['+addtime+']',
+		closeBtn: 1,
+		shift: 0,
+		content: "<div class='bt-form'>\
+			<div class='bt-w-menu pull-left' style='height: 565px;'>\
+				<p class='bgw'  onclick=\"domainEdit(" + id + ",'" + host_name + "')\">"+lan.site.domain_man+"</p>\
+				<p onclick='dirBinding("+id+")' title='子目录绑定'>子目录绑定</p>\
+				<p onclick='webPathEdit("+id+")' title='网站目录'>网站目录</p>\
+				<p onclick='limitNet("+id+")' title='流量限制'>流量限制</p>\
+				<p onclick=\"rewrite('"+host_name+"')\" title='伪静态'>伪静态</p>\
+				<p onclick='setIndexEdit("+id+")' title='默认文档'>默认文档</p>\
+				<p onclick=\"configFile('"+host_name+"')\" title='配置文件'>配置文件</p>\
+				<p onclick=\"setSSL("+id+",'"+host_name+"')\" title='SSL'>SSL</p>\
+				<p onclick=\"phpVersion('"+host_name+"')\" title='PHP版本'>PHP版本</p>\
+				<p onclick=\"to301('"+host_name+"')\" title='重定向'>重定向</p>\
+				<p onclick=\"toProxy('"+host_name+"')\" title='反向代理'>反向代理</p>\
+				<p id='site_"+id+"' onclick=\"security('"+id+"','"+host_name+"')\" title='防盗链'>防盗链</p>\
+				<p id='site_"+id+"' onclick=\"getSiteLogs('"+host_name+"')\" title='查看主机请求日志'>响应日志</p>\
+				<p id='site_"+id+"' onclick=\"getSiteErrorLogs('"+host_name+"')\" title='查看主机错误日志'>错误日志</p>\
+			</div>\
+			<div id='webedit-con' class='bt-w-con webedit-con pd15' style='height: 565px;overflow: scroll;'></div>\
+		</div>",
+		success:function(){
+			//域名输入提示
+			var placeholder = "<div class='placeholder'>每行填写一个域名，默认为80端口<br>泛解析添加方法 *.domain.com<br>如另加端口格式为 www.domain.com:88</div>";
+			$('#newdomain').after(placeholder);
+			$(".placeholder").click(function(){
+				$(this).hide();
+				$('#newdomain').focus();
+			});
+
+			$('#newdomain').focus(function() {
+			    $(".placeholder").hide();
+			});
+			
+			$('#newdomain').blur(function() {
+				if($(this).val().length == 0){
+					$(".placeholder").show();
+				}  
+			});
+
+			//切换
+			$(".bt-w-menu p").click(function(){
+				$(this).addClass("bgw").siblings().removeClass("bgw");
+			});
+
+			domainEdit(id,host_name);
+		}
+	});	
+}
 
 
 
