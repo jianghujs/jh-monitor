@@ -230,25 +230,15 @@ function hostDetail(id,host_name,endTime,addtime,event){
 	layer.open({
 		type: 1,
 		area: '80%',
-		title: '主机详情['+host_name+']  --  添加时间['+addtime+']',
+		title: '主机详情['+host_name+']',
 		closeBtn: 1,
 		shift: 0,
 		content: "<div class='bt-form'>\
 			<div class='bt-w-menu pull-left' style='height: 565px;'>\
-				<p class='bgw'  onclick=\"domainEdit(" + id + ",'" + host_name + "')\">"+lan.site.domain_man+"</p>\
-				<p onclick='dirBinding("+id+")' title='子目录绑定'>子目录绑定</p>\
-				<p onclick='webPathEdit("+id+")' title='网站目录'>网站目录</p>\
-				<p onclick='limitNet("+id+")' title='流量限制'>流量限制</p>\
-				<p onclick=\"rewrite('"+host_name+"')\" title='伪静态'>伪静态</p>\
-				<p onclick='setIndexEdit("+id+")' title='默认文档'>默认文档</p>\
-				<p onclick=\"configFile('"+host_name+"')\" title='配置文件'>配置文件</p>\
-				<p onclick=\"setSSL("+id+",'"+host_name+"')\" title='SSL'>SSL</p>\
-				<p onclick=\"phpVersion('"+host_name+"')\" title='PHP版本'>PHP版本</p>\
-				<p onclick=\"to301('"+host_name+"')\" title='重定向'>重定向</p>\
-				<p onclick=\"toProxy('"+host_name+"')\" title='反向代理'>反向代理</p>\
-				<p id='site_"+id+"' onclick=\"security('"+id+"','"+host_name+"')\" title='防盗链'>防盗链</p>\
-				<p id='site_"+id+"' onclick=\"getSiteLogs('"+host_name+"')\" title='查看主机请求日志'>响应日志</p>\
-				<p id='site_"+id+"' onclick=\"getSiteErrorLogs('"+host_name+"')\" title='查看主机错误日志'>错误日志</p>\
+				<p class='bgw' onclick='dirBinding("+id+")' title='主机概览'>主机概览</p>\
+				<p onclick='webPathEdit("+id+")' title='基础监控'>基础监控</p>\
+				<p onclick='limitNet("+id+")' title='日志监控'>日志监控</p>\
+				<p onclick=\"rewrite('"+host_name+"')\" title='伪静态'>系统监控</p>\
 			</div>\
 			<div id='webedit-con' class='bt-w-con webedit-con pd15' style='height: 565px;overflow: scroll;'></div>\
 		</div>",
