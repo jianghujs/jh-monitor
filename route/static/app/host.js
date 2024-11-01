@@ -30,6 +30,9 @@ function getWeb(page, search, type_id) {
 		var body = '';
 		$("#webBody").html(body);
 		for (var i = 0; i < data.data.length; i++) {
+      // 格式化json数据
+      data.data[i].cpu_info = JSON.parse(data.data[i].cpu_info || '{}');
+
 			//当前主机状态
 			if (data.data[i].status == '正在运行' || data.data[i].status == '1') {
 				var status = "<a href='javascript:;' title='停用这个主机' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
@@ -44,8 +47,8 @@ function getWeb(page, search, type_id) {
             </a>\
           </td>\
 					<td>" + status + "</td>\
-					<td>" + '' + "</td>\
-					<td>" + "" + "</td>\
+					<td>" + data.data[i].host_group_name + "</td>\
+					<td>" + (data.data[i].cpu_info.percent || '') + "</td>\
 					<td>" + "" + "</td>\
 					<td>" + "" + "</td>\
 					<td>" + "" + "</td>\

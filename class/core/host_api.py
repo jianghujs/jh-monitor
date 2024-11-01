@@ -34,7 +34,7 @@ app = Flask(__name__)
 
 class host_api:
     
-    host_field = 'id,host_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime'
+    host_field = 'id,host_name,host_group_id,host_group_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,last_update'
     host_detail_field = 'id,host_id,host_name,host_status,uptime,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,last_update,addtime'
 
     def listApi(self):
@@ -42,7 +42,7 @@ class host_api:
         p = request.form.get('p', '1')
         start = (int(p) - 1) * (int(limit))
 
-        hostM = jh.M('host')
+        hostM = jh.M('view01_host')
         _list = hostM.field(self.host_field).limit(
             (str(start)) + ',' + limit).order('id desc').select()
         
