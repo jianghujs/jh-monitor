@@ -30,15 +30,38 @@ function getWeb(page, search, type_id) {
 		var body = '';
 		$("#webBody").html(body);
 		for (var i = 0; i < data.data.length; i++) {
-      // 格式化json数据
-      data.data[i].cpu_info = JSON.parse(data.data[i].cpu_info || '{}');
 
-			//当前主机状态
+			// 当前主机状态
 			if (data.data[i].status == '正在运行' || data.data[i].status == '1') {
 				var status = "<a href='javascript:;' title='停用这个主机' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
 			} else {
 				var status = "<a href='javascript:;' title='启用这个主机' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
 			}
+
+      // 流量
+      let net_speed = '';
+      let net_total = '';
+      if (data.data[i].net_info && data.data[i].net_info.length > 0) {
+        net_speed += "<div>" + (data.data[i].net_info[0]['sent_per_second'] || '') + "</div>";
+        net_speed += "<div>" + (data.data[i].net_info[0]['recv_per_second'] || '') + "</div>";
+        net_total += "<div>" + (data.data[i].net_info[0]['sent'] || '') + "</div>";
+        net_total += "<div>" + (data.data[i].net_info[0]['recv'] || '') + "</div>";
+      }
+
+      // 磁盘
+      let disk_speed = '';
+      let disk_status = '';
+			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
+        for (let j = 0; j < data.data[i].disk_info.length; j++) {
+          disk_speed += "<div>" + (data.data[i].disk_info[j]['read_per_second'] || '') + "</div>";
+          disk_speed += "<div>" + (data.data[i].disk_info[j]['write_per_second'] || '') + "</div>";
+          if(data.data[i].disk_info[j]['status']) {
+            disk_status = "<a href='javascript:;' title='紧张' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
+          } else {
+            disk_status = "<a href='javascript:;' title='充裕' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>紧张</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
+          }
+        }
+      }
 
 			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>\
@@ -48,17 +71,17 @@ function getWeb(page, search, type_id) {
           </td>\
 					<td>" + status + "</td>\
 					<td>" + data.data[i].host_group_name + "</td>\
-					<td>" + (data.data[i].cpu_info.percent || '') + "</td>\
-					<td>" + "" + "</td>\
-					<td>" + "" + "</td>\
-					<td>" + "" + "</td>\
-					<td>" + "" + "</td>\
-					<td>" + "" + "</td>\
-					<td>" + "" + "</td>\
+					<td>" + (data.data[i]['load_avg']['1min'] || '') + "</td>\
+					<td>" + (data.data[i]['cpu_info']['percent'] || '') + "</td>\
+					<td>" + (data.data[i]['mem_info']['percent'] || '') + "</td>\
+					<td>" + net_speed + "</td>\
+					<td>" + net_total + "</td>\
+					<td>" + disk_speed + "</td>\
+					<td>" + disk_status + "</td>\
 					<td style='text-align:right; color:#bbb'>\
-					    <a href='javascript:;' class='btlink' onclick=\"openHostDetail(" + data.data[i].id + ",'" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
-					    | <a href='javascript:;' class='btlink' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
-              | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
+					    <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
+					    | <a href='javascript:;' class='btlink' onclick=\"webEdit('" + data.data[i].host_id + "','" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
+              | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
 					</td></tr>"
 			
 			$("#webBody").append(body);
@@ -210,13 +233,13 @@ function hostAdd() {
 
 /**
  * 删除一个主机
- * @param {Number} id 主机ID
+ * @param {Number} host_id 主机ID
  * @param {String} name 主机名称
  */
-function hostDelete(id, name){
+function hostDelete(host_id, name){
 	safeMessage("确认", "确定要删除主机"+"["+name+"]吗？", function(){
 		var loadT = layer.msg('正在处理,请稍候...',{icon:16,time:10000,shade: [0.3, '#000']});
-		$.post("/host/delete","id=" + id, function(ret){
+		$.post("/host/delete","host_id=" + host_id, function(ret){
 			layer.closeAll();
 			layer.msg(ret.msg,{icon:ret.status?1:2})
 			getWeb(1);
@@ -227,9 +250,9 @@ function hostDelete(id, name){
 
 
 /*主机详情*/
-function openHostDetail(id,host_name,endTime,addtime,event){
+function openHostDetail(host_id,host_name,endTime,addtime,event){
 	event && event.preventDefault();
-	
+
 	layer.open({
 		type: 1,
 		area: '80%',
@@ -238,9 +261,9 @@ function openHostDetail(id,host_name,endTime,addtime,event){
 		shift: 0,
 		content: "<div class='bt-form'>\
 			<div class='bt-w-menu pull-left' style='height: 565px;'>\
-				<p class='bgw' onclick='detailHostSummary("+id+")' title='主机概览'>主机概览</p>\
-				<p onclick='detailBaseMonitor("+id+")' title='基础监控'>基础监控</p>\
-				<p onclick='detailLogMonitor("+id+")' title='日志监控'>日志监控</p>\
+				<p class='bgw' onclick='detailHostSummary("+host_id+")' title='主机概览'>主机概览</p>\
+				<p onclick='detailBaseMonitor("+host_id+")' title='基础监控'>基础监控</p>\
+				<p onclick='detailLogMonitor("+host_id+")' title='日志监控'>日志监控</p>\
 				<p onclick=\"detailSysMonitor('"+host_name+"')\" title='系统监控'>系统监控</p>\
 			</div>\
 			<div id='hostdetail-con' class='bt-w-con hostdetail-con pd15' style='height: 565px;overflow: scroll;background: #fcf8f8;'></div>\
@@ -252,7 +275,7 @@ function openHostDetail(id,host_name,endTime,addtime,event){
 				$(this).addClass("bgw").siblings().removeClass("bgw");
 			});
 
-			detailHostSummary(id,host_name);
+			detailHostSummary(host_id,host_name);
 		}
 	});	
 }
@@ -260,204 +283,210 @@ function openHostDetail(id,host_name,endTime,addtime,event){
 
 /**
  * 主机概览
- * @param {Int} id 网站ID
+ * @param {Int} host_id 网站ID
  */
-function detailHostSummary(id, name, msg, status) {
-  var bodyHtml = `
+function detailHostSummary(host_id, name, msg, status) {
+	$.post('/host/detail' ,{host_id:host_id}, function(data) {
+    const host_detail = data.data;
+    const { ip, host_info, cpu_info, load_avg } = host_detail;
 
-    <!-- 主机信息 -->
-    <div class="server bgw mb15">
-      <div class="title c6 f16 plr15">
-          <h3 class="c6 f16 pull-left">主机信息</h3>
-      </div>
-      <div class="p-5">
-          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">主机名称: </span>debian</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">IP地址:</span>192.168.3.6</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">操作系统:</span>debian 11.6</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">运行天数:</span>0.8 天</div>
-          </div>
-          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">被控版本:</span>4.4</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">CPU型号:</span>Intel(R) Core(TM) i7-8700 CPU @ 3.2...</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">平均负载:</span>0.19 / 0.31 / 0.3</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">上次启动时间:</span>2024-10-30 19:46:49</div>
-          </div>
-      </div>
-    </div>
+    var bodyHtml = `
 
-    <div class="grid lg:grid-cols-2 gap-5 mt-2">
-      <div>
-        <!-- 系统状态 -->
-        <div class="server bgw">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">系统状态</h3>
-          </div>
-          <div class="mx-auto server-circle">
-              <ul class="grid sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4" id="systemInfoList">
-                  <li class="mtb20 circle-box text-center" id="LoadList">
-                      <h3 class="c5 f15">负载状态<a href="https://github.com/jianghujs/jh-panel/wiki#负载简述" target="_blank" class="bt-ico-ask" style="cursor: pointer;">?</a></h3>
-                      <div class="circle" style="cursor: pointer;">
-                          <div class="pie_left">
-                              <div class="left"></div>
-                          </div>
-                          <div class="pie_right">
-                              <div class="right"></div>
-                          </div>
-                          <div class="mask"><span id="Load">0</span>%</div>
-                      </div>
-                      <h4 id="LoadState" class="c5 f15">获取中...</h4>
-                  </li>
-                  <li class="mtb20 circle-box text-center" id="cpuChart">
-                      <h3 class="c5 f15">CPU使用率</h3>
-                      <div class="circle">
-                          <div class="pie_left">
-                              <div class="left"></div>
-                          </div>
-                          <div class="pie_right">
-                              <div class="right"></div>
-                          </div>
-                          <div class="mask"><span id="state">0</span>%</div>
-                      </div>
-                      <h4 id="core" class="c5 f15">获取中...</h4>
-                  </li>
-                  <li class="mtb20 circle-box text-center">
-                      <h3 class="c5 f15">内存使用率</h3>
-                      <div class="circle mem-release">
-                          <div class="pie_left">
-                              <div class="left"></div>
-                          </div>
-                          <div class="pie_right">
-                              <div class="right"></div>
-                          </div>
-                          <div class="mask"><span id="left">0</span>%</div>
-                          <div class="mem-re-min" style="display: none;"></div>
-                          <div class="mem-re-con" title=""></div>
-                      </div>
-                      <h4 id="memory" class="c5 f15">获取中...</h4>
-                  </li>
-              </ul>
-          </div>
+      <!-- 主机信息 -->
+      <div class="server bgw mb15">
+        <div class="title c6 f16 plr15">
+            <h3 class="c6 f16 pull-left">主机信息</h3>
         </div>
-
-        <!-- 进程占用TOP10 -->
-        <div class="server bgw mt-5" style="height:600px">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">进程占用TOP10</h3>
-          </div>
-          <div class="mx-auto">
-              
-            <div class="divtable m-5">
-              <div class="tablescroll">
-              <table class="table table-hover" style="border: 0 none;">
-                <thead>
-                  <tr>
-                    <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">进程名<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-                    <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">CPU<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-                    <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">内存<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-                    <th width="40" onclick="listOrder('cpu','host',this)" class="cursor-pointer">网络总IO<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-                    <th width="40" onclick="listOrder('cpu','host',this)" class="cursor-pointer">磁盘总IO<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-                    <th width='40' class='text-right'>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="webBody"></tbody>
-              </table>
-              </div>
-              <div class="dataTables_paginate paging_bootstrap pagination">
-                <ul id="webPage" class="page"></ul>
-              </div>
+        <div class="p-5">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">主机名称: </span>${host_info['hostName'] || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">IP地址:</span>${ip || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">操作系统:</span>${host_info['platform'] || ''} ${host_info['platformVersion'] || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">运行天数:</span>${host_info['runDay'] || ''}</div>
             </div>
-
-
-          </div>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">被控版本:</span>${host_info['jhMonitorVersion'] || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">CPU型号:</span>${cpu_info['modelName'] || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">平均负载:</span>${load_avg['1min'] || ''} / ${load_avg['5min'] || ''} / ${load_avg['15min'] || ''}</div>
+                <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">上次启动时间:</span>${host_info['upTime'] || ''}</div>
+            </div>
         </div>
-      
       </div>
 
-      <div>
-
-        <!-- 网络IO -->
-        <div class="bgw" style="height:491px">
-            <div class="title c6 f16 plr15">流量</div>
-            <div class="bw-info">
-                <div class="col-sm-6 col-md-3"><p class="c9"><span class="ico-up"></span>上行</p><a id="upSpeed">0</a></div>
-                <div class="col-sm-6 col-md-3"><p class="c9"><span class="ico-down"></span>下行</p><a id="downSpeed">0</a></div>
-                <div class="col-sm-6 col-md-3"><p class="c9">总发送</p><a id="upAll">0</a></div>
-                <div class="col-sm-6 col-md-3"><p class="c9">总接收</p><a id="downAll">0</a></div>
+      <div class="grid lg:grid-cols-2 gap-5 mt-2">
+        <div>
+          <!-- 系统状态 -->
+          <div class="server bgw">
+            <div class="title c6 f16 plr15">
+                <h3 class="c6 f16 pull-left">系统状态</h3>
             </div>
-            <div id="netImg" style="width:100%;height:330px;"></div>
-        </div>
+            <div class="mx-auto server-circle">
+                <ul class="grid sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4" id="systemInfoList">
+                    <li class="mtb20 circle-box text-center" id="LoadList">
+                        <h3 class="c5 f15">负载状态<a href="https://github.com/jianghujs/jh-panel/wiki#负载简述" target="_blank" class="bt-ico-ask" style="cursor: pointer;">?</a></h3>
+                        <div class="circle" style="cursor: pointer;">
+                            <div class="pie_left">
+                                <div class="left"></div>
+                            </div>
+                            <div class="pie_right">
+                                <div class="right"></div>
+                            </div>
+                            <div class="mask"><span id="Load">0</span>%</div>
+                        </div>
+                        <h4 id="LoadState" class="c5 f15">获取中...</h4>
+                    </li>
+                    <li class="mtb20 circle-box text-center" id="cpuChart">
+                        <h3 class="c5 f15">CPU使用率</h3>
+                        <div class="circle">
+                            <div class="pie_left">
+                                <div class="left"></div>
+                            </div>
+                            <div class="pie_right">
+                                <div class="right"></div>
+                            </div>
+                            <div class="mask"><span id="state">0</span>%</div>
+                        </div>
+                        <h4 id="core" class="c5 f15">获取中...</h4>
+                    </li>
+                    <li class="mtb20 circle-box text-center">
+                        <h3 class="c5 f15">内存使用率</h3>
+                        <div class="circle mem-release">
+                            <div class="pie_left">
+                                <div class="left"></div>
+                            </div>
+                            <div class="pie_right">
+                                <div class="right"></div>
+                            </div>
+                            <div class="mask"><span id="left">0</span>%</div>
+                            <div class="mem-re-min" style="display: none;"></div>
+                            <div class="mem-re-con" title=""></div>
+                        </div>
+                        <h4 id="memory" class="c5 f15">获取中...</h4>
+                    </li>
+                </ul>
+            </div>
+          </div>
 
+          <!-- 进程占用TOP10 -->
+          <div class="server bgw mt-5" style="height:600px">
+            <div class="title c6 f16 plr15">
+                <h3 class="c6 f16 pull-left">进程占用TOP10</h3>
+            </div>
+            <div class="mx-auto">
+                
+              <div class="divtable m-5">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">进程名<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+                      <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">CPU<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+                      <th width="40" onclick="listOrder('load','host',this)" class="cursor-pointer">内存<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+                      <th width="40" onclick="listOrder('cpu','host',this)" class="cursor-pointer">网络总IO<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+                      <th width="40" onclick="listOrder('cpu','host',this)" class="cursor-pointer">磁盘总IO<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+                      <th width='40' class='text-right'>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="webBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+
+
+            </div>
+          </div>
         
-        <!-- 告警事件 -->
-        <div class="server bgw mt-5" style="height:200px">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">告警事件</h3>
-          </div>
-          <div class="mx-auto">
-            <div class="divtable m-5">
-              <div class="tablescroll">
-              <table class="table table-hover" style="border: 0 none;">
-                <thead>
-                  <tr>
-                    <th width="120">告警内容</th>
-                    <th width="40">告警时间</th>
-                    <th width="40">状态</th>
-                    <th width='40' class='text-right border-none'>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="webBody"></tbody>
-              </table>
-              </div>
-              <div class="dataTables_paginate paging_bootstrap pagination">
-                <ul id="webPage" class="page"></ul>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <!-- 在线的SSH用户 -->
-        <div class="server bgw mt-5" style="height:200px">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">在线的SSH用户</h3>
-          </div>
-          <div class="mx-auto">
-            <div class="divtable m-5">
-              <div class="tablescroll">
-              <table class="table table-hover" style="border: 0 none;">
-                <thead>
-                  <tr>
-                    <th width="120">用户名</th>
-                    <th width="40">虚拟终端</th>
-                    <th width="40">登录时间</th>
-                    <th width="40">登录IP</th>
-                    <th width='40' class='text-right border-none'>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="webBody"></tbody>
-              </table>
+        <div>
+
+          <!-- 网络IO -->
+          <div class="bgw" style="height:491px">
+              <div class="title c6 f16 plr15">流量</div>
+              <div class="bw-info">
+                  <div class="col-sm-6 col-md-3"><p class="c9"><span class="ico-up"></span>上行</p><a id="upSpeed">0</a></div>
+                  <div class="col-sm-6 col-md-3"><p class="c9"><span class="ico-down"></span>下行</p><a id="downSpeed">0</a></div>
+                  <div class="col-sm-6 col-md-3"><p class="c9">总发送</p><a id="upAll">0</a></div>
+                  <div class="col-sm-6 col-md-3"><p class="c9">总接收</p><a id="downAll">0</a></div>
               </div>
-              <div class="dataTables_paginate paging_bootstrap pagination">
-                <ul id="webPage" class="page"></ul>
+              <div id="netImg" style="width:100%;height:330px;"></div>
+          </div>
+
+          
+          <!-- 告警事件 -->
+          <div class="server bgw mt-5" style="height:200px">
+            <div class="title c6 f16 plr15">
+                <h3 class="c6 f16 pull-left">告警事件</h3>
+            </div>
+            <div class="mx-auto">
+              <div class="divtable m-5">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="120">告警内容</th>
+                      <th width="40">告警时间</th>
+                      <th width="40">状态</th>
+                      <th width='40' class='text-right border-none'>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="webBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- 在线的SSH用户 -->
+          <div class="server bgw mt-5" style="height:200px">
+            <div class="title c6 f16 plr15">
+                <h3 class="c6 f16 pull-left">在线的SSH用户</h3>
+            </div>
+            <div class="mx-auto">
+              <div class="divtable m-5">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="120">用户名</th>
+                      <th width="40">虚拟终端</th>
+                      <th width="40">登录时间</th>
+                      <th width="40">登录IP</th>
+                      <th width='40' class='text-right border-none'>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="webBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+          
         </div>
-        
       </div>
-    </div>
-  `;
+    `;
 
-  $("#hostdetail-con").html(bodyHtml);
+
+    $("#hostdetail-con").html(bodyHtml);
+	},'json');
 
 }
 
 
 /**
  * 基础监控
- * @param {Int} id 网站ID
+ * @param {Int} host_id 网站ID
  */
-function detailBaseMonitor(id, name, msg, status) {
+function detailBaseMonitor(host_id, name, msg, status) {
   var bodyHtml = `
     <div class="control">
       <div class="col-xs-12 col-sm-12 col-md-12 pull-left pd0 view0">
@@ -574,9 +603,9 @@ function detailBaseMonitor(id, name, msg, status) {
 
 /**
  * 日志监控
- * @param {Int} id 网站ID
+ * @param {Int} host_id 网站ID
  */
-function detailLogMonitor(id, name, msg, status) {
+function detailLogMonitor(host_id, name, msg, status) {
   var bodyHtml = `
     <div class="flex flex-wrap">
       <!-- 日志路径列表 --> 
@@ -621,9 +650,9 @@ function detailLogMonitor(id, name, msg, status) {
 
 /**
  * 系统监控
- * @param {Int} id 网站ID
+ * @param {Int} host_id 网站ID
  */
-function detailSysMonitor(id, name, msg, status) {
+function detailSysMonitor(host_id, name, msg, status) {
   var bodyHtml = `
 
     <!-- 主机SSH登陆信息 -->
