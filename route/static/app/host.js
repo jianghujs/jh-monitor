@@ -259,15 +259,15 @@ function openHostDetail(host_id,host_name,endTime,addtime,event){
 		title: '主机详情['+host_name+']',
 		closeBtn: 1,
 		shift: 0,
-		content: "<div class='bt-form'>\
-			<div class='bt-w-menu pull-left' style='height: 565px;'>\
-				<p class='bgw' onclick='detailHostSummary("+host_id+")' title='主机概览'>主机概览</p>\
-				<p onclick='detailBaseMonitor("+host_id+")' title='基础监控'>基础监控</p>\
-				<p onclick='detailLogMonitor("+host_id+")' title='日志监控'>日志监控</p>\
-				<p onclick=\"detailSysMonitor('"+host_name+"')\" title='系统监控'>系统监控</p>\
-			</div>\
-			<div id='hostdetail-con' class='bt-w-con hostdetail-con pd15' style='height: 565px;overflow: scroll;background: #fcf8f8;'></div>\
-		</div>",
+		content: `<div class='bt-form'>
+			<div class='bt-w-menu pull-left' style='height: 565px;'>
+				<p class='bgw' onclick="detailHostSummary('${host_id}')" title='主机概览'>主机概览</p>
+				<p onclick="detailBaseMonitor('${host_id}')" title='基础监控'>基础监控</p>
+				<p onclick="detailLogMonitor('${host_id}')" title='日志监控'>日志监控</p>
+				<p onclick="detailSysMonitor('${host_name}')" title='系统监控'>系统监控</p>
+			</div>
+			<div id='hostdetail-con' class='bt-w-con hostdetail-con pd15' style='height: 565px;overflow: scroll;background: #fcf8f8;'></div>
+		</div>`,
 		success:function(){
 
 			//切换
