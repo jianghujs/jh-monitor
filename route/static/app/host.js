@@ -348,7 +348,7 @@ function detailHostSummary(host_id, name, msg, status) {
                   </li>
                   <li class="mtb20 circle-box text-center">
                       <h3 class="c5 f15">内存使用率</h3>
-                      <div class="circle mem-release">
+                      <div class="circle">
                           <div class="pie_left">
                               <div class="left"></div>
                           </div>
@@ -401,7 +401,7 @@ function detailHostSummary(host_id, name, msg, status) {
       <div>
 
         <!-- 网络IO -->
-        <div class="bgw" style="height:491px">
+        <div class="bgw relative" style="height:491px">
             <div class="title c6 f16 plr15">流量</div>
             <div class="bw-info">
                 <div class="col-sm-6 col-md-3"><p class="c9"><span class="ico-up"></span>上行</p><a id="upSpeed">0</a></div>
@@ -409,12 +409,12 @@ function detailHostSummary(host_id, name, msg, status) {
                 <div class="col-sm-6 col-md-3"><p class="c9">总发送</p><a id="upAll">0</a></div>
                 <div class="col-sm-6 col-md-3"><p class="c9">总接收</p><a id="downAll">0</a></div>
             </div>
-            <div id="netImg" style="width:100%;height:330px;"></div>
+            <div id="netImg" style="width: 100%; height:330px;"></div>
         </div>
 
         
         <!-- 告警事件 -->
-        <div class="server bgw mt-5" style="height:200px">
+        <div class="server bgw mt-5">
           <div class="title c6 f16 plr15">
               <h3 class="c6 f16 pull-left">告警事件</h3>
           </div>
@@ -430,7 +430,7 @@ function detailHostSummary(host_id, name, msg, status) {
                     <th width='40' class='text-right border-none'>操作</th>
                   </tr>
                 </thead>
-                <tbody id="webBody"></tbody>
+                <tbody id="alarmBody"></tbody>
               </table>
               </div>
               <div class="dataTables_paginate paging_bootstrap pagination">
@@ -441,7 +441,7 @@ function detailHostSummary(host_id, name, msg, status) {
         </div>
 
         <!-- 在线的SSH用户 -->
-        <div class="server bgw mt-5" style="height:200px">
+        <div class="server bgw mt-5">
           <div class="title c6 f16 plr15">
               <h3 class="c6 f16 pull-left">在线的SSH用户</h3>
           </div>
@@ -455,10 +455,9 @@ function detailHostSummary(host_id, name, msg, status) {
                     <th width="40">虚拟终端</th>
                     <th width="40">登录时间</th>
                     <th width="40">登录IP</th>
-                    <th width='40' class='text-right border-none'>操作</th>
                   </tr>
                 </thead>
-                <tbody id="webBody"></tbody>
+                <tbody id="sshUserBody"></tbody>
               </table>
               </div>
               <div class="dataTables_paginate paging_bootstrap pagination">
@@ -474,6 +473,7 @@ function detailHostSummary(host_id, name, msg, status) {
 
 
   $("#hostdetail-con").html(bodyHtml);
+  initDetailHostSummaryNetImg();
   
   getDetailHostSummaryData(host_id);
   setInterval(function() {
@@ -721,12 +721,13 @@ function detailSysMonitor(host_id, name, msg, status) {
 // <========================== 弹框内容 End 
 
 
+// 弹框获取数据方法 Start ==========================>
 
 // 获取主机概览数据
 function getDetailHostSummaryData(host_id) {
   $.post('/host/detail' ,{host_id:host_id}, function(data) {
     const host_detail = data.data;
-    let { ip, host_info, cpu_info, mem_info, load_avg, processRank = [] } = host_detail;
+    let { ip, host_info, cpu_info, mem_info, net_info, load_avg, process_rank = [], ssh_user_list = [] } = host_detail;
     // 主机信息
     $('.detailHostSummary .hostName').text(host_detail['host_name']);
     $('.detailHostSummary .ip').text(ip);
@@ -768,13 +769,13 @@ function getDetailHostSummaryData(host_id) {
 
     // 内存
     $("#memory").html(mem_info.usedPercent);
-    $("#memoryState").html(parseInt(mem_info.used) + '/' + parseInt(mem_info.total) + ' (MB)');
+    $("#memoryState").html(toSize(parseInt(mem_info.used)) + '/' + toSize(parseInt(mem_info.total)) + ' (MB)');
 
     setImg();
 
     // 进程占用TOP10
-    // 模拟processRank数据
-    processRank = [
+    // ! 模拟process_rank数据
+    process_rank = [
       { name: 'nginx', cpu: '0.1%', mem: '0.1%', net: '0.1%', disk: '0.1%' },
       { name: 'php-fpm', cpu: '0.1%', mem: '0.1%', net: '0.1%', disk: '0.1%' },
       { name: 'mysql', cpu: '0.1%', mem: '0.1%', net: '0.1%', disk: '0.1%' },
@@ -782,23 +783,259 @@ function getDetailHostSummaryData(host_id) {
       { name: 'php-fpm', cpu: '0.1%', mem: '0.1%', net: '0.1%', disk: '0.1%' }
     ]
     let processRankBody = '';
-    for(let processItem of processRank) {
+    for(let process_item of process_rank) {
       processRankBody += `
         <tr>
-          <td>${processItem.name}</td>
-          <td>${processItem.cpu}</td>
-          <td>${processItem.mem}</td>
-          <td>${processItem.net}</td>
-          <td>${processItem.disk}</td>
+          <td>${process_item.name}</td>
+          <td>${process_item.cpu}</td>
+          <td>${process_item.mem}</td>
+          <td>${process_item.net}</td>
+          <td>${process_item.disk}</td>
         </tr>
       `;
     }
     $("#processRankBody").html(processRankBody);
 
+    // 流量图
+    updateDetailHostSummaryNetImg(net_info);
 
+    // 告警事件
+    updateDetailHostSummaryAlarm(host_id);
 
+    // 在线的SSH用户
+    // ! 模拟sshUser数据
+    ssh_user_list = [
+      { user: 'root', terminal: 'pts/0', loginTime: '2021-10-10 10:10:10', loginIp: '192.168.3.1'},
+      { user: 'user1', terminal: 'pts/1', loginTime: '2021-10-10 10:10:10', loginIp: '192.168.3.2'}
+    ]
+    let sshUserBody = '';
+    for(let ssh_user of ssh_user_list) {
+      sshUserBody += `
+        <tr>
+          <td>${ssh_user.user}</td>
+          <td>${ssh_user.terminal}</td>
+          <td>${ssh_user.loginTime}</td>
+          <td>${ssh_user.loginIp}</td>
+        </tr>
+      `;
+    }
+    $("#sshUserBody").html(sshUserBody);
   },'json');
 }
+
+// 图标相关
+var netChart = {}
+
+function initDetailHostSummaryNetImg(net_info) {
+  netChart = {
+    xData: [],
+    yData: [],
+    zData: [],
+    myChartNetwork: echarts.init(document.getElementById('netImg')),
+    init() {
+      // 默认填充空白图标
+      for (var i = 8; i >= 0; i--) {
+        var time = (new Date()).getTime();
+        this.xData.push(this.format(time - (i * 3 * 1000)));
+        this.yData.push(0);
+        this.zData.push(0);
+      }
+      // 指定图表的配置项和数据
+      var option = {
+          title: {
+              text: lan.index.interface_net,
+              left: 'center',
+              textStyle: {
+                  color: '#888888',
+                  fontStyle: 'normal',
+                  fontFamily: lan.index.net_font,
+                  fontSize: 16,
+              }
+          },
+          tooltip: {
+              trigger: 'axis'
+          },
+          legend: {
+              data: [lan.index.net_up, lan.index.net_down],
+              bottom: '2%'
+          },
+          grid: {
+            left: '2%',
+            right: '2%',
+            containLabel: true
+          },
+          xAxis: {
+              type: 'category',
+              boundaryGap: false,
+              data: this.xData,
+              axisLine: {
+                  lineStyle: {
+                      color: "#666"
+                  }
+              }
+          },
+          yAxis: {
+              name: lan.index.unit + 'KB/s',
+              splitLine: {
+                  lineStyle: {
+                      color: "#eee"
+                  }
+              },
+              axisLine: {
+                  lineStyle: {
+                      color: "#666"
+                  }
+              }
+          },
+          series: [{
+              name: lan.index.net_up,
+              type: 'line',
+              data: this.yData,
+              smooth: true,
+              showSymbol: false,
+              symbol: 'circle',
+              symbolSize: 6,
+              areaStyle: {
+                  normal: {
+                      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                          offset: 0,
+                          color: 'rgba(255, 140, 0,0.5)'
+                      }, {
+                          offset: 1,
+                          color: 'rgba(255, 140, 0,0.8)'
+                      }], false)
+                  }
+              },
+              itemStyle: {
+                  normal: {
+                      color: '#f7b851'
+                  }
+              },
+              lineStyle: {
+                  normal: {
+                      width: 1
+                  }
+              }
+          }, {
+              name: lan.index.net_down,
+              type: 'line',
+              data: this.zData,
+              smooth: true,
+              showSymbol: false,
+              symbol: 'circle',
+              symbolSize: 6,
+              areaStyle: {
+                  normal: {
+                      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                          offset: 0,
+                          color: 'rgba(30, 144, 255,0.5)'
+                      }, {
+                          offset: 1,
+                          color: 'rgba(30, 144, 255,0.8)'
+                      }], false)
+                  }
+              },
+              itemStyle: {
+                  normal: {
+                      color: '#52a9ff'
+                  }
+              },
+              lineStyle: {
+                  normal: {
+                      width: 1
+                  }
+              }
+          }]
+      };
+      // 使用刚指定的配置项和数据显示图表。
+      this.myChartNetwork.setOption(option);
+      window.addEventListener("resize", () => {
+          this.myChartNetwork.resize();
+      });
+    },
+    getTime() {
+      var now = new Date();
+      var hour = now.getHours();
+      var minute = now.getMinutes();
+      var second = now.getSeconds();
+      if (minute < 10) {
+          minute = "0" + minute;
+      }
+      if (second < 10) {
+          second = "0" + second;
+      }
+      var nowdate = hour + ":" + minute + ":" + second;
+      return nowdate;
+    },
+    ts(m) { return m < 10 ? '0' + m : m },
+    format(sjc) {
+      var time = new Date(sjc);
+      var h = time.getHours();
+      var mm = time.getMinutes();
+      var s = time.getSeconds();
+      return this.ts(h) + ':' + this.ts(mm) + ':' + this.ts(s);
+    },
+    addData(upNet, downNet, shift) {
+      this.xData.push(this.getTime());
+      this.yData.push(upNet);
+      this.zData.push(downNet);
+      if (shift) {
+          this.xData.shift();
+          this.yData.shift();
+          this.zData.shift();
+      }
+    },
+    updateOption() {
+      this.myChartNetwork.setOption({
+          xAxis: {
+              data: this.xData
+          },
+          series: [{
+              name: lan.index.net_up,
+              data: this.yData
+          }, {
+              name: lan.index.net_down,
+              data: this.zData
+          }]
+      });
+      this.myChartNetwork.resize();
+    }
+  }
+  netChart.init();
+}
+
+function updateDetailHostSummaryNetImg(net_info) {
+  if (net_info && net_info.length > 0) {
+    const { sent, recv } = net_info[0];
+    netChart.addData(sent, recv, true);
+  }
+  netChart.updateOption();
+}
+
+function updateDetailHostSummaryAlarm(host_id) {
+  $.post('/host/alarm', {host_id}, function(data) {
+    const alarmList = data.data;
+    let alarmBody = '';
+    for(let alarmItem of alarmList) {
+      alarmBody += `
+        <tr>
+          <td>${alarmItem.alarm_content}</td>
+          <td>${alarmItem.addtime}</td>
+          <td>${alarmItem.alarm_type}</td>
+          <td class='text-right border-none'>
+            <a href='javascript:;' class='btlink' onclick='detailAlarmInfo(${alarmItem.id})'>详情</a>
+          </td>
+        </tr>
+      `;
+    }
+    $("#alarmBody").html(alarmBody);
+  }, 'json');
+}
+
+// <========================== 弹框获取数据方法 End
+
+
+// 其他方法 ==========================>
 
 function setImg() {
   $('.circle').each(function(index, el) {
@@ -823,7 +1060,7 @@ function setImg() {
   });
 }
 
-
+// <========================== 其他方法 End
 
 
 
