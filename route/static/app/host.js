@@ -473,7 +473,7 @@ function detailHostSummary(host_id, name, msg, status) {
 
 
   $("#hostdetail-con").html(bodyHtml);
-  initDetailHostSummaryNetImg();
+  initDetailHostSummaryNetChart();
   
   getDetailHostSummaryData(host_id);
   setInterval(function() {
@@ -511,7 +511,7 @@ function detailBaseMonitor(host_id, name, msg, status) {
                 </div>
               </div>
             </div>
-            <div id="getloadview" style="width:100%; height:330px"></div>
+            <div id="avgloadview" style="width:100%; height:330px"></div>
           </div>
         </div>
       </div>
@@ -600,6 +600,7 @@ function detailBaseMonitor(host_id, name, msg, status) {
 
   $("#hostdetail-con").html(bodyHtml);
 
+  getDetailHostBaseMonitorData();
 }
 
 /**
@@ -797,7 +798,7 @@ function getDetailHostSummaryData(host_id) {
     $("#processRankBody").html(processRankBody);
 
     // 流量图
-    updateDetailHostSummaryNetImg(net_info);
+    updateDetailHostSummaryNetChart(net_info);
 
     // 告警事件
     updateDetailHostSummaryAlarm(host_id);
@@ -826,7 +827,7 @@ function getDetailHostSummaryData(host_id) {
 // 图标相关
 var netChart = {}
 
-function initDetailHostSummaryNetImg(net_info) {
+function initDetailHostSummaryNetChart(net_info) {
   netChart = {
     xData: [],
     yData: [],
@@ -841,7 +842,7 @@ function initDetailHostSummaryNetImg(net_info) {
         this.zData.push(0);
       }
       // 指定图表的配置项和数据
-      var option = {
+      let option = {
           title: {
               text: lan.index.interface_net,
               left: 'center',
@@ -1004,7 +1005,7 @@ function initDetailHostSummaryNetImg(net_info) {
   netChart.init();
 }
 
-function updateDetailHostSummaryNetImg(net_info) {
+function updateDetailHostSummaryNetChart(net_info) {
   if (net_info && net_info.length > 0) {
     const { sent, recv } = net_info[0];
     netChart.addData(sent, recv, true);
@@ -1030,6 +1031,684 @@ function updateDetailHostSummaryAlarm(host_id) {
     }
     $("#alarmBody").html(alarmBody);
   }, 'json');
+}
+
+function getDetailHostBaseMonitorData(host_id) {
+  initDetailHosttBaseMonitorAvgLoadChart();
+  initDetailHosttBaseMonitorCPUChart();
+  initDetailHosttBaseMonitorMemChart();
+  initDetailHosttBaseMonitorDiskIoChart();
+  initDetailHosttBaseMonitorNetIoChart();
+}
+
+
+// 平均负载图表
+var avgLoadChart = {}
+function initDetailHosttBaseMonitorAvgLoadChart() {
+  // ! 模拟数据
+  let avg_load_history = [
+    {id: 162319, pro: 33.25, one: 1.33, five: 1.55, fifteen: 1.11, addtime: "10/27 00:12"},
+    {id: 162323, pro: 75.25, one: 3.01, five: 2.76, fifteen: 1.81, addtime: "10/27 00:21"},
+    {id: 162327, pro: 55.5, one: 2.22, five: 2.04, fifteen: 1.91, addtime: "10/27 00:30"},
+    {id: 162331, pro: 33.5, one: 1.34, five: 2.02, fifteen: 1.99, addtime: "10/27 00:38"},
+  ]
+
+  avgLoadChart = {
+    aData: [],
+    bData: [],
+    xData: [],
+    yData: [],
+    zData: [],
+    myChart: echarts.init(document.getElementById('avgloadview')),
+    init() {
+      for(var i = 0; i < avg_load_history.length; i++){
+        this.xData.push(avg_load_history[i].addtime);
+        this.yData.push(avg_load_history[i].pro);
+        this.zData.push(avg_load_history[i].one);
+        this.aData.push(avg_load_history[i].five);
+        this.bData.push(avg_load_history[i].fifteen);
+      }
+      let option = {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+                    type: 'cross'
+                }
+        },
+        legend: {
+          data:['1分钟','5分钟','15分钟'],
+          right:'16%',
+          top:'10px'
+        },
+        axisPointer: {
+          link: {xAxisIndex: 'all'},
+          lineStyle: {
+            color: '#aaaa',
+            width: 1
+          }
+        },
+        grid: [{ // 直角坐标系内绘图网格
+            top: '60px',
+            left: '5%',
+            right: '55%',
+            width: '40%',
+            height: 'auto'
+          },
+          {
+            top: '60px',
+            left: '55%',
+            width: '40%',
+            height: 'auto'
+          }
+        ],
+        xAxis: [
+  
+          { // 直角坐标系grid的x轴
+            type: 'category',
+            axisLine: {
+              lineStyle: {
+                color: '#666'
+              }
+            },
+            data: this.xData
+          },
+          { // 直角坐标系grid的x轴
+            type: 'category',
+            gridIndex: 1,
+            axisLine: {
+              lineStyle: {
+                color: '#666'
+              }
+            },
+            data: this.xData
+          },
+        ],
+        yAxis: [{
+            scale: true,
+            name: '资源使用率%',
+            splitLine: { // y轴网格显示
+              show: true,
+              lineStyle:{
+                color:"#ddd"
+              }
+            },
+            nameTextStyle: { // 坐标轴名样式
+              color: '#666',
+              fontSize: 12,
+              align: 'left'
+            },
+            axisLine:{
+              lineStyle:{
+                color: '#666',
+              }
+            }
+          },
+          {
+            scale: true,
+            name: '负载详情',
+            gridIndex: 1,
+            splitLine: { // y轴网格显示
+              show: true,
+              lineStyle:{
+                color:"#ddd"
+              }
+            },
+            nameTextStyle: { // 坐标轴名样式
+              color: '#666',
+              fontSize: 12,
+              align: 'left'
+            },
+            axisLine:{
+              lineStyle:{
+                color: '#666',
+              }
+            }
+          },
+        ],
+        dataZoom: [{
+          type: 'inside',
+          start: 0,
+          end: 100,
+          xAxisIndex:[0,1],
+          zoomLock:true
+        }, {
+          xAxisIndex: [0, 1],
+                type: 'slider',
+          start: 0,
+          end: 100,
+          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
+          handleSize: '80%',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 3,
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2
+          },
+          left:'5%',
+          right:'5%'
+        }],
+        series: [
+          {
+            name: '资源使用率%',
+            type: 'line',
+            lineStyle: {
+              normal: {
+                width: 2,
+                color: 'rgb(255, 140, 0)'
+              }
+            },
+            itemStyle: {
+              normal: {
+                color: 'rgb(255, 140, 0)'
+              }
+            },
+            data: this.yData
+          },
+          {
+            xAxisIndex: 1,
+            yAxisIndex: 1,
+            name: '1分钟',
+            type: 'line',
+            lineStyle: {
+              normal: {
+                width: 2,
+                color: 'rgb(30, 144, 255)'
+              }
+            },
+            itemStyle: {
+              normal: {
+                color: 'rgb(30, 144, 255)'
+              }
+            },
+            data: this.zData
+          },
+          {
+            xAxisIndex: 1,
+            yAxisIndex: 1,
+            name: '5分钟',
+            type: 'line',
+            lineStyle: {
+              normal: {
+                width: 2,
+                color: 'rgb(0, 178, 45)'
+              }
+            },
+            itemStyle: {
+              normal: {
+                color: 'rgb(0, 178, 45)'
+              }
+            },
+            data: this.aData
+          },
+          {
+            xAxisIndex: 1,
+            yAxisIndex: 1,
+            name: '15分钟',
+            type: 'line',
+            lineStyle: {
+              normal: {
+                width: 2,
+                color: 'rgb(147, 38, 255)'
+              }
+            },
+            itemStyle: {
+              normal: {
+                color: 'rgb(147, 38, 255)'
+              }
+            },
+            data: this.bData
+          }
+        ],
+        textStyle: {
+          color: '#666',
+          fontSize: 12
+        }
+      };
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  avgLoadChart.init();
+}
+
+// CPU图表
+var memChart = {}
+function initDetailHosttBaseMonitorCPUChart() {
+  // ! 模拟数据
+  let cpu_history = [
+    {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
+    {id: 168902, pro: 100, mem: 54.07751697121776, addtime: "11/03 00:01"},
+    {id: 168903, pro: 71.6, mem: 60.346975585265625, addtime: "11/03 00:03"},
+    {id: 168904, pro: 90.5, mem: 72.29185875221229, addtime: "11/03 00:05"}
+  ]
+
+  cpuChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('cupview')),
+    init() {
+      for(var i = 0; i < cpu_history.length; i++){
+        
+        this.xData.push(cpu_history[i].addtime);
+        this.yData.push(cpu_history[i].pro);
+      }
+      let option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          },
+          formatter: '{b}<br />{a}: {c}%'
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: this.xData,
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: lan.public.pre,
+          boundaryGap: [0, '100%'],
+          min:0,
+          max: 100,
+          splitLine:{
+            lineStyle:{
+              color:"#ddd"
+            }
+          },
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        dataZoom: [{
+          type: 'inside',
+          start: 0,
+          end: 100,
+          zoomLock:true
+        }, {
+          start: 0,
+          end: 100,
+          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
+          handleSize: '80%',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 3,
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2
+          }
+        }],
+        series: [
+          {
+            name:'CPU',
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgb(0, 153, 238)'
+              }
+            },
+            data: this.yData
+          }
+        ]
+      };
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  cpuChart.init();
+}
+
+// 内存图表
+var memChart = {}
+function initDetailHosttBaseMonitorMemChart() {
+  // ! 模拟数据
+  let mem_history = [
+    {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
+    {id: 168902, pro: 100, mem: 54.07751697121776, addtime: "11/03 00:01"},
+    {id: 168903, pro: 71.6, mem: 60.346975585265625, addtime: "11/03 00:03"},
+    {id: 168904, pro: 90.5, mem: 72.29185875221229, addtime: "11/03 00:05"}
+  ]
+
+  memChart = {
+    xData: [],
+    zData: [],
+    myChart: echarts.init(document.getElementById('memview')),
+    init() {
+      for(var i = 0; i < mem_history.length; i++){
+        this.xData.push(mem_history[i].addtime);
+        // this.yData.push(mem_history[i].pro);
+        this.zData.push(mem_history[i].mem);
+      }
+      let option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          },
+          formatter: '{b}<br />{a}: {c}%'
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: this.xData,
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: lan.public.pre,
+          boundaryGap: [0, '100%'],
+          min:0,
+          max: 100,
+          splitLine:{
+            lineStyle:{
+              color:"#ddd"
+            }
+          },
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        dataZoom: [{
+          type: 'inside',
+          start: 0,
+          end: 100,
+          zoomLock:true
+        }, {
+          start: 0,
+          end: 100,
+          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
+          handleSize: '80%',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 3,
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2
+          }
+        }],
+        series: [
+          {
+            name:lan.index.process_mem,
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgb(0, 153, 238)'
+              }
+            },
+            data: this.zData
+          }
+        ]
+      };
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  memChart.init();
+}
+
+// 磁盘IO图表
+var diskIoChart = {}
+function initDetailHosttBaseMonitorDiskIoChart() {
+  // ! 模拟数据
+  let disk_io_history = [
+    {"id": 168906, "read_count": 386, "write_count": 531, "read_bytes": 5439488, "write_bytes": 9777152, "read_time": 1561, "write_time": 22025, "addtime": "11/03 00:00"}, 
+    {"id": 168907, "read_count": 5, "write_count": 625, "read_bytes": 20480, "write_bytes": 6459392, "read_time": 4, "write_time": 20821, "addtime": "11/03 00:01"}, 
+    {"id": 168908, "read_count": 0, "write_count": 277, "read_bytes": 0, "write_bytes": 3047424, "read_time": 0, "write_time": 21336, "addtime": "11/03 00:03"}, 
+    {"id": 168909, "read_count": 0, "write_count": 254, "read_bytes": 0, "write_bytes": 3067904, "read_time": 0, "write_time": 22231, "addtime": "11/03 00:05"}, 
+    {"id": 168910, "read_count": 0, "write_count": 311, "read_bytes": 0, "write_bytes": 4100096, "read_time": 0, "write_time": 637, "addtime": "11/03 00:06"}, 
+    {"id": 168911, "read_count": 0, "write_count": 332, "read_bytes": 0, "write_bytes": 3985408, "read_time": 0, "write_time": 97995, "addtime": "11/03 00:08"}, 
+    {"id": 168912, "read_count": 3, "write_count": 549, "read_bytes": 217088, "write_bytes": 6299648, "read_time": 1416, "write_time": 105301, "addtime": "11/03 00:10"}, 
+    {"id": 168913, "read_count": 0, "write_count": 276, "read_bytes": 0, "write_bytes": 2994176, "read_time": 0, "write_time": 1676, "addtime": "11/03 00:12"}
+  ]
+
+  diskIoChart = {
+    rData: [],
+    wData: [],
+    xData: [],
+    myChart: echarts.init(document.getElementById('diskview')),
+    init() {
+      for(var i = 0; i < disk_io_history.length; i++){
+        this.rData.push((disk_io_history[i].read_bytes/1024/60).toFixed(3));
+        this.wData.push((disk_io_history[i].write_bytes/1024/60).toFixed(3));
+        this.xData.push(disk_io_history[i].addtime);
+      }
+      let option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          },
+          formatter:"时间：{b0}<br />{a0}: {c0} Kb/s<br />{a1}: {c1} Kb/s", 
+        },
+        legend: {
+          data:['读取字节数','写入字节数']
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: this.xData,
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: '单位:KB/s',
+          boundaryGap: [0, '100%'],
+          splitLine:{
+            lineStyle:{
+              color:"#ddd"
+            }
+          },
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        dataZoom: [{
+          type: 'inside',
+          start: 0,
+          end: 100,
+          zoomLock:true
+        }, {
+          start: 0,
+          end: 100,
+          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
+          handleSize: '80%',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 3,
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2
+          }
+        }],
+        series: [
+          {
+            name:'读取字节数',
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgb(255, 70, 131)'
+              }
+            },
+            data: this.rData
+          },
+          {
+            name:'写入字节数',
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgba(46, 165, 186, .7)'
+              }
+            },
+            data: this.wData
+          }
+        ]
+      };
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  diskIoChart.init();
+}
+
+// 网络IO图表
+var netIoChart = {}
+function initDetailHosttBaseMonitorNetIoChart() {
+  // ! 模拟数据
+  let net_io_history = [
+    {"id": 168905, "up": 74.066, "down": 82.152, "total_up": 810516284, "total_down": 941393246, "down_packets": 3613980, "up_packets": 3192491, "addtime": "11/03 00:00"},
+    {"id": 168905, "up": 74.066, "down": 82.152, "total_up": 810516284, "total_down": 941393246, "down_packets": 3613980, "up_packets": 3192491, "addtime": "11/03 00:00"},
+    {"id": 168905, "up": 74.066, "down": 82.152, "total_up": 810516284, "total_down": 941393246, "down_packets": 3613980, "up_packets": 3192491, "addtime": "11/03 00:00"}
+  ]
+
+  netIoChart = {
+    aData: [],
+    bData: [],
+    cData: [],
+    dData: [],
+    xData: [],
+    yData: [],
+    zData: [],
+    myChart: echarts.init(document.getElementById('network')),
+    init() {
+      for(var i = 0; i < net_io_history.length; i++){
+        this.aData.push(net_io_history[i].total_up);
+        this.bData.push(net_io_history[i].total_down);
+        this.cData.push(net_io_history[i].down_packets);
+        this.dData.push(net_io_history[i].up_packets);
+        this.xData.push(net_io_history[i].addtime);
+        this.yData.push(net_io_history[i].up);
+        this.zData.push(net_io_history[i].down);
+      }
+      let option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          }
+        },
+        legend: {
+          data:[lan.index.net_up,lan.index.net_down]
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: this.xData,
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: lan.index.unit+':KB/s',
+          boundaryGap: [0, '100%'],
+          splitLine:{
+            lineStyle:{
+              color:"#ddd"
+            }
+          },
+          axisLine:{
+            lineStyle:{
+              color:"#666"
+            }
+          }
+        },
+        dataZoom: [{
+          type: 'inside',
+          start: 0,
+          end: 100,
+          zoomLock:true
+        }, {
+          start: 0,
+          end: 100,
+          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
+          handleSize: '80%',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 3,
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2
+          }
+        }],
+        series: [
+          {
+            name:lan.index.net_up,
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgb(255, 140, 0)'
+              }
+            },
+            data: this.yData
+          },
+          {
+            name:lan.index.net_down,
+            type:'line',
+            smooth:true,
+            symbol: 'none',
+            sampling: 'average',
+            itemStyle: {
+              normal: {
+                color: 'rgb(30, 144, 255)'
+              }
+            },
+            data: this.zData
+          }
+        ]
+      };
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  netIoChart.init();
 }
 
 // <========================== 弹框获取数据方法 End
