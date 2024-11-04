@@ -152,8 +152,9 @@ function getWeb(page, search, type_id) {
 }
 
 
-
-//添加主机
+/**
+ * 添加主机
+ */
 function openHostAdd() {
   layer.open({
     type: 1,
@@ -189,27 +190,25 @@ function openHostAdd() {
     </form>",
   });
 
-  $(function() {
-    var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
-    $('#mainDomain').after(placeholder);
-    $(".placeholder").click(function(){
-      $(this).hide();
-      $('#mainDomain').focus();
-    })
-    $('#mainDomain').focus(function() {
-        $(".placeholder").hide();
-    });
-    
-    $('#mainDomain').blur(function() {
-      if($(this).val().length==0){
-        $(".placeholder").show();
-      }  
-    });
-
-    //获取当前时间时间戳，截取后6位
-    var timestamp = new Date().getTime().toString();
-    var dtpw = timestamp.substring(7);
+  var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
+  $('#mainDomain').after(placeholder);
+  $(".placeholder").click(function(){
+    $(this).hide();
+    $('#mainDomain').focus();
+  })
+  $('#mainDomain').focus(function() {
+      $(".placeholder").hide();
   });
+  
+  $('#mainDomain').blur(function() {
+    if($(this).val().length==0){
+      $(".placeholder").show();
+    }  
+  });
+
+  //获取当前时间时间戳，截取后6位
+  var timestamp = new Date().getTime().toString();
+  var dtpw = timestamp.substring(7);
 }
 
 
@@ -617,29 +616,25 @@ function detailLogMonitor(host_id, name, msg, status) {
               <h3 class="c6 f16 pull-left">日志路径列表</h3>
           </div>
           <div>
-              <ul class="log-path-list" style="line-height: 35px;">
-                  <li class="log-path-item">
-                      <div class="px-5 log-path cursor-pointer bg-green-200 text-green-500">/www/wwwlogs</div>
-                      <div class="px-5 log-path cursor-pointer">/www/wwwlogs</div>
-                      <div class="px-5 log-path cursor-pointer">/www/wwwlogs</div>
-                      <div class="px-5 log-path cursor-pointer">/www/wwwlogs</div>
-                  </li>
+              <ul id="logFileBody" class="log-path-list" style="line-height: 35px;">
+                  <li class="log-path-item px-5 log-path cursor-pointer bg-green-200 text-green-500">/www/wwwlogs</li>
+                  <li class="log-path-item px-5 log-path cursor-pointer">/www/wwwlogs</li>
               </ul>
           </div>
         </div>
       </div>
-      <div style="width:68%;">
+      <div style="width:68%;" id="logFileDetail">
         <div class="mx-5 mb-5 p-5 bg-white">
           <div class="title mt-2 flex">
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志路径: </span>/var/log/syslog</div>
+              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志路径: </span><span class="path"></span></div>
           </div>
           <div class="mt-2 flex">
-              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志大小:</span>0B</div>
-              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">文件权限:</span>-rw-r--r--</div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">修改时间:</span>2024-10-30 19:46:49</div>
+              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志大小:</span><span class="size"></span></div>
+              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">文件权限:</span><span class="permission"></span></div>
+              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">修改时间:</span><span class="modifyTime"></span></div>
           </div>
         </div>
-        <div class="mx-5 p-5 bgw" style="height: 390px;">
+        <div class="mx-5 p-5 bgw" style="height: 390px;" class="content">
           日志内容为空
         </div>
       </div>
@@ -648,6 +643,18 @@ function detailLogMonitor(host_id, name, msg, status) {
 
   $("#hostdetail-con").html(bodyHtml);
 
+  getDetailHostLogMonitorData();
+
+  $(".log-path-item").click(function() {
+    const logName = $(this).text();
+    $(this).addClass('bg-green-200 text-green-500').siblings().removeClass('bg-green-200 text-green-500');
+    getDetailHostLogMonitorDetailData(logName);
+  });
+  
+  // 默认选中第一个
+  if ($(".log-path-item").length > 0) {
+    $(".log-path-item").eq(0).click();
+  }
 }
 
 /**
@@ -676,11 +683,11 @@ function detailSysMonitor(host_id, name, msg, status) {
                 <th width="40">登陆时间</th>
               </tr>
             </thead>
-            <tbody id="webBody"></tbody>
+            <tbody id="sshLoginBody"></tbody>
           </table>
           </div>
           <div class="dataTables_paginate paging_bootstrap pagination">
-            <ul id="webPage" class="page"></ul>
+            <ul class="page"></ul>
           </div>
         </div>
       </div>
@@ -702,11 +709,11 @@ function detailSysMonitor(host_id, name, msg, status) {
                 <th>命令</th>
               </tr>
             </thead>
-            <tbody id="webBody"></tbody>
+            <tbody  id="sshCommandBody"></tbody>
           </table>
           </div>
           <div class="dataTables_paginate paging_bootstrap pagination">
-            <ul id="webPage" class="page"></ul>
+            <ul class="page"></ul>
           </div>
         </div>
       </div>
@@ -715,6 +722,8 @@ function detailSysMonitor(host_id, name, msg, status) {
   `;
 
   $("#hostdetail-con").html(bodyHtml);
+
+  getDetailHostSysMonitorData();
 
 }
 
@@ -1034,17 +1043,17 @@ function updateDetailHostSummaryAlarm(host_id) {
 }
 
 function getDetailHostBaseMonitorData(host_id) {
-  initDetailHosttBaseMonitorAvgLoadChart();
-  initDetailHosttBaseMonitorCPUChart();
-  initDetailHosttBaseMonitorMemChart();
-  initDetailHosttBaseMonitorDiskIoChart();
-  initDetailHosttBaseMonitorNetIoChart();
+  initDetailHostBaseMonitorAvgLoadChart();
+  initDetailHostBaseMonitorCPUChart();
+  initDetailHostBaseMonitorMemChart();
+  initDetailHostBaseMonitorDiskIoChart();
+  initDetailHostBaseMonitorNetIoChart();
 }
 
 
 // 平均负载图表
 var avgLoadChart = {}
-function initDetailHosttBaseMonitorAvgLoadChart() {
+function initDetailHostBaseMonitorAvgLoadChart() {
   // ! 模拟数据
   let avg_load_history = [
     {id: 162319, pro: 33.25, one: 1.33, five: 1.55, fifteen: 1.11, addtime: "10/27 00:12"},
@@ -1277,7 +1286,7 @@ function initDetailHosttBaseMonitorAvgLoadChart() {
 
 // CPU图表
 var memChart = {}
-function initDetailHosttBaseMonitorCPUChart() {
+function initDetailHostBaseMonitorCPUChart() {
   // ! 模拟数据
   let cpu_history = [
     {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
@@ -1376,7 +1385,7 @@ function initDetailHosttBaseMonitorCPUChart() {
 
 // 内存图表
 var memChart = {}
-function initDetailHosttBaseMonitorMemChart() {
+function initDetailHostBaseMonitorMemChart() {
   // ! 模拟数据
   let mem_history = [
     {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
@@ -1475,7 +1484,7 @@ function initDetailHosttBaseMonitorMemChart() {
 
 // 磁盘IO图表
 var diskIoChart = {}
-function initDetailHosttBaseMonitorDiskIoChart() {
+function initDetailHostBaseMonitorDiskIoChart() {
   // ! 模拟数据
   let disk_io_history = [
     {"id": 168906, "read_count": 386, "write_count": 531, "read_bytes": 5439488, "write_bytes": 9777152, "read_time": 1561, "write_time": 22025, "addtime": "11/03 00:00"}, 
@@ -1593,7 +1602,7 @@ function initDetailHosttBaseMonitorDiskIoChart() {
 
 // 网络IO图表
 var netIoChart = {}
-function initDetailHosttBaseMonitorNetIoChart() {
+function initDetailHostBaseMonitorNetIoChart() {
   // ! 模拟数据
   let net_io_history = [
     {"id": 168905, "up": 74.066, "down": 82.152, "total_up": 810516284, "total_down": 941393246, "down_packets": 3613980, "up_packets": 3192491, "addtime": "11/03 00:00"},
@@ -1710,6 +1719,82 @@ function initDetailHosttBaseMonitorNetIoChart() {
   }
   netIoChart.init();
 }
+
+// 日志文件列表
+function getDetailHostLogMonitorData() {
+  let log_file_list = [
+    {id: 1, name: 'access.log', size: '100M', modifyTime: '2021-10-10 10:10:10'},
+    {id: 2, name: 'error.log', size: '200M', modifyTime: '2021-10-10 10:10:10'},
+    {id: 3, name: 'info.log', size: '300M', modifyTime: '2021-10-10 10:10:10'},
+  ]
+  let logFileBody = '';
+  for(let logFile of log_file_list) {
+    logFileBody += `
+      <li class="log-path-item px-5 log-path cursor-pointer">${logFile.name}</li>  
+    `;
+  }
+  $("#logFileBody").html(logFileBody);
+
+}
+
+// 日志详情
+function getDetailHostLogMonitorDetailData() {
+  
+  let logFileDetail = {
+    path: '/www/syslog',
+    size: 23,
+    permission: '--rw-r--r--',
+    modifyTime: '2021-10-10 10:10:10',
+    content: '测试日志内容'
+  }
+  $("#logFileDetail .path").text(logFileDetail.path);
+  $("#logFileDetail .size").text(logFileDetail.size);
+  $("#logFileDetail .permission").text(logFileDetail.permission);
+  $("#logFileDetail .modifyTime").text(logFileDetail.modifyTime);
+  $("#logFileDetail .content").text(logFileDetail.content);
+
+}
+
+// 主机SSH登陆信息
+function getDetailHostSysMonitorData() {
+  let ssh_login_list = [
+    {id: 1, hostName: 'HOST1', ip: '192.168.1.3', port: 22, username: 'root', address: 'Guangdong', 'login_status': '', login_time: '2021-10-10 10:10:10'},
+    {id: 1, hostName: 'HOST1', ip: '192.168.1.3', port: 22, username: 'root', address: 'Guangdong', 'login_status': '', login_time: '2021-10-10 10:10:10'},
+    {id: 1, hostName: 'HOST1', ip: '192.168.1.3', port: 22, username: 'root', address: 'Guangdong', 'login_status': '', login_time: '2021-10-10 10:10:10'},
+  ]
+  let sshLoginBody = '';
+  for(let sshLogin of ssh_login_list) {
+    sshLoginBody += `
+      <tr>
+        <td>${sshLogin.hostName}</td>
+        <td>${sshLogin.ip}</td>
+        <td>${sshLogin.port}</td>
+        <td>${sshLogin.username}</td>
+        <td>${sshLogin.address}</td>
+        <td>${sshLogin.login_time}</td>
+      </tr>
+    `;
+  }
+  $("#sshLoginBody").html(sshLoginBody);
+
+  let ssh_command_list = [
+    {id: 1, user: 'root', command: 'ls', status: 'success', run_time: '2021-10-10 10:10:10'},
+    {id: 2, user: 'root', command: 'ls', status: 'success', run_time: '2021-10-10 10:10:10'},
+    {id: 3, user: 'root', command: 'ls', status: 'success', run_time: '2021-10-10 10:10:10'},
+  ]
+  let sshCommandBody = '';
+  for(let sshCommand of ssh_command_list) {
+    sshCommandBody += `
+      <tr>
+        <td>${sshCommand.user}</td>
+        <td>${sshCommand.run_time}</td>
+        <td>${sshCommand.command}</td>
+      </tr>
+    `;
+  }
+  $("#sshCommandBody").html(sshCommandBody);
+}
+  
 
 // <========================== 弹框获取数据方法 End
 
