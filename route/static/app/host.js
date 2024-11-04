@@ -158,36 +158,66 @@ function getWeb(page, search, type_id) {
 function openHostAdd() {
   layer.open({
     type: 1,
-    skin: 'demo-class',
-    area: '640px',
+    area: ['640px', '600px'],
     title: '添加主机',
     closeBtn: 1,
     shift: 0,
-    shadeClose: false,
-    content: "<form class='bt-form pd20 pb70' id='addhost'>\
-        <div class='line'>\
-          <span class='tname'>主机名</span>\
-          <div class='info-r c4'>\
-            <input id='hostName' class='bt-input-text' type='text' name='host_name' placeholder='主机名' style='width:458px' />\
-          </div>\
-        </div>\
-        <div class='line'>\
-          <span class='tname'>IP</span>\
-          <div class='info-r c4'>\
-            <input id='ip' class='bt-input-text' type='text' name='ip' placeholder='IP地址' style='width:458px' />\
-          </div>\
-        </div>\
-        <div class='line'>\
-          <span class='tname'>SSH公钥</span>\
-          <div class='info-r c4'>\
-            <input id='sshPkey' class='bt-input-text' type='text' name='ssh_pkey' placeholder='SSH公钥' style='width:458px' />\
-          </div>\
-        </div>\
-        <div class='bt-form-submit-btn'>\
-          <button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>\
-          <button type='button' class='btn btn-success btn-sm btn-title' onclick=\"hostAdd()\">提交</button>\
-        </div>\
-    </form>",
+    content: `
+    <div class="p-10 text-xl">
+      <div class="mb-6" hidden>
+        <h3 class="font-medium mb-4">立即接入被控享受以下功能</h3>
+        <ul class="space-y-2 bg-gray-100 p-5">
+          <li>全系统监控: 实时监控你的被控机器可用性、漏洞、恶意程序</li>
+          <li>实时告警: 监控到异常情况时多种通知告警</li>
+          <li>堡垒机: 子账号授权管理员登录服务器录音信息</li>
+        </ul>
+      </div>
+      
+      <div class="mb-6">
+        <h3 class="font-medium mb-4">安装步骤</h3>
+        <ol class="list-decimal list-inside space-y-2 bg-gray-100 p-5">
+          <li>复制安装脚本, 进入被监控服务器的SSH终端(需要root权限)后粘贴复制的命令</li>
+          <li>命令执行完成后服务器即是会看到等待接收的主机，点击接收即可以接收被监控端传入的数据</li>
+        </ol>
+      </div>
+      
+      <div class="mb-6">
+        <h3 class="font-medium mb-2 mb-4">获取命令</h3>
+        <div class="bg-gray-100 p-5">
+          <div class="mb-4">
+            <label class="block font-medium mb-4">操作系统</label>
+            <div class="flex items-center rounded">
+              <button class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-l">Linux</button>
+              <button class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded-r">Windows</button>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block font-medium mb-4">被控内网安装命令</label>
+            <div class="flex items-center bg-gray-200 p-5 rounded">
+              <div class="flex-1 overflow-x-auto">curl -sSO http://www.btkaixin.net/install/btmonitoragent.sh && bash btmonitoragent.sh https://192.168.3.62:806 e3359d2264ecc6ea29663f34dbc69a6a</div>
+              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded">复制</button>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block font-medium mb-4">被控公网安装命令</label>
+            <div class="flex items-center bg-gray-200 p-5 rounded">
+              <div class="flex-1 overflow-x-auto">curl -sSO http://www.btkaixin.net/install/btmonitoragent.sh && bash btmonitoragent.sh https://240e:3b1:44a1:f3b0:a00:27ff:fe54:e15e:806 e3359d2264ecc6ea29663f34dbc69a6a</div>
+              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded">复制</button>
+            </div>
+          </div>
+          <div hidden>
+            <h3 class="font-medium mb-4">主控IP</h3>
+            <div class="flex space-x-4">
+              <input type="text" placeholder="请输入主控IP" class="flex-1 bg-gray-200 text-white py-25 px-4 rounded" />
+              <button class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">获取命令</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
+    </div>
+    `
   });
 
   var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
