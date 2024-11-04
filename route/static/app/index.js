@@ -1,4 +1,610 @@
+
+
+getHostSummaryData();
+getAlarmEventData();
+getDangerCommandData();
+getSSHLoginData();
+getRDPLoginData();
+initCPUUsageChart();
+initMemUsageChart();
+initBandwidthUsageChart();
+initHostLoginChart();
+initHostDangerCmdChart();
+
+// 主机概览
+function getHostSummaryData() {
+  let host_list = [
+    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
+    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
+    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' }
+  ]
+  let host_summary_body = '';
+  host_list.forEach((host, index) => {
+    host_summary_body += `
+      <tr>
+        <td>${host.host_name}</td>
+        <td>${host.status}</td>
+        <td>${host.cpu}</td>
+        <td>${host.memory}</td>
+        <td>${host.net}</td>
+      </tr>
+    `
+  })
+  $('#hostSummaryBody').html(host_summary_body)
+
+}
+
+// 告警事件
+function getAlarmEventData() {
+  let alarm_list = [
+    { host_name: '主机1', alarm_type: 'CPU Usage', alerm_content: 'CPU使用率超过90%', alerm_level: 'High' },
+    { host_name: '主机2', alarm_type: 'CPU Usage', alerm_content: 'CPU使用率超过90%', alerm_level: 'High' },
+    { host_name: '主机3', alarm_type: 'CPU Usage', alerm_content: 'CPU使用率超过90%', alerm_level: 'High' }
+  ]
+  let alarm_event_body = '';
+  alarm_list.forEach((alarm, index) => {
+    alarm_event_body += `
+      <tr>
+        <td>${alarm.host_name}</td>
+        <td>${alarm.alarm_type}</td>
+        <td>${alarm.alerm_content}</td>
+        <td>${alarm.alerm_level}</td>
+      </tr>
+    `
+  });
+  $('#alarmEventBody').html(alarm_event_body);
+}
+
+// 危险命令执行
+function getDangerCommandData() {
+  let command_list = [
+    { host_name: '主机1', command: 'rm -rf /', time: '2021-01-01 12:00:00' },
+    { host_name: '主机2', command: 'rm -rf /', time: '2021-01-01 12:00:00' },
+    { host_name: '主机3', command: 'rm -rf /', time: '2021-01-01 12:00:00' }
+  ]
+  let command_body = '';
+  command_list.forEach((command, index) => {
+    command_body += `
+      <tr>
+        <td>${command.host_name}</td>
+        <td>${command.command}</td>
+        <td>${command.time}</td>
+      </tr>
+    `
+  })
+  $('#dangerCmdBody').html(command_body)
+}
+  
+
+// SSH登陆日志
+function getSSHLoginData() {
+  let ssh_login_list = [
+    { host_name: '主机1', ip: '192.168.1.1', login_time: '2021-01-01 12:00:00', status: 'Success' },
+    { host_name: '主机2', ip: '192.168.1.2', login_time: '2021-01-01 12:00:00', status: 'Success' },
+    { host_name: '主机3', ip: '192.168.1.3', login_time: '2021-01-01 12:00:00', status: 'Success' }
+  ]
+  let ssh_login_body = '';
+
+  ssh_login_list.forEach((ssh_login, index) => {
+    ssh_login_body += `
+      <tr>
+        <td>${ssh_login.host_name}</td>
+        <td>${ssh_login.ip}</td>
+        <td>${ssh_login.login_time}</td>
+        <td>${ssh_login.status}</td>
+      </tr>
+    `
+  });
+  $('#sshLoginBody').html(ssh_login_body)
+
+}
+
+// 远程桌面登陆日志
+function getRDPLoginData() {
+  let rdp_login_list = [
+    { host_name: '主机1', ip: '192.168.1.1', login_time: '2021-01-01 12:00:00', status: 'Success' },
+    { host_name: '主机2', ip: '192.168.1.2', login_time: '2021-01-01 12:00:00', status: 'Success' },
+    { host_name: '主机3', ip: '192.168.1.3', login_time: '2021-01-01 12:00:00', status: 'Success' }
+  ]
+  let rdp_login_body = '';
+
+  rdp_login_list.forEach((rdp_login, index) => {
+    rdp_login_body += `
+      <tr>
+        <td>${rdp_login.host_name}</td>
+        <td>${rdp_login.ip}</td>
+        <td>${rdp_login.login_time}</td>
+        <td>${rdp_login.status}</td>
+      </tr>
+    `
+  });
+  $('#rdpLoginBody').html(rdp_login_body)
+
+}
+
+// 主机CPU使用率图表
+var cpuUsageChart = {}
+function initCPUUsageChart() {
+  // ! 模拟数据
+  let cpu_usage = [
+    { pro: 43.7, host_name: 'localhost' },
+    { pro: 23.7, host_name: '3.61虚拟机' }
+  ]
+
+  cpuUsageChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('cpuUsageView')),
+    init() {
+      for(var i = 0; i < cpu_usage.length; i++){
+        
+        this.xData.push(cpu_usage[i].addtime);
+        this.yData.push(cpu_usage[i].pro);
+      }
+      let option = {
+        tooltip: {},
+        grid: {
+          left: '5%',
+          right: '5%',
+          top: '5%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'value',
+          min: 0,
+          max: 4,
+          interval: 0.5,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLine: {
+            show: false,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        yAxis: {
+          type: 'category',
+          data: ['', '', '', '', '', '', '', '', '虚拟机', 'localhost'],
+          axisLine: {
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        series: [{
+          type: 'bar',
+          data: ['', '', '', '', '', '', '', '', 3.61, 3],
+          label: {
+            normal: { // 在 3.x 中使用 normal 设置标签
+              show: false,
+              position: 'insideRight',
+              formatter: '{c}',
+              textStyle: {
+                color: '#efefef'
+              }
+            }
+          },
+          itemStyle: {
+            normal: { // 在 3.x 中使用 normal 设置样式
+              color: '#5087EB',
+              barBorderRadius: 50 // 在 3.x 中使用 barBorderRadius
+            }
+          },
+          barWidth: 15 // 设置柱体宽度
+        }]
+      }
+      ;
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  cpuUsageChart.init();
+}
+
+// 主机内存使用率图表
+var memUsageChart = {}
+function initMemUsageChart() {
+  // ! 模拟数据
+  let mem_usage = [
+    { mem: 43.7, host_name: 'localhost' },
+    { mem: 23.7, host_name: '3.61虚拟机' }
+  ]
+
+  memUsageChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('memUsageView')),
+    init() {
+      for(var i = 0; i < mem_usage.length; i++){
+        
+        this.xData.push(mem_usage[i].addtime);
+        this.yData.push(mem_usage[i].pro);
+      }
+      let option = {
+        tooltip: {},
+        grid: {
+          left: '5%',
+          right: '5%',
+          top: '5%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'value',
+          min: 0,
+          max: 4,
+          interval: 0.5,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLine: {
+            show: false,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        yAxis: {
+          type: 'category',
+          data: ['', '', '', '', '', '', '', '', '虚拟机', 'localhost'],
+          axisLine: {
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        series: [{
+          type: 'bar',
+          data: ['', '', '', '', '', '', '', '', 3.61, 3],
+          label: {
+            normal: { // 在 3.x 中使用 normal 设置标签
+              show: false,
+              position: 'insideRight',
+              formatter: '{c}',
+              textStyle: {
+                color: '#efefef'
+              }
+            }
+          },
+          itemStyle: {
+            normal: { // 在 3.x 中使用 normal 设置样式
+              color: '#5087EB',
+              barBorderRadius: 50 // 在 3.x 中使用 barBorderRadius
+            }
+          },
+          barWidth: 15 // 设置柱体宽度
+        }]
+      }
+      ;
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  memUsageChart.init();
+}
+
+// 主机带宽使用排行
+var bandwidthUsageChart = {}
+function initBandwidthUsageChart() {
+  // ! 模拟数据
+  let bandwidth_usage = [
+    { bandwidth: 43.7, host_name: 'localhost' },
+    { bandwitdh: 23.7, host_name: '3.61虚拟机' }
+  ]
+
+  bandwidthUsageChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('bandwidthUsageView')),
+    init() {
+      for(var i = 0; i < bandwidth_usage.length; i++){
+        
+        this.xData.push(bandwidth_usage[i].addtime);
+        this.yData.push(bandwidth_usage[i].pro);
+      }
+      let option = {
+        tooltip: {},
+        grid: {
+          left: '5%',
+          right: '5%',
+          top: '5%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'value',
+          min: 0,
+          max: 4,
+          interval: 0.5,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLine: {
+            show: false,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        yAxis: {
+          type: 'category',
+          data: ['', '', '', '', '', '', '', '', '虚拟机', 'localhost'],
+          axisLine: {
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        series: [{
+          type: 'bar',
+          data: ['', '', '', '', '', '', '', '', 3.61, 3],
+          label: {
+            normal: { // 在 3.x 中使用 normal 设置标签
+              show: false,
+              position: 'insideRight',
+              formatter: '{c}',
+              textStyle: {
+                color: '#efefef'
+              }
+            }
+          },
+          itemStyle: {
+            normal: { // 在 3.x 中使用 normal 设置样式
+              color: '#5087EB',
+              barBorderRadius: 50 // 在 3.x 中使用 barBorderRadius
+            }
+          },
+          barWidth: 15 // 设置柱体宽度
+        }]
+      }
+      ;
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  bandwidthUsageChart.init();
+}
+
+// 主机登陆次数
+var hostLoginChart = {}
+function initHostLoginChart() {
+  // ! 模拟数据
+  let host_login = [
+    { bandwidth: 43.7, host_name: 'localhost' },
+    { bandwitdh: 23.7, host_name: '3.61虚拟机' }
+  ]
+
+  hostLoginChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('hostLoginView')),
+    init() {
+      for(var i = 0; i < host_login.length; i++){
+        
+        this.xData.push(host_login[i].addtime);
+        this.yData.push(host_login[i].pro);
+      }
+      let option = {
+        tooltip: {},
+        grid: {
+          left: '5%',
+          right: '5%',
+          top: '5%',
+          bottom: '5%',
+          containLabel: true
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 6,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLine: {
+            show: false,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        xAxis: {
+          type: 'category',
+          data: ['10-29', '10-30', '10-31', '11-01', '11-02', '11-03', '11-04'],
+          axisLine: {
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        series: [{
+          type: 'bar',
+          data: [3, 4, 1, 2, 5, 3, 3],
+          label: {
+            normal: { // 在 3.x 中使用 normal 设置标签
+              show: false,
+              position: 'insideRight',
+              formatter: '{c}',
+              textStyle: {
+                color: '#efefef'
+              }
+            }
+          },
+          itemStyle: {
+            normal: { // 在 3.x 中使用 normal 设置样式
+              color: '#5087EB',
+              barBorderRadius: 50 // 在 3.x 中使用 barBorderRadius
+            }
+          },
+          barWidth: 15 // 设置柱体宽度
+        }]
+      }
+      ;
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  hostLoginChart.init();
+}
+
+// 所有主机危险命令执行次数
+var hostDangerCmdChart = {}
+function initHostDangerCmdChart() {
+  // ! 模拟数据
+  let host_danger_cmd = [
+    { bandwidth: 43.7, host_name: 'localhost' },
+    { bandwitdh: 23.7, host_name: '3.61虚拟机' }
+  ]
+
+  hostDangerCmdChart = {
+    xData: [],
+    yData: [],
+    myChart: echarts.init(document.getElementById('hostDangerCmdView')),
+    init() {
+      for(var i = 0; i < host_danger_cmd.length; i++){
+        
+        this.xData.push(host_danger_cmd[i].addtime);
+        this.yData.push(host_danger_cmd[i].pro);
+      }
+      let option = {
+        tooltip: {},
+        grid: {
+          left: '5%',
+          right: '5%',
+          top: '5%',
+          bottom: '5%',
+          containLabel: true
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 6,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLine: {
+            show: false,
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        xAxis: {
+          type: 'category',
+          data: ['10-29', '10-30', '10-31', '11-01', '11-02', '11-03', '11-04'],
+          axisLine: {
+            lineStyle: {
+              color: '#efefef'
+            }
+          },
+          axisLabel: {
+            textStyle: { // 在 3.x 中使用 textStyle 设置颜色
+              color: 'black'
+            }
+          }
+        },
+        series: [{
+          type: 'bar',
+          data: [3, 4, 1, 2, 5, 3, 3],
+          label: {
+            normal: { // 在 3.x 中使用 normal 设置标签
+              show: false,
+              position: 'insideRight',
+              formatter: '{c}',
+              textStyle: {
+                color: '#efefef'
+              }
+            }
+          },
+          itemStyle: {
+            normal: { // 在 3.x 中使用 normal 设置样式
+              color: '#5087EB',
+              barBorderRadius: 50 // 在 3.x 中使用 barBorderRadius
+            }
+          },
+          barWidth: 15 // 设置柱体宽度
+        }]
+      }
+      ;
+      this.myChart.setOption(option);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    }
+  }
+  hostDangerCmdChart.init();
+}
+
+
 $(function() {
+  
     $(".mem-release").hover(function() {
         $(this).addClass("shine_green");
         if (!($(this).hasClass("mem-action"))) {
