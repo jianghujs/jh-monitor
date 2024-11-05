@@ -80,8 +80,7 @@ function getWeb(page, search, type_id) {
 					<td>" + disk_status + "</td>\
 					<td style='text-align:right; color:#bbb'>\
 					    <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
-					    | <a href='javascript:;' class='btlink' onclick=\"webEdit('" + data.data[i].host_id + "','" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">设置</a>\
-              | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
+					    | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
 					</td></tr>"
 			
 			$("#webBody").append(body);
