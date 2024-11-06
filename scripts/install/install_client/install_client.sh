@@ -181,14 +181,23 @@ Setup_SSH_Config(){
     chown "$USERNAME:$USERNAME" "$SSH_DIR"
     chmod 700 "$SSH_DIR"
 
-    PUBLIC_KEY=$(curl -s "$monitor_url/pub/get_pub_key")
-    echo $PUBLIC_KEY
+    PUBLIC_KEY_DATA=$(curl -s "$monitor_url/pub/get_pub_key")
+    echo $PUBLIC_KEY_DATA
 
-    if [ ! -f "$AUTHORIZED_KEYS" ] || ! grep -q "$PUBLIC_KEY" "$AUTHORIZED_KEYS"; then
-        echo "$PUBLIC_KEY" >> "$AUTHORIZED_KEYS"
-        chown "$USERNAME:$USERNAME" "$AUTHORIZED_KEYS"
-        chmod 600 "$AUTHORIZED_KEYS"
-        echo "公钥添加成功。"
+    PUBLIC_KEY_DATA_STATUS=$(echo $PUBLIC_KEY_DATA | awk -F 'status":' '{print $2}' | awk -F ',' '{print $1}'  | sed 's/ //g')
+    if [ "$PUBLIC_KEY_DATA_STATUS" == "true" ]; then
+        PUBLIC_KEY=$(echo $PUBLIC_KEY_DATA | awk -F 'data":' '{print $2}' | awk -F '"' '{print $2}')
+        
+        if ! grep -Fxq "$PUBLIC_KEY" $AUTHORIZED_KEYS; then
+          echo $PUBLIC_KEY >> $AUTHORIZED_KEYS
+          chown "$USERNAME:$USERNAME" "$AUTHORIZED_KEYS"
+          chmod 600 "$AUTHORIZED_KEYS"
+          echo "公钥添加成功。"
+        fi
+
+    else
+        echo "获取公钥失败"
+        exit 1
     fi
 }
 
