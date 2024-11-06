@@ -206,8 +206,4 @@ class host_api:
                 count = 0
             return tmp
 
-    def getPubKeyApi(self):
-        if os.path.exists('/root/.ssh/id_rsa.pub'):
-            return jh.returnJson(True, 'ok', jh.readFile('/root/.ssh/id_rsa.pub'))
-        return jh.returnJson(True, 'ok', '')
 

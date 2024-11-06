@@ -279,8 +279,16 @@ elif [[ "$action" == "install" ]];then
     # else
     #     Install_Deb_Pack
     # fi
-    Install_Monitor_Agent
+
+    # 安装客户端
+    # Install_Monitor_Agent
+    
+    # 添加ansible用户
     Add_Ansible_User
+
+    # 配置服务端访问权限
     Setup_SSH_Config
+
+    # 通知服务端添加主机
     Add_Host_To_Monitor
 fi

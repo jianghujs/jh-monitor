@@ -841,5 +841,3 @@ class system_api:
         jh.writeFile(control_report_cycle_file, json.dumps(params))
 
         return jh.returnJson(True, '设置成功!')
-
-    
