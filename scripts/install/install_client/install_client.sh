@@ -209,7 +209,8 @@ Add_Host_To_Monitor(){
     if [[ "$add_res" =~ "true" ]]; then
         echo "添加主机成功"
     else
-        echo "添加主机失败"
+        add_res_msg=$(echo $add_res | awk -F 'msg": "' '{print $2}' | awk -F '"' '{print $1}')
+        echo -e "添加主机失败，$add_res_msg"
         exit 1
     fi
 }
