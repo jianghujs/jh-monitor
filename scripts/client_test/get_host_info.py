@@ -93,7 +93,7 @@ def main():
     }
     
     # 将字典转换为 JSON 格式的字符串并打印
-    print(json.dumps(host_info, ensure_ascii=False, indent=4))
+    print(json.dumps(host_info))
 
 
 if __name__ == '__main__':

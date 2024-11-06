@@ -19,6 +19,7 @@ import time
 import threading
 import psutil
 import traceback
+import ansible_runner
 
 if sys.version_info[0] == 2:
     reload(sys)
@@ -408,182 +409,6 @@ def systemTask():
         time.sleep(30)
         systemTask()
 
-
-# -------------------------------------- PHP监控 start --------------------------------------------- #
-# 502错误检查线程
-def check502Task():
-    try:
-        while True:
-            if os.path.exists(jh.getRunDir() + '/data/502Task.pl'):
-                check502()
-            time.sleep(30)
-    except:
-        time.sleep(30)
-        check502Task()
-
-
-def check502():
-    try:
-        verlist = ['52', '53', '54', '55', '56', '70',
-                   '71', '72', '73', '74', '80', '81', '82']
-        for ver in verlist:
-            sdir = jh.getServerDir()
-            php_path = sdir + '/php/' + ver + '/sbin/php-fpm'
-            if not os.path.exists(php_path):
-                continue
-            if checkPHPVersion(ver):
-                continue
-            if startPHPVersion(ver):
-                print('检测到PHP-' + ver + '处理异常,已自动修复!')
-                jh.writeLog('PHP守护程序', '检测到PHP-' + ver + '处理异常,已自动修复!')
-    except Exception as e:
-        print(str(e))
-
-
-# 处理指定PHP版本
-def startPHPVersion(version):
-    sdir = jh.getServerDir()
-    try:
-
-        # system
-        phpService = jh.systemdCfgDir() + '/php' + version + '.service'
-        if os.path.exists(phpService):
-            jh.execShell("systemctl restart php" + version)
-            if checkPHPVersion(version):
-                return True
-
-        # initd
-        fpm = sdir + '/php/init.d/php' + version
-        php_path = sdir + '/php/' + version + '/sbin/php-fpm'
-        if not os.path.exists(php_path):
-            if os.path.exists(fpm):
-                os.remove(fpm)
-            return False
-
-        if not os.path.exists(fpm):
-            return False
-
-        # 尝试重载服务
-        os.system(fpm + ' reload')
-        if checkPHPVersion(version):
-            return True
-
-        # 尝试重启服务
-        cgi = '/tmp/php-cgi-' + version + '.sock'
-        pid = sdir + '/php/' + version + '/var/run/php-fpm.pid'
-        data = jh.execShell("ps -ef | grep php/" + version +
-                            " | grep -v grep|grep -v python |awk '{print $2}'")
-        if data[0] != '':
-            os.system("ps -ef | grep php/" + version +
-                      " | grep -v grep|grep -v python |awk '{print $2}' | xargs kill ")
-        time.sleep(0.5)
-        if not os.path.exists(cgi):
-            os.system('rm -f ' + cgi)
-        if not os.path.exists(pid):
-            os.system('rm -f ' + pid)
-        os.system(fpm + ' start')
-        if checkPHPVersion(version):
-            return True
-
-        # 检查是否正确启动
-        if os.path.exists(cgi):
-            return True
-    except Exception as e:
-        print(str(e))
-        return True
-
-
-def getFpmConfFile(version):
-    return jh.getServerDir() + '/php/' + version + '/etc/php-fpm.d/www.conf'
-
-
-def getFpmAddress(version):
-    fpm_address = '/tmp/php-cgi-{}.sock'.format(version)
-    php_fpm_file = getFpmConfFile(version)
-    try:
-        content = readFile(php_fpm_file)
-        tmp = re.findall(r"listen\s*=\s*(.+)", content)
-        if not tmp:
-            return fpm_address
-        if tmp[0].find('sock') != -1:
-            return fpm_address
-        if tmp[0].find(':') != -1:
-            listen_tmp = tmp[0].split(':')
-            if bind:
-                fpm_address = (listen_tmp[0], int(listen_tmp[1]))
-            else:
-                fpm_address = ('127.0.0.1', int(listen_tmp[1]))
-        else:
-            fpm_address = ('127.0.0.1', int(tmp[0]))
-        return fpm_address
-    except:
-        return fpm_address
-
-
-def checkPHPVersion(version):
-    # 检查指定PHP版本
-    try:
-        sock = getFpmAddress(version)
-        data = jh.requestFcgiPHP(sock, '/phpfpm_status_' + version + '?json')
-        result = str(data, encoding='utf-8')
-    except Exception as e:
-        result = 'Bad Gateway'
-
-    # print(version,result)
-    # 检查openresty
-    if result.find('Bad Gateway') != -1:
-        return False
-    if result.find('HTTP Error 404: Not Found') != -1:
-        return False
-
-    # 检查Web服务是否启动
-    if result.find('Connection refused') != -1:
-        global isTask
-        if os.path.exists(isTask):
-            isStatus = jh.readFile(isTask)
-            if isStatus == 'True':
-                return True
-
-        # systemd
-        systemd = jh.systemdCfgDir() + '/openresty.service'
-        if os.path.exists(systemd):
-            execShell('systemctl reload openresty')
-            return True
-        # initd
-        initd = '/etc/init.d/openresty'
-        if os.path.exists(initd):
-            os.system(initd + ' reload')
-    return True
-
-# --------------------------------------PHP监控 end--------------------------------------------- #
-
-
-# --------------------------------------OpenResty Auto Restart Start --------------------------------------------- #
-# 解决acme.sh续签后,未起效。
-def openrestyAutoRestart():
-    try:
-        while True:
-            # 检查是否安装
-            odir = jh.getServerDir() + '/openresty'
-            if not os.path.exists(odir):
-                time.sleep(86400)
-                continue
-
-            # systemd
-            systemd = '/lib/systemd/system/openresty.service'
-            initd = '/etc/init.d/openresty'
-            if os.path.exists(systemd):
-                execShell('systemctl reload openresty')
-            elif os.path.exists(initd):
-                os.system(initd + ' reload')
-            time.sleep(86400)
-    except Exception as e:
-        print(str(e))
-        time.sleep(86400)
-
-# --------------------------------------OpenResty Auto Restart End   --------------------------------------------- #
-
-
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
 def restartService():
     restartTip = 'data/restart.pl'
@@ -651,22 +476,15 @@ def setDaemon(t):
     else:
         t.setDaemon(True)
     return t
+
+
     
 if __name__ == "__main__":
+   
     # 系统监控
     sysTask = threading.Thread(target=systemTask)
     sysTask = setDaemon(sysTask)
     sysTask.start()
-
-    # PHP 502错误检查线程
-    php502 = threading.Thread(target=check502Task)
-    php502 = setDaemon(php502)
-    php502.start()
-
-    # OpenResty Auto Restart Start
-    oar = threading.Thread(target=openrestyAutoRestart)
-    oar = setDaemon(oar)
-    oar.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)

@@ -70,7 +70,7 @@ function getWeb(page, search, type_id) {
             </a>\
           </td>\
 					<td>" + status + "</td>\
-					<td>" + data.data[i].host_group_name + "</td>\
+					<td>" + (data.data[i]['host_group_name'] || '') + "</td>\
 					<td>" + (data.data[i]['load_avg']['1min'] || '') + "</td>\
 					<td>" + (data.data[i]['cpu_info']['percent'] || '') + "</td>\
 					<td>" + (data.data[i]['mem_info']['percent'] || '') + "</td>\
