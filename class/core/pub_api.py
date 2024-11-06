@@ -43,8 +43,15 @@ class pub_api:
     def addHostApi(self):
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
+        host_id = 'H_' + host_name + '_' + jh.getRandomString(4)
+
+        exist_host = jh.M('host').where('ip=?', (ip,)).field('ip').find()
+        if len(exist_host) > 0:
+            return jh.returnJson(False, '主机已经存在!')
+        
+        # 添加主机
+        jh.M('host').add("host_id,host_name,ip,addtime", (host_id,host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
         with open('/etc/ansible/hosts', 'a') as f:
             f.write(f"{ip}\n")
 
-        jh.M('host').add("host_name,ip,addtime", (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
         return jh.returnJson(True, '主机添加成功!')
