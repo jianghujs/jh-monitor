@@ -296,9 +296,7 @@ def clientTask():
                         'firewall_info': json.dumps(firewall_info),
                         'addtime': addtime
                     }
-                    # 获取host_detail的所有key用,分割的字符串
                     host_detail_keys = ','.join(list(host_detail.keys()))
-                    # 获取host_detail的所有value用,分割的字符串
                     host_detail_values = tuple(host_detail.values())
 
                     sql.table('host_detail').add(host_detail_keys, host_detail_values)
