@@ -65,6 +65,28 @@ function toSizeG(bytes){
 	return b;
 }
 
+//格式化值
+function formatValue(v, unit = '') {
+  // console.log(v, unit, typeof v)
+  return (v === null || v === undefined || v === '' || typeof v === 'undefined')? '': (v + unit);
+}
+
+// 高亮异常的比例值
+function renderPercentColor() {
+  // jquery查找全部class为percent-color的元素，根据元素内的值，大于80则设置为红色
+  let percentColors = $('.percent-color');
+  percentColors.each(function() {
+    let val = ($(this).text() || '').replace('%', '');
+    let color = 'auto';
+    if (val > 80) {
+      color = 'red';
+    } else if (val > 60) {
+      color = 'orange'
+    } 
+    $(this).css('color', color);
+  })
+}
+
 //to unixtime
 function toUnixTime(txt){
         var unix = new Date(Date.parse(txt.replace(/-/g,'/'))).getTime();

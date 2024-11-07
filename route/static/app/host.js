@@ -42,10 +42,10 @@ function getWeb(page, search, type_id) {
       let net_speed = '';
       let net_total = '';
       if (data.data[i].net_info && data.data[i].net_info.length > 0) {
-        net_speed += "<div>" + (data.data[i].net_info[0]['sent_per_second'] || '') + "</div>";
-        net_speed += "<div>" + (data.data[i].net_info[0]['recv_per_second'] || '') + "</div>";
-        net_total += "<div>" + (data.data[i].net_info[0]['sent'] || '') + "</div>";
-        net_total += "<div>" + (data.data[i].net_info[0]['recv'] || '') + "</div>";
+        net_speed += "<div>" + formatValue(data.data[i].net_info[0]['sent_per_second'], 'B') + "</div>";
+        net_speed += "<div>" + formatValue(data.data[i].net_info[0]['recv_per_second'], 'B') + "</div>";
+        net_total += "<div>" + formatValue(data.data[i].net_info[0]['sent'], 'B') + "</div>";
+        net_total += "<div>" + formatValue(data.data[i].net_info[0]['recv'], 'B') + "</div>";
       }
 
       // 磁盘
@@ -53,8 +53,8 @@ function getWeb(page, search, type_id) {
       let disk_status = '';
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
         for (let j = 0; j < data.data[i].disk_info.length; j++) {
-          disk_speed += "<div>" + (data.data[i].disk_info[j]['read_per_second'] || '') + "</div>";
-          disk_speed += "<div>" + (data.data[i].disk_info[j]['write_per_second'] || '') + "</div>";
+          disk_speed += "<div>" + formatValue(data.data[i].disk_info[j]['read_per_second'], 'B') + "</div>";
+          disk_speed += "<div>" + formatValue(data.data[i].disk_info[j]['write_per_second'], 'B') + "</div>";
           if(data.data[i].disk_info[j]['status']) {
             disk_status = "<a href='javascript:;' title='紧张' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
           } else {
@@ -70,10 +70,10 @@ function getWeb(page, search, type_id) {
             </a>\
           </td>\
 					<td>" + status + "</td>\
-					<td>" + (data.data[i]['host_group_name']) + "</td>\
-					<td>" + (data.data[i]['load_avg']['1min']) + "</td>\
-					<td>" + (data.data[i]['cpu_info']['percent']) + "</td>\
-					<td>" + (data.data[i]['mem_info']['percent']) + "</td>\
+					<td>" + formatValue(data.data[i]['host_group_name']) + "</td>\
+					<td class='percent-color'>" + formatValue(data.data[i]['load_avg']['1min']) + "</td>\
+					<td class='percent-color'>" + formatValue(data.data[i]['cpu_info']['percent'], '%') + "</td>\
+					<td class='percent-color'>" + formatValue(data.data[i]['mem_info']['usedPercent'], '%') + "</td>\
 					<td>" + net_speed + "</td>\
 					<td>" + net_total + "</td>\
 					<td>" + disk_speed + "</td>\
@@ -84,6 +84,8 @@ function getWeb(page, search, type_id) {
 					</td></tr>"
 			
 			$("#webBody").append(body);
+
+      renderPercentColor();
 			//setEdate(data.data[i].id,data.data[i].edate);
          	//设置到期日期
 			function getDate(a) {

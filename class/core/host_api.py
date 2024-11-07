@@ -95,7 +95,7 @@ class host_api:
 
     def parseDetailJSONValue(self, host_detail):
         # 转成json
-        host_detail['host_group_name'] = host_detail.get('host_group_name', '')
+        host_detail['host_group_name'] = host_detail['host_group_name'] if host_detail.get('host_group_name') is not None else ''
         host_detail['host_info'] = json.loads(host_detail['host_info']) if host_detail.get('host_info') is not None else {}
         host_detail['cpu_info'] = json.loads(host_detail['cpu_info']) if host_detail.get('cpu_info') is not None else {}
         host_detail['mem_info'] = json.loads(host_detail['mem_info']) if host_detail.get('mem_info') is not None else {}
