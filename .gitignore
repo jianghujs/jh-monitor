@@ -185,4 +185,7 @@ node_modules
 package-lock.json
 package.json.checksum
 
-scripts/client_test/artifacts
+scripts/client/artifacts
+data/artifacts
+data/__pycache__
+data/env

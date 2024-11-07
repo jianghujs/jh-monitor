@@ -1,15 +1,17 @@
+# get_host_temperature.yml -e "script_name=get_host_info.py"
 ---
 - name: Copy and execute Python script on target machine
   hosts: all  # 替换为您的目标机器组名称
   vars:
-    local_python_script: get_host_info.py  # 本地 Python 脚本路径
-    remote_python_script_path: /tmp/get_host_info.py  # 目标机器上的路径
+    script_name: "" 
+    local_python_script_path: "/www/server/jh-monitor/scripts/client/{{script_name}}"  # 本地 Python 脚本路径
+    remote_python_script_path: "/tmp/{{script_name}}"  # 目标机器上的路径
 
   tasks:
 
     - name: Copy Python script to target machine
       copy:
-        src: "{{ local_python_script }}"
+        src: "{{ local_python_script_path }}"
         dest: "{{ remote_python_script_path }}"
         mode: '0755'
 

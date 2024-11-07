@@ -29,6 +29,8 @@ if sys.version_info[0] == 2:
 sys.path.append(os.getcwd() + "/class/core")
 import jh
 import db
+sys.path.append(os.getcwd() + "/scripts/client")
+from run_script_batch import run_script_batch
 
 # print sys.path
 
@@ -224,27 +226,103 @@ def siteEdate():
         print(str(e))
 
 
-def systemTask():
+def clientTask():
     # 系统监控任务
     try:
-        import system_api
-        import psutil
-        sm = system_api.system_api()
+        import host_api
+        h_api = host_api.host_api()
+        sql = db.Sql()
+        count = 0
         filename = 'data/control.conf'
-
-        sql = db.Sql().dbfile('system')
-        csql = jh.readFile('data/sql/system.sql')
-        csql_list = [sql.strip() for sql in csql.split(';') if sql.strip()]
-        for index in range(len(csql_list)):
-            sql.execute(csql_list[index], ())
-
-        cpuIo = cpu = {}
-        cpuCount = psutil.cpu_count()
-        used = count = 0
-        reloadNum = 0
-        network_up = network_down = diskio_1 = diskio_2 = networkInfo = cpuInfo = diskInfo = None
-
+        
         while True:
+            # 预备主机数据
+            hostM = jh.M('view01_host')
+            host_list = hostM.field(h_api.host_field).select()
+            print('host_list', host_list)
+            
+            # 获取配置的保留天数
+            day = 30
+            # try:
+            #     day = int(jh.readFile(filename))
+            #     if day < 1:
+            #         time.sleep(10)
+            #         continue
+            # except:
+            #     day = 30
+            addtime = int(time.time())
+            deltime = addtime - (day * 86400)
+
+            # 执行脚本
+            script_list = ['get_host_info.py', 'get_host_usage.py']
+            batch_result = run_script_batch(script_list)
+
+            # 填充执行结果
+            for r in batch_result:
+                ip = r['ip']
+                data = r['data']
+
+                if ip is not None and data is not None:
+                    host_info = data.get('get_host_info.py', {})
+                    host_usage = data.get('get_host_usage.py', {})
+                    cpu_info = host_usage.get('cpu_info', {})
+                    mem_info = host_usage.get('mem_info', {})
+                    disk_info = host_usage.get('disk_info', [])
+                    net_info = host_usage.get('net_info', [])
+                    load_avg = host_usage.get('load_avg', {})
+                    firewall_info = host_usage.get('firewall_info', {})
+
+                    print('ip', ip)
+                    # 从host_list找到ip匹配的host
+                    host_data = [h for h in host_list if h.get('ip') == ip]
+                    if len(host_data) == 0:
+                        print("未匹配到主机")
+                        continue
+                    host = host_data[0]
+                    print('host', host)
+                    
+                    # INSERT INTO `host_detail` (host_id, host_name, host_status, uptime, host_info, cpu_info, mem_info, disk_info, net_info, load_avg, firewall_info, port_info, backup_info, temperature_info, ssh_user_list, last_update, addtime) VALUES
+                    # ('H00001', 'Host1', 'Running', '15 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00'),
+                    # ('H00002', 'Host2', 'Running', '20 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00'),
+                    # ('H00003', 'Host3', 'Stopped', '5 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00');
+
+
+                    host_detail = {
+                        'host_id': host['host_id'],
+                        'host_name': host['host_name'],
+                        'host_status': 'Running',
+                        'uptime': data.get('uptime', ''),
+                        'host_info': json.dumps(host_info),
+                        'cpu_info': json.dumps(cpu_info),
+                        'mem_info': json.dumps(mem_info),
+                        'disk_info': json.dumps(disk_info),
+                        'net_info': json.dumps(net_info),
+                        'load_avg': json.dumps(load_avg),
+                        'firewall_info': json.dumps(firewall_info),
+                        'addtime': addtime
+                    }
+                    # 获取host_detail的所有key用,分割的字符串
+                    host_detail_keys = ','.join(list(host_detail.keys()))
+                    print(host_detail_keys)
+                    # 获取host_detail的所有value用,分割的字符串
+                    host_detail_values = tuple(host_detail.values())
+                    print(host_detail_values)
+
+                    sql.table('host_detail').add(host_detail_keys, host_detail_values)
+                    sql.table('host_detail').where("addtime<?", (deltime,)).delete()
+
+                
+
+            time.sleep(5)
+            count += 1
+            continue
+            run_result = run_script('get_host_info.py')
+            print('run_result', run_result)
+            time.sleep(5)
+            count += 1
+            continue
+
+
             if not os.path.exists(filename):
                 time.sleep(10)
                 continue
@@ -481,10 +559,10 @@ def setDaemon(t):
     
 if __name__ == "__main__":
    
-    # 系统监控
-    sysTask = threading.Thread(target=systemTask)
-    sysTask = setDaemon(sysTask)
-    sysTask.start()
+    # client监控
+    ct = threading.Thread(target=clientTask)
+    ct = setDaemon(ct)
+    ct.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)

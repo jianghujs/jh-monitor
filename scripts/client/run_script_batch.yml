@@ -1,0 +1,26 @@
+---
+- name: Copy and execute multiple Python scripts on target machines
+  hosts: all  # 替换为您的目标机器组名称
+  vars:
+    local_script_base_path: "/www/server/jh-monitor/scripts/client"
+    remote_script_base_path: "/tmp/"
+
+  tasks:
+    - name: Copy Python scripts to target machine
+      copy:
+        src: "{{ local_script_base_path }}/{{ item }}"
+        dest: "{{ remote_script_base_path }}/{{ item }}"
+        mode: '0755'
+      loop: "{{ script_names }}"
+
+    - name: Execute Python scripts
+      command: python3 "{{ remote_script_base_path }}/{{ item }}"
+      register: result
+      loop: "{{ script_names }}"
+
+    - name: Return Results
+      debug:
+        msg:
+          - "{{ item.item }}"
+          - "{{ item.stdout }}"
+      loop: "{{ result.results }}"
