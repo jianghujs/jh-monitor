@@ -19,7 +19,10 @@ import time
 import threading
 import psutil
 import traceback
-import ansible_runner
+from colorama import init, Fore, Style
+
+# 初始化 colorama
+init(autoreset=True)
 
 if sys.version_info[0] == 2:
     reload(sys)
@@ -76,7 +79,7 @@ def jh_async(f):
 
 
 @jh_async
-def restartMw():
+def restartPanel():
     time.sleep(1)
     cmd = jh.getRunDir() + '/scripts/init.d/jhm reload &'
     jh.execShell(cmd)
@@ -236,10 +239,6 @@ def clientTask():
         filename = 'data/control.conf'
         
         while True:
-            # 预备主机数据
-            hostM = jh.M('view01_host')
-            host_list = hostM.field(h_api.host_field).select()
-            print('host_list', host_list)
             
             # 获取配置的保留天数
             day = 30
@@ -252,6 +251,10 @@ def clientTask():
             #     day = 30
             addtime = int(time.time())
             deltime = addtime - (day * 86400)
+            print(f"{Fore.BLUE}★ ========= [clientTask] STARTED -  开始时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(addtime))}{Style.RESET_ALL}")
+            # 预备主机数据
+            hostM = jh.M('view01_host')
+            host_list = hostM.field(h_api.host_field).select()
 
             # 执行脚本
             script_list = ['get_host_info.py', 'get_host_usage.py']
@@ -272,21 +275,13 @@ def clientTask():
                     load_avg = host_usage.get('load_avg', {})
                     firewall_info = host_usage.get('firewall_info', {})
 
-                    print('ip', ip)
                     # 从host_list找到ip匹配的host
                     host_data = [h for h in host_list if h.get('ip') == ip]
                     if len(host_data) == 0:
                         print("未匹配到主机")
                         continue
                     host = host_data[0]
-                    print('host', host)
                     
-                    # INSERT INTO `host_detail` (host_id, host_name, host_status, uptime, host_info, cpu_info, mem_info, disk_info, net_info, load_avg, firewall_info, port_info, backup_info, temperature_info, ssh_user_list, last_update, addtime) VALUES
-                    # ('H00001', 'Host1', 'Running', '15 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00'),
-                    # ('H00002', 'Host2', 'Running', '20 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00'),
-                    # ('H00003', 'Host3', 'Stopped', '5 days', '{"hostName":"debian","kernelArch":"x86_64","kernelVersion":"5.10.0-23-amd64","os":"linux","platform":"debian","platformFamily":"debian","platformVersion":"11.6","procs":97,"upTime":14472}', '{"logicalCores":2,"modelName":"Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz","percent":4.15}', '{"total":4109926400,"free":3076767744,"used":467066880,"usedPercent":11.36,"buffers":65052672,"cached":501039104,"swapFree":1022357504,"swapTotal":1022357504,"swapUsed":0,"swapUsedPercent":0}', '[{"total":19947929600,"free":15416078336,"used":3492610048,"usedPercent":18.47,"fstype":"ext4","ioPercent":0,"ioTime":139824,"iops":0,"mountpoint":"/","name":"/dev/sda1"}]', '[{"name":"enp0s3","recv":145488948,"recv_per_second":1612,"sent":32678885,"sent_per_second":90}]', '{"1min":0.15,"5min":0.10,"15min":0.05}', '{"is_running":true,"rules":[{"access":"ACCEPT","protocol":"tcp","release_port":"22","source":"anywhere"},{"access":"ACCEPT","protocol":"tcp","release_port":"806","source":"anywhere"}],"rule_change":{"add":null,"del":null}}', '{"2129988847542649187":{"ip":"0.0.0.0","port":22,"protocol":"tcp","pne_id":-7672102068318330115},"6588906985071447406":{"ip":"127.0.0.1","port":37177,"protocol":"tcp","pne_id":-4512644645752656383},"6677558488157980451":{"ip":"::","port":806,"protocol":"tcp","pne_id":-7910089643010597800},"344772759478166149":{"ip":"::","port":22,"protocol":"tcp","pne_id":-7672102068318330115}}', '{}', '{}', '[]', '2023-10-03 12:00:00', '2023-10-01 12:00:00');
-
-
                     host_detail = {
                         'host_id': host['host_id'],
                         'host_name': host['host_name'],
@@ -303,189 +298,34 @@ def clientTask():
                     }
                     # 获取host_detail的所有key用,分割的字符串
                     host_detail_keys = ','.join(list(host_detail.keys()))
-                    print(host_detail_keys)
                     # 获取host_detail的所有value用,分割的字符串
                     host_detail_values = tuple(host_detail.values())
-                    print(host_detail_values)
 
                     sql.table('host_detail').add(host_detail_keys, host_detail_values)
                     sql.table('host_detail').where("addtime<?", (deltime,)).delete()
 
                 
 
+            endtime = int(time.time())
+          
+            print(f"{Fore.GREEN}★ ========= [clientTask] SUCCESS - 完成时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(endtime))} 用时: {str(endtime - addtime) + 's'} {Style.RESET_ALL}")
+          
             time.sleep(5)
             count += 1
-            continue
-            run_result = run_script('get_host_info.py')
-            print('run_result', run_result)
-            time.sleep(5)
-            count += 1
-            continue
+            del(batch_result)
 
-
-            if not os.path.exists(filename):
-                time.sleep(10)
-                continue
-
-            day = 30
-            try:
-                day = int(jh.readFile(filename))
-                if day < 1:
-                    time.sleep(10)
-                    continue
-            except:
-                day = 30
-
-            tmp = {}
-            # 取当前CPU Io
-            tmp['used'] = psutil.cpu_percent(interval=1)
-
-            if not cpuInfo:
-                tmp['mem'] = sm.getMemUsed()
-                cpuInfo = tmp
-
-            # TODO 不太理解，这里如果出现cpuInfo未清理的情况下会导致cpu信息一直停留在高位
-            if cpuInfo['used'] < tmp['used']:
-                tmp['mem'] = sm.getMemUsed()
-                cpuInfo = tmp
-
-            # 取当前网络Io
-            networkIo = sm.psutilNetIoCounters()
-            if not network_up:
-                network_up = networkIo[0]
-                network_down = networkIo[1]
-            tmp = {}
-            tmp['upTotal'] = networkIo[0]
-            tmp['downTotal'] = networkIo[1]
-            tmp['up'] = round(float((networkIo[0] - network_up) / 1024), 2)
-            tmp['down'] = round(float((networkIo[1] - network_down) / 1024), 2)
-            tmp['downPackets'] = networkIo[3]
-            tmp['upPackets'] = networkIo[2]
-
-            network_up = networkIo[0]
-            network_down = networkIo[1]
-
-            if not networkInfo:
-                networkInfo = tmp
-            if (tmp['up'] + tmp['down']) > (networkInfo['up'] + networkInfo['down']):
-                networkInfo = tmp
-            # 取磁盘Io
-            # if os.path.exists('/proc/diskstats'):
-            diskio_2 = psutil.disk_io_counters()
-            if not diskio_1:
-                diskio_1 = diskio_2
-            tmp = {}
-            tmp['read_count'] = diskio_2.read_count - diskio_1.read_count
-            tmp['write_count'] = diskio_2.write_count - diskio_1.write_count
-            tmp['read_bytes'] = diskio_2.read_bytes - diskio_1.read_bytes
-            tmp['write_bytes'] = diskio_2.write_bytes - diskio_1.write_bytes
-            tmp['read_time'] = diskio_2.read_time - diskio_1.read_time
-            tmp['write_time'] = diskio_2.write_time - diskio_1.write_time
-
-            if not diskInfo:
-                diskInfo = tmp
-            else:
-                diskInfo['read_count'] += tmp['read_count']
-                diskInfo['write_count'] += tmp['write_count']
-                diskInfo['read_bytes'] += tmp['read_bytes']
-                diskInfo['write_bytes'] += tmp['write_bytes']
-                diskInfo['read_time'] += tmp['read_time']
-                diskInfo['write_time'] += tmp['write_time']
-            diskio_1 = diskio_2
-            diskInfo['disk_list'] = sm.getDiskInfo()
-
-            # 网站
-            siteInfo = sm.getSiteInfo()
-            
-            # mysql
-            mysqlInfo = sm.getMysqlInfo()
-            # 报告
-            jh.generateMonitorReportAndNotify(cpuInfo, networkInfo, diskInfo, siteInfo, mysqlInfo)
-            
-            # print diskInfo
-            if count >= 12:
-                try:
-                    addtime = int(time.time())
-                    deltime = addtime - (day * 86400)
-
-                    data = (cpuInfo['used'], cpuInfo['mem'], addtime)
-                    sql.table('cpuio').add('pro,mem,addtime', data)
-                    sql.table('cpuio').where("addtime<?", (deltime,)).delete()
-
-                    data = (networkInfo['up'] / 5, networkInfo['down'] / 5, networkInfo['upTotal'], networkInfo[
-                        'downTotal'], networkInfo['downPackets'], networkInfo['upPackets'], addtime)
-                    sql.table('network').add(
-                        'up,down,total_up,total_down,down_packets,up_packets,addtime', data)
-                    sql.table('network').where(
-                        "addtime<?", (deltime,)).delete()
-                    # if os.path.exists('/proc/diskstats'):
-                    data = (diskInfo['read_count'], diskInfo['write_count'], diskInfo['read_bytes'], diskInfo[
-                        'write_bytes'], diskInfo['read_time'], diskInfo['write_time'], addtime)
-                    sql.table('diskio').add(
-                        'read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime', data)
-                    sql.table('diskio').where(
-                        "addtime<?", (deltime,)).delete()
-                   
-                    # LoadAverage
-                    load_average = sm.getLoadAverage()
-                    lpro = round(
-                        (load_average['one'] / load_average['max']) * 100, 2)
-                    if lpro > 100:
-                        lpro = 100
-                    sql.table('load_average').add('pro,one,five,fifteen,addtime', (lpro, load_average[
-                        'one'], load_average['five'], load_average['fifteen'], addtime))
-
-                    # Database
-                    mysql_write_lock_data_key = 'MySQL信息写入面板数据库任务'
-                    if not jh.checkLockValid(mysql_write_lock_data_key, 'day_start'):
-                        mysqlInfo = sm.getMysqlInfo()
-                        database_list = mysqlInfo.get('database_list', [])
-                        sql.table('database').add('total_size,total_bytes,list,addtime', (
-                            mysqlInfo.get('total_size', 0),
-                            mysqlInfo.get('total_tytes', 0),
-                            json.dumps(mysqlInfo.get('database_list', [])),
-                            addtime
-                        ))
-                        sql.table('database').where(
-                            "addtime<?", (deltime,)).delete()
-                        jh.updateLockData(mysql_write_lock_data_key)
-
-                    lpro = None
-                    load_average = None
-                    cpuInfo = None
-                    networkInfo = None
-                    diskInfo = None
-                    count = 0
-                    reloadNum += 1
-                    if reloadNum > 1440:
-                        reloadNum = 0
-                        jh.writeFile('logs/sys_interrupt.pl',
-                                     "reload num:" + str(reloadNum))
-                        restartMw()
-                except Exception as ex:
-                    lpro = None
-                    load_average = None
-                    cpuInfo = None
-                    networkInfo = None
-                    diskInfo = None
-                    print(str(ex))
-                    jh.writeFile('logs/sys_interrupt.pl', str(ex))
-
-            del(tmp)
-            time.sleep(5)
-            count += 1
     except Exception as ex:
         traceback.print_exc()
-        print(str(ex))
         jh.writeFile('logs/sys_interrupt.pl', str(ex))
-        
-        notify_msg = jh.generateCommonNotifyMessage("服务器监控异常：" + str(ex))
-        jh.notifyMessage(title='服务器异常通知', msg=notify_msg, stype='服务器监控', trigger_time=3600)
+        print(f"{Fore.RED}★ ========= [clientTask] ERROR：{str(ex)} {Style.RESET_ALL}")
+    
+        notify_msg = jh.generateCommonNotifyMessage("客户端监控异常：" + str(ex))
+        jh.notifyMessage(title='客户端异常通知', msg=notify_msg, stype='客户端监控', trigger_time=3600)
 
-        restartMw()
+        restartPanel()
 
         time.sleep(30)
-        systemTask()
+        clientTask()
 
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
 def restartService():

@@ -34,4 +34,5 @@ telebot==0.0.5
 ansible==8.7.0
 ansible-runner==2.4.0
 sshpass==1.09
+colorama==0.4.6
 
