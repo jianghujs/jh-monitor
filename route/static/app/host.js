@@ -645,7 +645,7 @@ function detailHostSummary(host_id, name, msg, status) {
         </div>
 
         <!-- 进程占用TOP10 -->
-        <div class="server bgw mt-5" style="height:600px">
+        <div class="server bgw mt-5" style="height:600px" hidden>
           <div class="title c6 f16 plr15">
               <h3 class="c6 f16 pull-left">进程占用TOP10</h3>
           </div>
@@ -1296,8 +1296,8 @@ function initDetailHostSummaryNetChart(net_info) {
 
 function updateDetailHostSummaryNetChart(net_info) {
   if (net_info && net_info.length > 0) {
-    const { sent, recv } = net_info[0];
-    netChart.addData(sent, recv, true);
+    const { sent_per_second, recv_per_second } = net_info[0];
+    netChart.addData(sent_per_second, recv_per_second, true);
   }
   netChart.updateOption();
 }
