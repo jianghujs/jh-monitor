@@ -274,7 +274,7 @@ elif [ "$action" == "install" ]; then
     Setup_SSH_Config
 
     # 通知服务端添加主机
-    f
+    Add_Host_To_Monitor
     # Download_Agent
     # Set_Crontab
     # Timezones_Check
