@@ -35,11 +35,11 @@ function getWeb(page, search, type_id) {
       name += `
       <div class="flex align-center">
           <span>${data.data[i].host_name}</span>
-          <span style='margin-left: 5px;' title='修改名称' class='btlink cursor-pointer glyphicon glyphicon-edit'></span>
+          <span style='margin-left: 5px;' onclick="openEditHostName('${data.data[i].host_id}','${data.data[i].host_name}')\" title='修改名称' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit'></span>
       </div>
       <div>
           <span>${data.data[i].ip}</span>
-          <span style='margin-left: 5px;' title='复制IP' class='btlink cursor-pointer glyphicon glyphicon-copy'></span>
+          <span style='margin-left: 5px;' onclick="copyText('${data.data[i].ip}')\" title='复制IP' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-copy'></span>
       </div>
       `
 
@@ -60,25 +60,28 @@ function getWeb(page, search, type_id) {
         net_total += "<div>" + formatValue(data.data[i].net_info[0]['recv'], 'B') + "</div>";
       }
 
-      // 磁盘
-      let disk_speed = '';
+      // 磁盘;
+      let disk_total = 0;
+      let disk_used = 0;
+      let disk_percent = 100;
+      let disk_speed = ''
       let disk_status = '';
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
-        for (let j = 0; j < data.data[i].disk_info.length; j++) {
-          disk_speed += "<div>" + formatValue(data.data[i].disk_info[j]['read_per_second'], 'B') + "</div>";
-          disk_speed += "<div>" + formatValue(data.data[i].disk_info[j]['write_per_second'], 'B') + "</div>";
-          if(data.data[i].disk_info[j]['status']) {
-            disk_status = "<a href='javascript:;' title='紧张' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
-          } else {
-            disk_status = "<a href='javascript:;' title='充裕' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>紧张</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
-          }
+        disk_total += (data.data[i].disk_info[0]['total'] || 0)
+        disk_used += (data.data[i].disk_info[0]['used'] || 0)
+        disk_speed += "<div>" + formatValue(data.data[i].disk_info[0]['read_per_second'], 'B') + "</div>";
+        disk_speed += "<div>" + formatValue(data.data[i].disk_info[0]['write_per_second'], 'B') + "</div>";
+        if(data.data[i].disk_info[0]['usedPercent'] < 80) {
+          disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span></span>";
+        } else {
+          disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:red'>不足</span></span>";
         }
       }
 
 			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
-					<td>" + formatValue(data.data[i]['host_group_name']) + "</td>\
+					<td>" + (formatValue(data.data[i]['host_group_name']) || '--') + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['load_avg']['1min']) + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['cpu_info']['percent'], '%') + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['mem_info']['usedPercent'], '%') + "</td>\
@@ -157,6 +160,57 @@ function getWeb(page, search, type_id) {
 		});
 
 		readerTableChecked();
+	},'json');
+}
+
+/**
+ * 
+ * 修改主机名称
+ */
+function openEditHostName(host_id, host_name) {
+  layer.open({
+    type: 1,
+    title: `编辑主机名称【${host_name}】`,
+    area: '440px',
+    closeBtn: 1,
+    shift: 0,
+    content: `
+    <form class='bt-form pd20 pb70' id='editHostNameForm'>
+      <div class="p-10 text-xl">
+        <div class='line'>
+          <span class='tname'>主机名称</span>
+          <div class='info-r c4'>
+            <input id='Wbeizhu' class='bt-input-text' type='text' name='host_name' placeholder='主机名称' style='width:268px' value='${host_name}'/>
+            <input hidden type='text' name='host_id' hidden value='${host_id}'/>
+          </div>
+        </div>
+        
+        <div class='bt-form-submit-btn'>
+          <button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>
+          <button type='button' class='btn btn-success btn-sm btn-title' onclick="submitEditHostName()">提交</button>
+        </div>
+      </div>
+    </form>
+    `
+
+  });
+}
+
+/**
+ * 修改主机名称
+ */
+function submitEditHostName() {
+  let editHostNameForm = $('#editHostNameForm').serialize();
+	loading = layer.msg('正在修改!',{icon:16,time:0,shade: [0.3, "#000"]})
+	$.post('/host/update_host_name', editHostNameForm, function(data){
+		layer.close(loading);
+		if (data.status){
+      getWeb(1);
+      layer.closeAll()
+      
+		} else {
+			layer.msg(data.msg,{icon:0,time:3000,shade: [0.3, "#000"]})
+		}
 	},'json');
 }
 

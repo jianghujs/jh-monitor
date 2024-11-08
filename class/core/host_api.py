@@ -73,6 +73,13 @@ class host_api:
         jh.M('host').add("host_name,ip,addtime", (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
         return jh.returnJson(True, '主机添加成功!')
 
+    def updateHostNameApi(self):
+        host_id = request.form.get('host_id', '')
+        host_name = request.form.get('host_name', '')
+        
+        jh.M('host').where('host_id=?', (host_id,)).setField('host_name', host_name)
+        return jh.returnJson(True, '主机名称修改成功!')
+
     def deleteApi(self):
         host_id = request.form.get('host_id', '')
         jh.M('host').where('host_id=?', (host_id,)).delete()
