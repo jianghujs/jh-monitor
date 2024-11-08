@@ -48,6 +48,13 @@ function getWeb(page, search, host_group_id) {
 				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
 			}
 
+      let host_group = `
+        <div class="flex align-center">
+          <span>${(formatValue(data.data[i]['host_group_name']) || '--')}</span>
+          <span  onclick="openChangeHostGroup('${data.data[i].host_id}','${data.data[i].host_name}','${data.data[i].host_group_id}')\" style='color:rgb(92, 184, 92)' class='ml-2 text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit' title='修改分组'></span>
+        </div>
+      `;
+
       // 流量
       let net_speed = '';
       let net_total = '';
@@ -79,7 +86,7 @@ function getWeb(page, search, host_group_id) {
 			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
-					<td>" + (formatValue(data.data[i]['host_group_name']) || '--') + "</td>\
+					<td>" + host_group + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['load_avg']['1min']) + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['cpu_info']['percent'], '%') + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['mem_info']['usedPercent'], '%') + "</td>\
@@ -145,7 +152,7 @@ function getWeb(page, search, host_group_id) {
 		});
 		//输出分页
 		// $("#webPage").html(data.page);
-		// $("#webPage").html('<div class="site_type"><span>主机分类:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分类</option><option value="0">默认分类</option></select></div>');
+		// $("#webPage").html('<div class="site_type"><span>主机分组:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分组</option><option value="0">默认分组</option></select></div>');
 		
 		$(".btlinkbed").click(function(){
 			var dataid = $(this).attr("data-id");
@@ -164,12 +171,14 @@ function getWeb(page, search, host_group_id) {
 /**
  * 主机分组列表
  */
+var hostGroupList = [];
 function getHostGroupList() {
   
 	var select = $('.host_group_list > select');
 	$.post('/host/get_host_group_list',function(rdata){
+    hostGroupList = rdata;
 		$(select).html('');
-		$(select).append('<option value="-1">全部分类</option>');
+		$(select).append('<option value="-1">全部分组</option>');
 		for (var i = 0; i<rdata.length; i++) {
 			$(select).append('<option value="'+rdata[i]['host_group_id']+'">'+rdata[i]['host_group_name']+'</option>');
 		}
@@ -267,14 +276,14 @@ function openEditHostGroup(id,host_group_name){
 		closeBtn: 1,
 		shift: 0,
 		content: "<form class='bt-form bt-form pd20 pb70' id='mod_pwd'>\
-                    <div class='line'>\
-                        <span class='tname'>分组名称</span>\
-                        <div class='info-r'><input name=\"host_group_name_mod\" class='bt-input-text mr5' type='text' value='"+host_group_name+"' /></div>\
-                    </div>\
-                    <div class='bt-form-submit-btn'>\
-                        <button id='submit_host_group_mod' type='button' class='btn btn-success btn-sm btn-title'>提交</button>\
-                    </div>\
-                  </form>"
+                <div class='line'>\
+                    <span class='tname'>分组名称</span>\
+                    <div class='info-r'><input name=\"host_group_name_mod\" class='bt-input-text mr5' type='text' value='"+host_group_name+"' /></div>\
+                </div>\
+                <div class='bt-form-submit-btn'>\
+                    <button id='submit_host_group_mod' type='button' class='btn btn-success btn-sm btn-title'>提交</button>\
+                </div>\
+              </form>"
 	});
 
 	$('#submit_host_group_mod').unbind().click(function(){
@@ -344,6 +353,63 @@ function submitEditHostName() {
 	},'json');
 }
 
+
+
+/**
+ * 
+ * 修改主机所属分组
+ */
+function openChangeHostGroup(host_id, host_name, host_group_id) {
+  let hostGroupListCon = hostGroupList.map(item => `
+     <option value='${item.host_group_id}' ${item.host_group_id == host_group_id? 'selected': ''}>${item.host_group_name}</option>  
+  `)
+  layer.open({
+    type: 1,
+    title: `设置主机分组【${host_name}】`,
+    area: '440px',
+    closeBtn: 1,
+    shift: 0,
+    content: `
+    <form class='bt-form pd20 pb70' id='changeHostGroupForm'>
+      <div class="p-10 text-xl">
+        <div class='line'>
+          <span class='tname'>主机分组</span>
+          <div class='info-r c4'>
+            <select class="bt-input-text mr5" name="host_group_id" style="width: 260px;" value="${host_group_id}">${hostGroupListCon}</select>
+            <input hidden type='text' name='host_id' hidden value='${host_id}'/>
+          </div>
+        </div>
+        
+        <div class='bt-form-submit-btn'>
+          <button type='button' class='btn btn-danger btn-sm btn-title' onclick='layer.closeAll()'>取消</button>
+          <button type='button' class='btn btn-success btn-sm btn-title' onclick="submitChangeHostGroup()">提交</button>
+        </div>
+      </div>
+    </form>
+    `
+                // args['delete'] = $('select[name="delete"]').val();
+
+  });
+}
+
+
+/**
+ * 修改主机所属分组
+ */
+function submitChangeHostGroup() {
+  let changeHostGroupForm = $('#changeHostGroupForm').serialize();
+	loading = layer.msg('正在修改!',{icon:16,time:0,shade: [0.3, "#000"]})
+	$.post('/host/change_host_group', changeHostGroupForm, function(data){
+		layer.close(loading);
+		if (data.status){
+      getWeb(1);
+      layer.closeAll()
+      
+		} else {
+			layer.msg(data.msg,{icon:0,time:3000,shade: [0.3, "#000"]})
+		}
+	},'json');
+}
 
 /**
  * 添加主机

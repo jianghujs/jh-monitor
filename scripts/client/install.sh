@@ -190,6 +190,18 @@ Add_Ansible_User(){
     fi
 }
 
+Config_Ansible_User() {
+    # 创建脚本执行目录
+    mkdir /home/ansible_user/jh-monitor-scripts/
+    chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
+    
+    # 防火墙读取权限
+    mkdir -p /etc/sudoers.d/
+    echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user
+    chmod 0440 /etc/sudoers.d/ansible_user
+    
+}
+
 Setup_SSH_Config(){
     if [ ! -d "$SSH_DIR" ]; then
         mkdir -p "$SSH_DIR"
@@ -269,6 +281,9 @@ elif [ "$action" == "install" ]; then
     
     # 添加ansible用户
     Add_Ansible_User
+
+    # 配置ansible用户权限
+    Config_Ansible_User
 
     # 配置服务端访问权限
     Setup_SSH_Config

@@ -47,7 +47,7 @@ class host_api:
         hostM = jh.M('view01_host')
         
         if host_group_id != '' and host_group_id != '-1':
-            hostM.where('host_group_id=?', (host_group_id))
+            hostM.where('host_group_id=?', (host_group_id,))
 
         _list = hostM.field(self.host_field).limit(
             (str(start)) + ',' + limit).order('id desc').select()
@@ -91,7 +91,7 @@ class host_api:
     def removeHostGroupApi(self):
         id = request.form.get('id', '')
         if jh.M('host_group').where('id=?', (id,)).count() == 0:
-            return jh.returnJson(False, "指定分类不存在!")
+            return jh.returnJson(False, "指定分组不存在!")
         # 查询host_group_id
         host_group_id = jh.M('host_group').where('id=?', (id,)).getField('host_group_id')
         jh.M('host_group').where('id=?', (id,)).delete()
@@ -126,6 +126,21 @@ class host_api:
         
         jh.M('host').where('host_id=?', (host_id,)).setField('host_name', host_name)
         return jh.returnJson(True, '主机名称修改成功!')
+
+    def changeHostGroupApi(self):
+        host_id = request.form.get('host_id', '')
+        host_group_id = request.form.get('host_group_id', '')
+
+        if host_group_id == 'default':
+            host_group_name = ''
+        else:
+            host_group_name = jh.M('host_group').where('host_group_id=?', (host_group_id,)).getField('host_group_name')
+            if not host_group_name:
+                return jh.returnJson(False, '指定分组不存在!')
+        
+        jh.M('host').where('host_id=?', (host_id,)).setField('host_group_id', host_group_id)
+        jh.M('host').where('host_id=?', (host_id,)).setField('host_group_name', host_group_name)
+        return jh.returnJson(True, '主机分组修改成功!')
 
     def deleteApi(self):
         host_id = request.form.get('host_id', '')

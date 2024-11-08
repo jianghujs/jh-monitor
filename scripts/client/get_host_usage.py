@@ -134,7 +134,7 @@ def get_firewall_info():
     is_running = False
     try:
         # 通过执行iptables命令检查防火墙状态
-        subprocess.run(["iptables", "-L"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["sudo", "iptables", "-L"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         is_running = True
     except subprocess.CalledProcessError:
         is_running = False
@@ -143,7 +143,7 @@ def get_firewall_info():
     rules = []
     try:
         # 获取iptables规则
-        result = subprocess.run(["iptables", "-L", "-n", "-v"], check=True, stdout=subprocess.PIPE)
+        result = subprocess.run(["sudo", "iptables", "-L", "-n", "-v"], check=True, stdout=subprocess.PIPE)
         output = result.stdout.decode('utf-8')
 
         # 解析输出，提取规则信息
@@ -190,7 +190,7 @@ def main():
         "disk_info": get_disk_info(),
         "net_info": get_net_info(), 
         "load_avg": get_load_avg(),
-        "firewall_info": get_firewall_info(),
+        # "firewall_info": get_firewall_info(),
 
         # "Memory Usage": get_memory_info(),
         # "Disk Usage": get_disk_usage(),

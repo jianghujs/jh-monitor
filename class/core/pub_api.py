@@ -44,14 +44,21 @@ class pub_api:
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
         host_id = 'H_' + host_name + '_' + jh.getRandomString(4)
+        host_group_id = 'default'
+        host_group_name = ''
 
         exist_host = jh.M('host').where('ip=?', (ip,)).field('ip').find()
         if len(exist_host) > 0:
             return jh.returnJson(False, '主机已经存在!')
         
         # 添加主机
-        jh.M('host').add("host_id,host_name,ip,addtime", (host_id,host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
-        with open('/etc/ansible/hosts', 'a') as f:
-            f.write(f"{ip}\n")
+        jh.M('host').add("host_id,host_name,host_group_id,host_group_name,ip,addtime", (host_id,host_name,host_group_id,host_group_name,ip,time.strftime('%Y-%m-%d %H:%M:%S')))
+        # 添加到host文件
+        with open('/etc/ansible/hosts', 'r+') as f:
+            lines = f.readlines()
+            existing_ips = set(line.strip() for line in lines)
+            ip_conf = f"{ip} ansible_ssh_user=ansible_user"
+            if ip_conf not in existing_ips:
+                f.write(f"{ip_conf}\n")
 
         return jh.returnJson(True, '主机添加成功!')

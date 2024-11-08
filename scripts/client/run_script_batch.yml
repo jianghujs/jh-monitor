@@ -3,7 +3,7 @@
   hosts: all  # 替换为您的目标机器组名称
   vars:
     local_script_base_path: "/www/server/jh-monitor/scripts/client"
-    remote_script_base_path: "/tmp/"
+    remote_script_base_path: "/home/ansible_user/jh-monitor-scripts"
 
   tasks:
     - name: Copy Python scripts to target machine

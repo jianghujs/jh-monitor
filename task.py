@@ -265,46 +265,47 @@ def clientTask():
             # 循环主机列表获取状态
             for host in host_list:
                 ip = host['ip']
-                ip_batch_result = batch_result[ip]
-                host_detail = {
-                    'host_id': host['host_id'],
-                    'host_name': host['host_name'],
-                    'host_status': 'Stopped',
-                    'uptime': '',
-                    'host_info': '{}',
-                    'cpu_info': '{}',
-                    'mem_info': '{}',
-                    'disk_info': '{}',
-                    'net_info': '{}',
-                    'load_avg': '{}',
-                    'firewall_info': {},
-                    'addtime': addtime
-                }
-                if ip_batch_result:
-                    if ip_batch_result['status'] == 'ok':
-                        data = ip_batch_result.get('data', {}) 
-                        uptime = data.get('uptime', '')
-                        host_info = data.get('get_host_info.py', {})
-                        host_usage = data.get('get_host_usage.py', {})
-                        cpu_info = host_usage.get('cpu_info', {})
-                        mem_info = host_usage.get('mem_info', {})
-                        disk_info = host_usage.get('disk_info', [])
-                        net_info = host_usage.get('net_info', [])
-                        load_avg = host_usage.get('load_avg', {})
-                        firewall_info = host_usage.get('firewall_info', {})
-                        
-                        host_detail.update({
-                            'host_status': 'Running',
-                            'uptime': uptime,
-                            'host_info': json.dumps(host_info),
-                            'cpu_info': json.dumps(cpu_info),
-                            'mem_info': json.dumps(mem_info),
-                            'disk_info': json.dumps(disk_info),
-                            'net_info': json.dumps(net_info),
-                            'load_avg': json.dumps(load_avg),
-                            'firewall_info': json.dumps(firewall_info),
-                            'addtime': addtime
-                        })
+                if batch_result.get(ip, None) is not None:
+                    ip_batch_result = batch_result[ip]
+                    host_detail = {
+                        'host_id': host['host_id'],
+                        'host_name': host['host_name'],
+                        'host_status': 'Stopped',
+                        'uptime': '',
+                        'host_info': '{}',
+                        'cpu_info': '{}',
+                        'mem_info': '{}',
+                        'disk_info': '{}',
+                        'net_info': '{}',
+                        'load_avg': '{}',
+                        'firewall_info': {},
+                        'addtime': addtime
+                    }
+                    if ip_batch_result:
+                        if ip_batch_result['status'] == 'ok':
+                            data = ip_batch_result.get('data', {}) 
+                            uptime = data.get('uptime', '')
+                            host_info = data.get('get_host_info.py', {})
+                            host_usage = data.get('get_host_usage.py', {})
+                            cpu_info = host_usage.get('cpu_info', {})
+                            mem_info = host_usage.get('mem_info', {})
+                            disk_info = host_usage.get('disk_info', [])
+                            net_info = host_usage.get('net_info', [])
+                            load_avg = host_usage.get('load_avg', {})
+                            firewall_info = host_usage.get('firewall_info', {})
+                            
+                            host_detail.update({
+                                'host_status': 'Running',
+                                'uptime': uptime,
+                                'host_info': json.dumps(host_info),
+                                'cpu_info': json.dumps(cpu_info),
+                                'mem_info': json.dumps(mem_info),
+                                'disk_info': json.dumps(disk_info),
+                                'net_info': json.dumps(net_info),
+                                'load_avg': json.dumps(load_avg),
+                                'firewall_info': json.dumps(firewall_info),
+                                'addtime': addtime
+                            })
 
                 print("！！！！！！！！！！", host_detail)
 
