@@ -453,14 +453,14 @@ function openHostAdd() {
           <div class="mb-4">
             <label class="block font-medium mb-4">被控内网安装命令</label>
             <div class="flex items-center bg-gray-200 p-5 rounded">
-              <div class="flex-1 overflow-x-auto">curl -sSO http://www.btkaixin.net/install/btmonitoragent.sh && bash btmonitoragent.sh https://192.168.3.62:806 e3359d2264ecc6ea29663f34dbc69a6a</div>
-              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded">复制</button>
+              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLAN"></div>
+              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN()">复制</button>
             </div>
           </div>
-          <div class="mb-4">
+          <div class="mb-4" hidden>
             <label class="block font-medium mb-4">被控公网安装命令</label>
             <div class="flex items-center bg-gray-200 p-5 rounded">
-              <div class="flex-1 overflow-x-auto">curl -sSO http://www.btkaixin.net/install/btmonitoragent.sh && bash btmonitoragent.sh https://240e:3b1:44a1:f3b0:a00:27ff:fe54:e15e:806 e3359d2264ecc6ea29663f34dbc69a6a</div>
+              <div class="flex-1 overflow-x-auto break-words">curl -sSO http://www.btkaixin.net/install/btmonitoragent.sh && bash btmonitoragent.sh https://240e:3b1:44a1:f3b0:a00:27ff:fe54:e15e:806 e3359d2264ecc6ea29663f34dbc69a6a</div>
               <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded">复制</button>
             </div>
           </div>
@@ -479,25 +479,16 @@ function openHostAdd() {
     `
   });
 
-  var placeholder = "<div class='placeholder c9' style='top:10px;left:10px'>"+lan.site.domain_help+"</div>";
-  $('#mainDomain').after(placeholder);
-  $(".placeholder").click(function(){
-    $(this).hide();
-    $('#mainDomain').focus();
-  })
-  $('#mainDomain').focus(function() {
-      $(".placeholder").hide();
+  $.post('/host/get_client_install_shell_lan','', function(data){
+    let rdata = JSON.parse(data)
+    if (rdata.status){
+      $("#clientInstallShellLAN").html(rdata.data);
+    }
   });
-  
-  $('#mainDomain').blur(function() {
-    if($(this).val().length==0){
-      $(".placeholder").show();
-    }  
-  });
+}
 
-  //获取当前时间时间戳，截取后6位
-  var timestamp = new Date().getTime().toString();
-  var dtpw = timestamp.substring(7);
+function copyClientInstallShellLAN() {
+    copyText($("#clientInstallShellLAN").html());
 }
 
 

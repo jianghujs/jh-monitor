@@ -155,6 +155,10 @@ class host_api:
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
     
+    def getClientInstallShellLanApi(self):
+        client_install_shell = f"curl -sSO https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh && bash install.sh http://{jh.getHostAddr()}:10844"
+        return jh.returnJson(True, 'ok', client_install_shell)
+
     def alarmApi(self):
         host_id = request.form.get('host_id', '')
         host_alarm = jh.M('host_alarm').where('host_id=?', (host_id,)).field(self.host_alarm_field).select()
