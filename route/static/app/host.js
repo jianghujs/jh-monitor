@@ -30,12 +30,24 @@ function getWeb(page, search, type_id) {
 		var body = '';
 		$("#webBody").html(body);
 		for (var i = 0; i < data.data.length; i++) {
+      // 主机名称
+      let name = '';
+      name += `
+      <div class="flex align-center">
+          <span>${data.data[i].host_name}</span>
+          <span style='margin-left: 5px;' title='修改名称' class='btlink cursor-pointer glyphicon glyphicon-edit'></span>
+      </div>
+      <div>
+          <span>${data.data[i].ip}</span>
+          <span style='margin-left: 5px;' title='复制IP' class='btlink cursor-pointer glyphicon glyphicon-copy'></span>
+      </div>
+      `
 
 			// 当前主机状态
-			if (data.data[i].status == '正在运行' || data.data[i].status == '1') {
-				var status = "<a href='javascript:;' title='停用这个主机' onclick=\"webStop(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
+			if (data.data[i].host_status == 'Running') {
+				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
 			} else {
-				var status = "<a href='javascript:;' title='启用这个主机' onclick=\"webStart(" + data.data[i].id + ",'" + data.data[i].name + "')\" class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
+				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
 			}
 
       // 流量
@@ -64,11 +76,7 @@ function getWeb(page, search, type_id) {
       }
 
 			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
-					<td>\
-						<a class='btlink webtips' href='http://"+data.data[i].name+"' onclick=\"webEdit(" + data.data[i].id + ",'" + data.data[i].name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "',event)\" title='"+data.data[i].name+"'>" 
-							+ data.data[i].host_name + '/' + data.data[i].ip + "\
-            </a>\
-          </td>\
+					<td>" + name + "</td>\
 					<td>" + status + "</td>\
 					<td>" + formatValue(data.data[i]['host_group_name']) + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['load_avg']['1min']) + "</td>\

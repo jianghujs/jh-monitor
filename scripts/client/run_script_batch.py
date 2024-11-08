@@ -18,7 +18,7 @@ def run_script_batch(script_names):
     else:
         print("Playbook execution failed")
 
-    result = []
+    result = {}
     for event in r.events:
         if event.get('event') == 'runner_on_ok':
             event_data = event.get('event_data', {})
@@ -32,13 +32,22 @@ def run_script_batch(script_names):
                 res = event_data.get('res', {})
                 r = {item.get('msg', '')[0]: item.get('msg', '')[1] for item in res.get('results', [])}
                 
-                result.append({
-                    'ip': ip,
+                result[ip] = {
+                    'status': 'ok',
                     'data': r
-                })
-                
+                }
+        elif event.get('event') == 'runner_on_unreachable': 
+            event_data = event.get('event_data', {})
+            ip = event_data.get('host', '')
+            result[ip] = {
+                'status': 'fail',
+                'msg': 'unreachable'
+            }
+
     return result
 
 # if __name__ == "__main__":
 #     script_outputs = run_script_batch(['get_host_info.py', 'get_host_usage.py'])
 #     # script_outputs = run_script_batch(['get_host_usage.py'])
+
+#     print("✨", script_outputs)
