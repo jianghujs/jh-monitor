@@ -3,7 +3,7 @@
  * @param {Number} page   当前页
  * @param {String} search 搜索条件
  */
-function getWeb(page, search, type_id) {
+function getWeb(page, search, host_group_id) {
 	search = $("#SearchValue").prop("value");
 	page = page == undefined ? '1':page;
 	var order = getCookie('order');
@@ -13,15 +13,13 @@ function getWeb(page, search, type_id) {
 		order = '';
 	}
 
-	var type = '';
-	if ( typeof(type_id) == 'undefined' ){
-		type = '&type_id=0';
-	} else {
-		type = '&type_id='+type_id;
+	var host_group_select = '';
+	if ( typeof(host_group_id) != 'undefined' ){
+		host_group_select = '&host_group_id='+host_group_id;
 	}
 
 	var sUrl = '/host/list';
-	var pdata = 'limit=1000&p=' + page + '&search=' + search + order + type;
+	var pdata = 'limit=1000&p=' + page + '&search=' + search + order + host_group_select;
 	var loadT = layer.load();
 	//取回数据
 	$.post(sUrl, pdata, function(data) {
@@ -162,6 +160,138 @@ function getWeb(page, search, type_id) {
 		readerTableChecked();
 	},'json');
 }
+
+/**
+ * 主机分组列表
+ */
+function getHostGroupList() {
+  
+	var select = $('.host_group_list > select');
+	$.post('/host/get_host_group_list',function(rdata){
+		$(select).html('');
+		$(select).append('<option value="-1">全部分类</option>');
+		for (var i = 0; i<rdata.length; i++) {
+			$(select).append('<option value="'+rdata[i]['host_group_id']+'">'+rdata[i]['host_group_name']+'</option>');
+		}
+
+		$(select).bind('change',function(){
+			var select_id = $(this).val();
+			// console.log(select_id);
+			getWeb(1,'',select_id);
+		})
+	},'json');
+}
+getHostGroupList();
+
+/**
+ * 主机分组管理
+ */
+
+function openHostGroupManage(){
+		layer.open({
+			type: 1,
+			area: '350px',
+			title: '主机分组管理',
+			closeBtn: 1,
+			shift: 0,
+			content: '<div class="bt-form edit_site_type">\
+					<div class="divtable mtb15" style="overflow:auto">\
+						<div class="line "><div class="info-r  ml0">\
+							<input name="host_group_name" class="bt-input-text mr5 host_group_name" placeholder="请填写分组名称" type="text" style="width:50%" value=""><button name="btn_submit" class="btn btn-success btn-sm mr5 ml5 btn_submit" onclick="addHostGroup();">添加</button></div>\
+						</div>\
+						<table id="type_table" class="table table-hover" width="100%">\
+							<thead><tr><th>分组名称</th><th width="80px">操作</th></tr></thead>\
+							<tbody id="hostGroupListCon"></tbody>\
+						</table>\
+					</div>\
+				</div>'
+		});
+    getHostGroupListTable();
+}
+
+function getHostGroupListTable() {
+  $.post('/host/get_host_group_list',function(rdata){
+		var list = '';
+		for (var i = 0; i<rdata.length; i++) {
+			list +='<tr><td>' + rdata[i]['host_group_name'] + '</td>\
+				<td><a class="btlink edit_type" onclick="openEditHostGroup(\''+rdata[i]['id']+'\',\''+rdata[i]['host_group_name']+'\')">编辑</a> | <a class="btlink del_type" onclick="removeHostGroup(\''+rdata[i]['id']+'\',\''+rdata[i]['host_group_id']+'\',\''+rdata[i]['host_group_name']+'\')">删除</a>\
+				</td></tr>';
+		}
+    $('#hostGroupListCon').html(list);
+	},'json');
+}
+
+
+
+
+function addHostGroup(){
+	var host_group_name = $("input[name=host_group_name]").val();
+	$.post('/host/add_host_group','host_group_name='+host_group_name, function(rdata){
+		showMsg(rdata.msg,function(){
+			if (rdata.status){
+        getHostGroupListTable();
+				getHostGroupList();
+			}
+		},{icon:rdata.status?1:2});
+	},'json');
+}
+
+function removeHostGroup(id,host_group_id,host_group_name){
+	if (id == 0){
+		layer.msg('默认分组不可删除/不可编辑!',{icon:2});
+		return;
+	}
+	layer.confirm('是否确定删除分组？',{title: '删除分组【'+ host_group_name +'】' }, function(){
+		$.post('/host/remove_host_group','id='+id, function(rdata){
+			showMsg(rdata.msg,function(){
+				if (rdata.status){
+          getHostGroupListTable();
+					getHostGroupList();
+				}
+			},{icon:rdata.status?1:2});
+		},'json');
+	});
+}
+
+
+function openEditHostGroup(id,host_group_name){
+	if (id == 0){
+		layer.msg('默认分组不可删除/不可编辑!',{icon:2});
+		return;
+	}
+
+	var editHostGroupLayer = layer.open({
+		type: 1,
+		area: '350px',
+		title: '修改分组管理【' + host_group_name + '】',
+		closeBtn: 1,
+		shift: 0,
+		content: "<form class='bt-form bt-form pd20 pb70' id='mod_pwd'>\
+                    <div class='line'>\
+                        <span class='tname'>分组名称</span>\
+                        <div class='info-r'><input name=\"host_group_name_mod\" class='bt-input-text mr5' type='text' value='"+host_group_name+"' /></div>\
+                    </div>\
+                    <div class='bt-form-submit-btn'>\
+                        <button id='submit_host_group_mod' type='button' class='btn btn-success btn-sm btn-title'>提交</button>\
+                    </div>\
+                  </form>"
+	});
+
+	$('#submit_host_group_mod').unbind().click(function(){
+		var host_group_name = $('input[name=host_group_name_mod]').val();
+		$.post('/host/modify_host_group_name','id='+id+'&host_group_name='+host_group_name, function(rdata){
+			showMsg(rdata.msg,function(){
+				if (rdata.status){
+          layer.close(editHostGroupLayer);
+          getHostGroupListTable();
+					getHostGroupList();
+				}
+			},{icon:rdata.status?1:2});
+		},'json');
+
+	});
+}
+
 
 /**
  * 

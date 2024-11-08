@@ -41,9 +41,14 @@ class host_api:
     def listApi(self):
         limit = request.form.get('limit', '10')
         p = request.form.get('p', '1')
+        host_group_id = request.form.get('host_group_id', '')
         start = (int(p) - 1) * (int(limit))
 
         hostM = jh.M('view01_host')
+        
+        if host_group_id != '' and host_group_id != '-1':
+            hostM.where('host_group_id=?', (host_group_id))
+
         _list = hostM.field(self.host_field).limit(
             (str(start)) + ',' + limit).order('id desc').select()
         
@@ -63,6 +68,48 @@ class host_api:
 
         _ret['page'] = jh.getPage(_page)
         return jh.getJson(_ret)
+
+    
+    def getHostGroupListApi(self):
+        data = jh.M("host_group").field("id,host_group_id,host_group_name").order("id asc").select()
+        data.insert(0, {"id": 0, "host_group_id": "default", "host_group_name": "默认分组"})
+        return jh.getJson(data)
+
+    
+    def addHostGroupApi(self):
+        host_group_name = request.form.get('host_group_name', '').strip()
+        if not host_group_name:
+            return jh.returnJson(False, "分组名称不能为空")
+        if len(host_group_name) > 18:
+            return jh.returnJson(False, "分组名称长度不能超过6个汉字或18位字母")
+        if jh.M('host_group').where('host_group_name=?', (host_group_name,)).count() > 0:
+            return jh.returnJson(False, "指定分组名称已存在!")
+        host_group_id = 'HG' + '_' + jh.getRandomString(4)
+        jh.M('host_group').add("host_group_id,host_group_name", (host_group_id,host_group_name,))
+        return jh.returnJson(True, '添加成功!')
+
+    def removeHostGroupApi(self):
+        id = request.form.get('id', '')
+        if jh.M('host_group').where('id=?', (id,)).count() == 0:
+            return jh.returnJson(False, "指定分类不存在!")
+        # 查询host_group_id
+        host_group_id = jh.M('host_group').where('id=?', (id,)).getField('host_group_id')
+        jh.M('host_group').where('id=?', (id,)).delete()
+        jh.M("host").where("host_group_id=?", (host_group_id,)).save("host_group_id", ('default',))
+        return jh.returnJson(True, "分组已删除!")
+
+    def modifyHostGroupNameApi(self):
+        # 修改主机分组名称
+        host_group_name = request.form.get('host_group_name', '').strip()
+        mid = request.form.get('id', '')
+        if not host_group_name:
+            return jh.returnJson(False, "分组名称不能为空")
+        if len(host_group_name) > 18:
+            return jh.returnJson(False, "分组名称长度不能超过6个汉字或18位字母")
+        if jh.M('host_group').where('id=?', (mid,)).count() == 0:
+            return jh.returnJson(False, "指定分组不存在!")
+        jh.M('host_group').where('id=?', (mid,)).setField('host_group_name', host_group_name)
+        return jh.returnJson(True, "修改成功!")
 
     def addApi(self):
         host_name = request.form.get('host_name', '10')

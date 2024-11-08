@@ -17,6 +17,7 @@
 				</div>
 				<div class="safe bgw mtb15 pd15">
 					<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
+					<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title" type="button">分组管理</button>
 					
 					<span>
 						<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
@@ -48,8 +49,8 @@
 							<ul id="webPage" class="page"></ul>
 						</div>
 
-						<div class="site_type">
-							<span>主机分类:</span>
+						<div class="host_group_list">
+							<span>主机分组:</span>
 							<select class="bt-input-text mr5" style="width:100px">
 								<!-- <option value="-1">全部分类</option>
 								<option value="0">默认分类</option> -->
