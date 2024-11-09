@@ -1,3 +1,5 @@
+
+var loadT = layer.load();
 /**
  * 主机数据列表
  * @param {Number} page   当前页
@@ -20,7 +22,6 @@ function getWeb(page, search, host_group_id) {
 
 	var sUrl = '/host/list';
 	var pdata = 'limit=1000&p=' + page + '&search=' + search + order + host_group_select;
-	var loadT = layer.load();
 	//取回数据
 	$.post(sUrl, pdata, function(data) {
 		layer.close(loadT);
@@ -59,10 +60,10 @@ function getWeb(page, search, host_group_id) {
       let net_speed = '';
       let net_total = '';
       if (data.data[i].net_info && data.data[i].net_info.length > 0) {
-        net_speed += "<div>" + formatValue(data.data[i].net_info[0]['sent_per_second'], 'B') + "</div>";
-        net_speed += "<div>" + formatValue(data.data[i].net_info[0]['recv_per_second'], 'B') + "</div>";
-        net_total += "<div>" + formatValue(data.data[i].net_info[0]['sent'], 'B') + "</div>";
-        net_total += "<div>" + formatValue(data.data[i].net_info[0]['recv'], 'B') + "</div>";
+        net_speed += "<div>" + toSize(data.data[i].net_info[0]['sent_per_second']) + "</div>";
+        net_speed += "<div>" + toSize(data.data[i].net_info[0]['recv_per_second']) + "</div>";
+        net_total += "<div>" + toSize(data.data[i].net_info[0]['sent']) + "</div>";
+        net_total += "<div>" + toSize(data.data[i].net_info[0]['recv']) + "</div>";
       }
 
       // 磁盘;
@@ -74,8 +75,8 @@ function getWeb(page, search, host_group_id) {
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
         disk_total += (data.data[i].disk_info[0]['total'] || 0)
         disk_used += (data.data[i].disk_info[0]['used'] || 0)
-        disk_speed += "<div>" + formatValue(data.data[i].disk_info[0]['read_per_second'], 'B') + "</div>";
-        disk_speed += "<div>" + formatValue(data.data[i].disk_info[0]['write_per_second'], 'B') + "</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['read_per_second']) + "</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['write_per_second']) + "</div>";
         if(data.data[i].disk_info[0]['usedPercent'] < 80) {
           disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span></span>";
         } else {

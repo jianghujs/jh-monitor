@@ -9,6 +9,9 @@ $(document).ready(function() {
 });
 
 function toSize(a) {
+  if (a == '' || a == null) {
+    return '';
+  }
 	var d = [" B", " KB", " MB", " GB", " TB", " PB"];
 	var e = 1024;
 	for(var b = 0; b < d.length; b++) {
@@ -48,21 +51,23 @@ function scrollHandle(e) {
     $(this).find("thead").css({ "transform": "translateY(" + scrollTop + "px)", "position": "relative", "z-index": "1" });
 }
 
-
-//转换单们到MB
-function toSizeM(byteLen) {
-    var a = parseInt(byteLen) / 1024 / 1024;
-    return a || 0;
-}
-
 //字节单位转换MB
-function toSizeG(bytes){
+function toSizeM(bytes){
 	var c = 1024 * 1024;
 	var b = 0;
 	if(bytes > 0){
-		var b = (bytes/c).toFixed(2);
+		b = (bytes/c).toFixed(2);
 	}
 	return b;
+}
+
+function toSizeMWithUnit(bytes){
+  var c = 1024 * 1024;
+  var b = '';
+  if(bytes != '' && bytes != null && bytes > 0){
+    b = (bytes/c).toFixed(2) + 'MB';
+  }
+  return b;
 }
 
 //格式化值
@@ -70,6 +75,7 @@ function formatValue(v, unit = '') {
   // console.log(v, unit, typeof v)
   return (v === null || v === undefined || v === '' || typeof v === 'undefined')? '': (v + unit);
 }
+
 
 // 高亮异常的比例值
 function renderPercentColor() {

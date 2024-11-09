@@ -34,49 +34,66 @@ def get_disk_info():
     # 获取磁盘使用信息
     partitions = psutil.disk_partitions()
     disk_info = []
+
+    # 获取初始的磁盘 I/O 计数
+    initial_io_counters = psutil.disk_io_counters(perdisk=True)
+
+    # 等待一段时间以测量速度
+    time.sleep(1)
+
+    # 获取之后的磁盘 I/O 计数
+    final_io_counters = psutil.disk_io_counters(perdisk=True)
+
     for partition in partitions:
         if 'rw' in partition.opts:  # 仅考虑可读写的分区
             disk_usage = psutil.disk_usage(partition.mountpoint)
-            # disk_io_counters = psutil.disk_io_counters(perdisk=True)
-            disk_info.append({
-                'total': disk_usage.total / (1024 ** 3),  # 转换为 GB
-                'used': disk_usage.used / (1024 ** 3),
-                'free': disk_usage.free / (1024 ** 3),
-                'usedPercent': disk_usage.percent,
-                'fstype': partition.fstype,
-                'name': partition.device,
-                # 'ioPercent': 
-                # 'ioTime': 
-                # 'iops': 
-                'mountpoint': partition.mountpoint
-            })
-            # usage_info[partition.mountpoint] = {
-            #     'total': usage.total / (1024 ** 3),  # 转换为 GB
-            #     'used': usage.used / (1024 ** 3),
-            #     'free': usage.free / (1024 ** 3),
-            #     'percent': usage.percent
-            # }
+            device_name = partition.device.split('/')[-1]  # 提取设备名称
+
+            # 获取初始和最终的 I/O 计数
+            initial_io = initial_io_counters.get(device_name)
+            final_io = final_io_counters.get(device_name)
+
+            if initial_io and final_io:
+                read_bytes = final_io.read_bytes - initial_io.read_bytes
+                write_bytes = final_io.write_bytes - initial_io.write_bytes
+
+                # 计算读写速度
+                read_speed = read_bytes 
+                write_speed = write_bytes 
+
+                disk_info.append({
+                    'total': disk_usage.total / (1024 ** 3),  # 转换为 GB
+                    'used': disk_usage.used / (1024 ** 3),
+                    'free': disk_usage.free / (1024 ** 3),
+                    'usedPercent': disk_usage.percent,
+                    'fstype': partition.fstype,
+                    'name': partition.device,
+                    'mountpoint': partition.mountpoint,
+                    'readSpeed': read_speed,
+                    'writeSpeed': write_speed
+                })
+
     return disk_info
 
-# def get_disk_io_speed(interval=1):
-#     # 获取初始磁盘 IO 统计
-#     disk_io_start = psutil.disk_io_counters()
-#     bytes_read_start = disk_io_start.read_bytes
-#     bytes_written_start = disk_io_start.write_bytes
+def get_disk_io_speed(interval=1):
+    # 获取初始磁盘 IO 统计
+    disk_io_start = psutil.disk_io_counters()
+    bytes_read_start = disk_io_start.read_bytes
+    bytes_written_start = disk_io_start.write_bytes
     
-#     # 等待指定的时间间隔
-#     time.sleep(interval)
+    # 等待指定的时间间隔
+    time.sleep(interval)
     
-#     # 获取结束时的磁盘 IO 统计
-#     disk_io_end = psutil.disk_io_counters()
-#     bytes_read_end = disk_io_end.read_bytes
-#     bytes_written_end = disk_io_end.write_bytes
+    # 获取结束时的磁盘 IO 统计
+    disk_io_end = psutil.disk_io_counters()
+    bytes_read_end = disk_io_end.read_bytes
+    bytes_written_end = disk_io_end.write_bytes
     
-#     # 计算读写速度（字节/秒转换为 KB/秒）
-#     read_speed = (bytes_read_end - bytes_read_start) / 1024 / interval
-#     write_speed = (bytes_written_end - bytes_written_start) / 1024 / interval
+    # 计算读写速度（字节/秒转换为 KB/秒）
+    read_speed = (bytes_read_end - bytes_read_start) / interval
+    write_speed = (bytes_written_end - bytes_written_start)  / interval
     
-#     return read_speed, write_speed
+    return read_speed, write_speed
 
 def get_net_info(interval=1):
     # 获取初始网络 IO 信息
