@@ -75,14 +75,28 @@ function getWeb(page, search, host_group_id) {
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
         disk_total += (data.data[i].disk_info[0]['total'] || 0)
         disk_used += (data.data[i].disk_info[0]['used'] || 0)
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['read_per_second']) + "</div>";
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['write_per_second']) + "</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed']) + "</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed']) + "</div>";
         if(data.data[i].disk_info[0]['usedPercent'] < 80) {
           disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span></span>";
         } else {
           disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:red'>不足</span></span>";
         }
       }
+
+      // 操作列
+      let opt = ``;
+      if (data.data[i].host_info && data.data[i].host_info.isJHPanel) { 
+        // 增加跳转 jhPanelUrl 
+        // 替换 ip地址为 data.data[i].ip，端口不要替换掉
+        let jhPanelUrl = (data.data[i].host_info.jhPanelUrl || '').replace(/(https?:\/\/)([^:]+)/, `$1${data.data[i].ip}`);
+        opt += `<a href='${jhPanelUrl}' class='btlink' target='_blank'>打开江湖面板</a>`;
+      }
+      opt += `
+        <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
+        | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>
+      `;
+      
 
 			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
@@ -95,10 +109,8 @@ function getWeb(page, search, host_group_id) {
 					<td>" + net_total + "</td>\
 					<td>" + disk_speed + "</td>\
 					<td>" + disk_status + "</td>\
-					<td style='text-align:right; color:#bbb'>\
-					    <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
-					    | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>\
-					</td></tr>"
+					<td style='text-align:right; color:#bbb'>" + opt + "</td>\
+        </tr>"
 			
 			$("#webBody").append(body);
 
@@ -566,8 +578,11 @@ function openHostDetail(host_id,host_name,endTime,addtime,event){
  * 主机概览
  * @param {Int} host_id 网站ID
  */
+let getDetailHostSummaryDataTask = null;
 function detailHostSummary(host_id, name, msg, status) {
-
+  if (getDetailHostSummaryDataTask) {
+    clearInterval(getDetailHostSummaryDataTask);
+  }
   var bodyHtml = `
 
     <!-- 主机信息 -->
@@ -756,7 +771,7 @@ function detailHostSummary(host_id, name, msg, status) {
   initDetailHostSummaryNetChart();
   
   getDetailHostSummaryData(host_id);
-  setInterval(function() {
+  getDetailHostSummaryDataTask =  setInterval(function() {
     getDetailHostSummaryData(host_id);
   }, 3000);
 

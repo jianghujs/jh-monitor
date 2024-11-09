@@ -32,14 +32,14 @@
 									<th width="150" style="cursor: pointer;">主机名称/IP</th>
 									<th style="cursor: pointer;" width="98">状态</th>
 									<th width="80" style="cursor: pointer;">分组名称</th>
-									<th width="80" onclick="listOrder('load','host',this)" style="cursor: pointer;">负载<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">CPU<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">内存<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">总流量<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">磁盘读写<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">磁盘状态<span class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th width='130' class='text-right'>操作</th>
+									<th width="80" onclick="listOrder('load','host',this)" style="cursor: pointer;">负载<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">CPU<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">内存<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">流量<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">总流量<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">磁盘读写<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width="80" onclick="listOrder('cpu','host',this)" style="cursor: pointer;">磁盘状态<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th width='220' class='text-right'>操作</th>
 								</tr>
 							</thead>
 							<tbody id="webBody"></tbody>

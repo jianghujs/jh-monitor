@@ -70,6 +70,33 @@ def is_jh_panel_installed():
         print(f"An error occurred: {e}")
         return False
 
+def get_jh_panel_url():
+    panel_path = "/www/server/jh-panel"
+    if not os.path.exists(panel_path):
+        return ""
+    
+    # 端口
+    port = 10744
+    if os.path.exists(f"{panel_path}/data/port.pl"):
+        with open(f"{panel_path}/data/port.pl") as f:
+            port = f.read().strip()
+    
+    # 协议
+    protocol = "http"
+    if os.path.exists(f"{panel_path}/data/ssl.pl"):
+        protocol = "https"
+    
+    # auth_path
+    auth_path = ""
+    if os.path.exists(f"{panel_path}/data/admin_path.pl"):
+        with open(f"{panel_path}/data/admin_path.pl") as f:
+            auth_path = f.read().strip()
+
+    # address
+    address = get_host_ip()
+
+    return f"{protocol}://{address}:{port}{auth_path}"
+    
 def is_pve_machine():
     # 检查 /etc/pve 目录是否存在
     return os.path.exists('/etc/pve')
@@ -89,6 +116,7 @@ def main():
         "cpuModel": get_cpu_model(),
         "lastBootTime": get_last_boot_time(),
         "isJHPanel": is_jh_panel_installed(),
+        "jhPanelUrl": get_jh_panel_url(),
         "isPVE": is_pve_machine()
     }
     
