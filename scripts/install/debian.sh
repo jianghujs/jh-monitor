@@ -214,6 +214,30 @@ if [ ! -f /usr/local/bin/pip3 ];then
   python3 -m pip install --upgrade pip setuptools wheel
 fi
 
+# 安装并配置ansible
+apt-get install -y ansible
+apt-get install -y sshpass # 支持密码连接
+
+mkdir -p /etc/ansible/
+echo "[defaults]                   
+inventory      = /etc/ansible/hosts      		
+#library        = /usr/share/my_modules/  		
+#module_utils   = /usr/share/my_module_utils/ 	
+#remote_tmp     = ~/.ansible/tmp   				
+#local_tmp      = ~/.ansible/tmp   				
+#plugin_filters_cfg = /etc/ansible/plugin_filters.yml 
+#forks          = 5								
+#poll_interval  = 15							
+#sudo_user      = root      					
+#ask_sudo_pass = True							
+#ask_pass      = True							
+#transport      = smart		
+#remote_port    = 22							
+#module_lang    = C			
+#module_set_locale = False   " > /etc/ansible/ansible.cfg
+
+echo "" > /etc/ansible/hosts
+
 # 安装python依赖
 cd /www/server/jh-monitor/scripts/install && bash lib.sh
 chmod 755 /www/server/jh-monitor/data
