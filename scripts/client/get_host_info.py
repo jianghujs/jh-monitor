@@ -101,7 +101,7 @@ def is_pve_machine():
     # 检查 /etc/pve 目录是否存在
     return os.path.exists('/etc/pve')
 
-def get_pve_panel_url():
+def get_pve_url():
     # 获取 PVE 管理面板地址
     if not is_pve_machine():
         return ""
@@ -134,7 +134,7 @@ def main():
         "isJHPanel": is_jh_panel_installed(),
         "jhPanelUrl": get_jh_panel_url(),
         "isPVE": is_pve_machine(),
-        "pvePanelUrl": get_pve_panel_url()
+        "pveUrl": get_pve_url()
     }
     
     # 将字典转换为 JSON 格式的字符串并打印

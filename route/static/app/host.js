@@ -94,7 +94,7 @@ function getWeb(page, search, host_group_id) {
         opt += `<a href='${jhPanelUrl}' class='btlink' target='_blank'>打开江湖面板</a>`;
       }
       // 打开PVE面板
-      if (data.data[i].host_info && data.data[i].host_info.isPVEPanel) {
+      if (data.data[i].host_info && data.data[i].host_info.isPVE) {
         opt += `<a href='${data.data[i].host_info.pvePanelUrl}' class='btlink' target='_blank'>打开PVE面板</a>`;
       }
       opt += `
