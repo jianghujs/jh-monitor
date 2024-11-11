@@ -98,8 +98,8 @@ function getWeb(page, search, host_group_id) {
         opt += `<a href='${data.data[i].host_info.pvePanelUrl}' class='btlink' target='_blank'>打开PVE面板</a>`;
       }
       opt += `
-        <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
-        | <a href='javascript:;' class='btlink' onclick=\"hostDelete('" + data.data[i].host_id + "','" + data.data[i].host_name + "')\" title='删除主机'>删除</a>
+        <a href='javascript:;' class='btlink' onclick="openHostDetail('${data.data[i].host_id}','${data.data[i].host_name}','${data.data[i].edate}','${data.data[i].addtime}')">详情</a>
+        | <a href='javascript:;' class='btlink' onclick="hostDelete('${data.data[i].host_id}','${data.data[i].host_name}')" title='删除主机'>删除</a>
       `;
       
 
