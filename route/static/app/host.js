@@ -86,11 +86,16 @@ function getWeb(page, search, host_group_id) {
 
       // 操作列
       let opt = ``;
+      // 打开江湖面板
       if (data.data[i].host_info && data.data[i].host_info.isJHPanel) { 
         // 增加跳转 jhPanelUrl 
         // 替换 ip地址为 data.data[i].ip，端口不要替换掉
         let jhPanelUrl = (data.data[i].host_info.jhPanelUrl || '').replace(/(https?:\/\/)([^:]+)/, `$1${data.data[i].ip}`);
         opt += `<a href='${jhPanelUrl}' class='btlink' target='_blank'>打开江湖面板</a>`;
+      }
+      // 打开PVE面板
+      if (data.data[i].host_info && data.data[i].host_info.isPVEPanel) {
+        opt += `<a href='${data.data[i].host_info.pvePanelUrl}' class='btlink' target='_blank'>打开PVE面板</a>`;
       }
       opt += `
         <a href='javascript:;' class='btlink' onclick=\"openHostDetail('" + data.data[i].host_id + "','" + data.data[i].host_name + "','" + data.data[i].edate + "','" + data.data[i].addtime + "')\">详情</a>\
