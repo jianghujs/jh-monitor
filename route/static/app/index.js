@@ -14,10 +14,26 @@ initHostDangerCmdChart();
 // 主机概览
 function getHostSummaryData() {
   let host_list = [
-    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
-    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
-    { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' }
+    // { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
+    // { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' },
+    // { host_name: '主机1', ip: '192.168.1.1', status: '正常', cpu: '20%', memory: '30%', disk: '40%', net: '50%', time: '2021-01-01 12:00:00' }
   ]
+	$.post('/host/list', 'limit=1000&p=1', function(data) {
+		for (var i = 0; i < data.data.length; i++) {
+      const host = data.data[i];
+      host_list.push({
+        host_name: host.host_name,
+        ip: host.ip,
+        status: host.host_status === 'Running' ? '运行中' : '已停止',
+        cpu: host.cpu_info.percent + '%',
+        memory: host.mem_info.usedPercent + '%',
+        disk: host.disk_status,
+        net: host.net_speed,
+        time: host.last_update
+      });
+    }
+  })
+
   let host_summary_body = '';
   host_list.forEach((host, index) => {
     host_summary_body += `
