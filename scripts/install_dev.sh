@@ -67,8 +67,10 @@ if [ $OSNAME != "macos" ];then
 fi
 
 echo "use system version: ${OSNAME}"
+# ! 开发直接执行本地安装脚本
 cd /www/server/jh-monitor && bash scripts/install/${OSNAME}.sh
 
+# 启动面板
 cd /www/server/jh-monitor && bash cli.sh start
 isStart=`ps -ef|grep 'gunicorn -c setting.py app:app' |grep -v grep|awk '{print $2}'`
 n=0
