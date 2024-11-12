@@ -35,152 +35,6 @@ Command_Exists() {
     command -v "$@" >/dev/null 2>&1
 }
 
-Get_Pack_Manager(){
-    if [ -f "/usr/bin/yum" ] && [ -d "/etc/yum.repos.d" ]; then
-        PM="yum"
-    elif [ -f "/usr/bin/apt-get" ] && [ -f "/usr/bin/dpkg" ]; then
-        PM="apt-get"        
-    else
-        echo "不支持的包管理器"
-        exit 1
-    fi
-}
-
-Download_Agent(){
-    version="1.0"
-    file_name="btmonitoragent"
-    agent_src="/tmp/btmonitoragent.zip"
-
-    if [ -d "$target_dir" ]; then
-        rm -rf "$target_dir"
-    fi
-    cd /tmp || exit
-
-    if [ -n "$offline" ]; then
-        if [[ "$offline" =~ ".zip" ]]; then
-            if [[ ! -f "$offline" ]]; then
-                echo "$offline 文件不存在请使用完整路径。例:/root/agent.zip"
-                exit 1
-            fi
-            \cp "$offline" "$agent_src"
-        else
-            wget -O "$agent_src" "$download_Url/install/src/update.zip" -t 5 -T 10
-        fi
-    else
-        wget -O "$agent_src" "$download_Url/install/src/update.zip" -t 5 -T 10
-    fi
-
-    tmp_size=$(du -b "$agent_src" | awk '{print $1}')
-    if [ "$tmp_size" -lt 10703460 ]; then
-        rm -f "$agent_src"
-        echo -e "\033[31mERROR: 下载云监控被控端失败，请尝试以下解决方法：\033[0m"
-        echo "1、请尝试重新安装！"
-        echo "2、如无法连接到下载节点，请参考此教程指定节点：https://www.bt.cn/bbs/thread-87257-1-1.html"
-        exit 1
-    fi
-
-    echo "正在解压云监控被控端..."
-    if ! Command_Exists unzip; then
-        echo -e "\033[31mERROR: unzip 命令不存在，尝试以下解决方法：\033[0m"
-        echo -e "1、使用命令重新安装unzip。 \n   Debian/Ubuntu 系列: apt reinstall unzip \n   RedHat/CentOS 系列：yum reinstall unzip "
-        echo -e "2、检查系统源是否可用？尝试更换可用的源参考教程：https://www.bt.cn/bbs/thread-58005-1-1.html "
-        exit 1
-    fi
-
-    unzip -d "$target_dir" "$agent_src" > /dev/null 2>&1
-    mkdir -p "$target_dir/config" "$target_dir/logs"
-
-    rm -rf "$agent_src"
-
-    if [ ! -f "$target_dir/BT-MonitorAgent" ]; then
-        rm -rf "$target_dir"
-        echo -e "\033[31mERROR: 解压云监控被控端失败，请尝试重新安装！\033[0m"
-        exit 1
-    else
-        chmod -R 755 "$target_dir"
-        chown -R root:root "$target_dir"
-        chmod +x "$target_dir/BT-MonitorAgent"
-        chmod -R +x "$target_dir/plugin"
-    fi
-}
-
-Timezones_Check(){
-    if [[ "$action" =~ "127.0.0.1" ]]; then
-        echo "检测到地址是127.0.0.1,本机安装,跳过时区检测"
-        return
-    fi
-
-    bind_conf=$(curl -s -k "$action/api/bind" | awk -F '/' '{print $6}' | awk -F '"' '{print $1}')
-    list_timectl=$(timedatectl list-timezones | grep "$bind_conf")
-    local_timectl=$(timedatectl | grep 'Time zone' | grep "$bind_conf")
-
-    if [ -z "$bind_conf" ]; then 
-        echo -e "\033[31m错误：无法获取主监控服务器的时区，请检查与主监控服务器连接是否正常！\033[0m"
-        exit 1
-    fi
-    if [ -z "$local_timectl" ]; then
-        echo ""
-        echo "被控服务器时区与主监控服务器时区不一致，将自动设置成与主监控服务器一致的时区！"
-        sleep 1
-        timedatectl set-timezone "$list_timectl"
-        if [ "$?" != "0" ]; then
-            echo -e "\033[31m错误：时区设置错误，请手动将当前服务器时区设置与主监控服务器时区一致！\033[0m"
-            echo -e "\033[31m错误：主监控服务器时区是$list_timectl \033[0m"
-            exit 1
-        fi
-        echo "已将当前服务器时区设置为：$list_timectl"
-        echo ""
-    fi
-}
-
-Install_RPM_Pack(){
-    yumPacks="wget curl unzip crontabs"
-    yum install -y ${yumPacks}
-
-    for yumPack in ${yumPacks}; do
-        rpmPack=$(rpm -q ${yumPack})
-        packCheck=$(echo "${rpmPack}" | grep not)
-        if [ "${packCheck}" ]; then
-            yum install ${yumPack} -y
-        fi
-    done
-}
-
-Install_Deb_Pack(){
-    debPacks="wget curl unzip cron"
-    apt-get install -y $debPacks
-
-    for debPack in ${debPacks}; do
-        dpkg -l ${debPack} 2>/dev/null | grep -q '^ii' || apt-get install -y ${debPack}
-    done
-}
-
-Connent_Test(){
-    # todo: 实现 Connexion Test
-    exit 1
-}
-
-Set_Crontab(){
-    crond_text='*/1 * * * * /bin/bash /usr/local/btmonitoragent/crontab_tasks/btm_agent_runfix.sh >> /usr/local/btmonitoragent/crontab_tasks/btm_agent_runfix.log 2>&1'
-
-    if [ ! -f "${target_dir}/crontab_tasks/btm_agent_runfix.sh" ]; then
-        mkdir -p "$target_dir/crontab_tasks"
-        wget -O "$target_dir/crontab_tasks/btm_agent_runfix.sh" "${download_Url}/tools/btm_agent_runfix.sh" -t 5 -T 10
-    fi
-
-    echo -e "正在添加被控端守护任务...\c"
-    if [ "$PM" = "yum" ]; then
-        sed -i "/btm_agent_runfix/d" /var/spool/cron/root
-        echo "$crond_text" >> "/var/spool/cron/root"
-        systemctl restart crond
-    else
-        sed -i "/btm_agent_runfix/d" /var/spool/cron/crontabs/root
-        echo "$crond_text" >> "/var/spool/cron/crontabs/root"
-        systemctl restart cron
-    fi
-    echo -e "   \033[32mdone\033[0m"
-}
-
 Add_Ansible_User(){
     if id "$USERNAME" &>/dev/null; then
         echo "用户 $USERNAME 已经存在。"
@@ -269,16 +123,6 @@ elif [ "$action" == "install" ]; then
     SERVER_IP=$(echo "${monitor_url}" | cut -d'/' -f3 | cut -d':' -f1)
     SERVER_PORT=$(echo "${monitor_url}" | awk -F ":" '{print $3}')
 
-    Get_Pack_Manager
-    # if [ $PM = "yum" ]; then
-    #     Install_RPM_Pack
-    # else
-    #     Install_Deb_Pack
-    # fi
-
-    # 安装客户端
-    # Install_Monitor_Agent
-    
     # 添加ansible用户
     Add_Ansible_User
 
@@ -290,7 +134,4 @@ elif [ "$action" == "install" ]; then
 
     # 通知服务端添加主机
     Add_Host_To_Monitor
-    # Download_Agent
-    # Set_Crontab
-    # Timezones_Check
 fi
