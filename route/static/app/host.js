@@ -1668,7 +1668,7 @@ function initDetailHostBaseMonitorAvgLoadChart() {
 
 function updateDetailHostBaseMonitorAvgLoadChartData(s, e) {
   $.get('/system/get_cpu_io?host_id=' + detailHostId + 'start='+s+'&end='+e,function(rdata){
-    debugger
+    // debugger
   }, 'json');
   // ! 模拟数据
   let avg_load_history = [
