@@ -129,10 +129,10 @@ UNINSTALL_REDIS()
     fi
 }
 
-UNINSTALL_MW()
+UNINSTALL_JHM()
 {
     echo -e "----------------------------------------------------"
-    echo -e "检查已有mderver-web环境，卸载可能影响现有站点及数据"
+    echo -e "检查已有jh-monitor环境，卸载可能影响现有站点及数据"
     echo -e "----------------------------------------------------"
     read -p "输入yes强制卸载面板: " yes;
     if [ "$yes" != "yes" ];then
@@ -154,7 +154,7 @@ UNINSTALL_PHP
 UNINSTALL_MySQL
 UNINSTALL_MEMCACHED
 UNINSTALL_REDIS
-UNINSTALL_MW
+UNINSTALL_JHM
 
 endTime=`date +%s`
 ((outTime=(${endTime}-${startTime})/60))
