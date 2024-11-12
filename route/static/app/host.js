@@ -469,10 +469,17 @@ function openHostAdd() {
             </div>
           </div>
           <div class="mb-4">
-            <label class="block font-medium mb-4">被控内网安装命令</label>
+            <label class="block font-medium mb-4">安装命令（国际源）</label>
             <div class="flex items-center bg-gray-200 p-5 rounded">
-              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLAN"></div>
-              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN()">复制</button>
+              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGithub"></div>
+              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGithub')">复制</button>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block font-medium mb-4">安装命令（国内源）</label>
+            <div class="flex items-center bg-gray-200 p-5 rounded">
+              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGitee"></div>
+              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGitee')">复制</button>
             </div>
           </div>
           <div class="mb-4" hidden>
@@ -499,14 +506,16 @@ function openHostAdd() {
 
   $.post('/host/get_client_install_shell_lan','', function(data){
     let rdata = JSON.parse(data)
+    debugger
     if (rdata.status){
-      $("#clientInstallShellLAN").html(rdata.data);
+      $("#clientInstallShellLANOfGithub").html(rdata.data.github);
+      $("#clientInstallShellLANOfGitee").html(rdata.data.gitee);
     }
   });
 }
 
-function copyClientInstallShellLAN() {
-    copyText($("#clientInstallShellLAN").html());
+function copyClientInstallShellLAN(key) {
+    copyText($("#" + key).html());
 }
 
 

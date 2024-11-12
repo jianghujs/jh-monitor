@@ -157,7 +157,14 @@ class host_api:
     
     def getClientInstallShellLanApi(self):
         client_install_shell = f"curl -sSO https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh && bash install.sh install http://{jh.getHostAddr()}:10844"
-        return jh.returnJson(True, 'ok', client_install_shell)
+        server_ip = jh.getHostAddr()
+        github_script_url = "https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh"
+        gitee_script_url = "https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/client/install.sh"
+        command_template = "wget -O install.sh %s && bash install.sh install http://%s:10844"
+        return jh.returnJson(True, 'ok', {
+            'github': command_template % (github_script_url, server_ip),
+            'gitee': command_template % (gitee_script_url, server_ip)
+        })
 
     def alarmApi(self):
         host_id = request.form.get('host_id', '')
