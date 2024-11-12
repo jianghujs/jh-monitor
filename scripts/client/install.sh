@@ -192,7 +192,7 @@ Add_Ansible_User(){
 
 Config_Ansible_User() {
     # 创建脚本执行目录
-    mkdir /home/ansible_user/jh-monitor-scripts/
+    mkdir -p /home/ansible_user/jh-monitor-scripts/
     chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
     
     # 防火墙读取权限
