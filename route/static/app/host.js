@@ -606,17 +606,17 @@ function detailHostSummary(host_id, name, msg, status) {
           <h3 class="c6 f16 pull-left">主机信息</h3>
       </div>
       <div class="p-5">
-          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+          <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">主机名称: </span><span class="hostName"></span></div>
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">IP地址:</span><span class="ip"></span></div>
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">操作系统:</span><span class="platform"></span></div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">运行天数:</span><span class="runDay"></span></div>
+              <div hidden class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">运行天数:</span><span class="runDay"></span></div>
           </div>
-          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">被控版本:</span><span class="jhMonitorVersion"></span></div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">CPU型号:</span><span class="modelName"></span></div>
+          <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+              <div hidden class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">被控版本:</span><span class="jhMonitorVersion"></span></div>
+              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32" title="modelName">CPU型号:</span><span class="modelName"></span></div>
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">平均负载:</span><span class="loadAvg"></span></div>
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">上次启动时间:</span><span class="upTime"></span></div>
+              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">已不间断运行:</span><span class="upTime"></span></div>
           </div>
       </div>
     </div>
@@ -1052,12 +1052,12 @@ function getDetailHostSummaryData(host_id) {
     // 主机信息
     $('.detailHostSummary .hostName').text(host_detail['host_name']);
     $('.detailHostSummary .ip').text(ip);
-    $('.detailHostSummary .platform').text(`${host_info['platform']} ${host_info['platformVersion']}`);
+    $('.detailHostSummary .platform').text(`${host_info['platform']} ${host_info['platformVersion']}`).attr('title', `${host_info['platform']} ${host_info['platformVersion']}`);
     $('.detailHostSummary .runDay').text(host_info['runDay']);
     $('.detailHostSummary .jhMonitorVersion').text(host_info['jhMonitorVersion']);
-    $('.detailHostSummary .modelName').text(cpu_info['modelName']);
+    $('.detailHostSummary .modelName').text(cpu_info['modelName']).attr('title', cpu_info['modelName']);
     $('.detailHostSummary .loadAvg').text(`${load_avg['1min']} / ${load_avg['5min']} / ${load_avg['15min']}`);
-    $('.detailHostSummary .upTime').text(host_info['upTime']);
+    $('.detailHostSummary .upTime').text(host_info['upTimeStr']);
 
     // 负载状态 
     var loadColor, occupy, averageText = '';

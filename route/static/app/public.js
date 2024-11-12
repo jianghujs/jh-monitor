@@ -22,6 +22,17 @@ function toSize(a) {
 	}
 }
 
+function toTime(ts) {
+  var d = new Date(ts * 1000);
+  var year = d.getFullYear();
+  var month = d.getMonth() + 1;
+  var day = d.getDate();
+  var hour = d.getHours();
+  var minute = d.getMinutes();
+  var second = d.getSeconds();
+  return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
+}
+
 function inArray(f, arr){
 	for (var i = 0; i < arr.length; i++) {
 		if (f == arr[i]) {
