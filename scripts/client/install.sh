@@ -65,6 +65,8 @@ Setup_SSH_Config(){
     chown "$USERNAME:$USERNAME" "$SSH_DIR"
     chmod 700 "$SSH_DIR"
 
+    echo "正在从服务端 $monitor_url/pub/get_pub_key 获取公钥..."
+
     PUBLIC_KEY_DATA=$(curl -s "$monitor_url/pub/get_pub_key")
     echo $PUBLIC_KEY_DATA
 
