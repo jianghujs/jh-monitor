@@ -1,5 +1,5 @@
 [Unit]
-Description=jh-task daemon
+Description=jhm-task daemon
 After=network.target
 
 [Service]

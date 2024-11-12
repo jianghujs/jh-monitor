@@ -1,5 +1,5 @@
 [Unit]
-Description=jh-monitor daemon
+Description=jhm-monitor daemon
 After=network.target
 
 [Service]
@@ -15,7 +15,7 @@ Restart=on-failure
 [Timer]
 # 每日凌晨点重启
 OnCalendar=*-*-* 03:30:00
-Unit=jh.service
+Unit=jhm.service
 
 [Install]
 WantedBy=multi-user.target
