@@ -557,7 +557,9 @@ function hostDelete(host_id, name){
 
 
 /*主机详情*/
+var detailHostId = null;
 function openHostDetail(host_id,host_name,endTime,addtime,event){
+  detailHostId = host_id;
 	event && event.preventDefault();
 
 	layer.open({
@@ -797,7 +799,11 @@ function detailHostSummary(host_id, name, msg, status) {
  * 基础监控
  * @param {Int} host_id 网站ID
  */
+let updateDetailHostBaseMonitorTask = null;
 function detailBaseMonitor(host_id, name, msg, status) {
+  if (updateDetailHostBaseMonitorTask) {
+    clearInterval(updateDetailHostBaseMonitorTask);
+  }
   var bodyHtml = `
     <div class="control">
       <div class="col-xs-12 col-sm-12 col-md-12 pull-left pd0 view0">
@@ -911,6 +917,11 @@ function detailBaseMonitor(host_id, name, msg, status) {
   $("#hostdetail-con").html(bodyHtml);
 
   getDetailHostBaseMonitorData();
+
+  updateDetailHostBaseMonitorAvgLoadChartData();
+  updateDetailHostBaseMonitorTask =  setInterval(function() {
+    updateDetailHostBaseMonitorAvgLoadChartData();
+  }, 3000);
 }
 
 /**
@@ -1361,6 +1372,44 @@ function getDetailHostBaseMonitorData(host_id) {
   initDetailHostBaseMonitorNetIoChart();
 }
 
+//指定天数
+function Wday(day, name){
+	var now = (new Date().getTime())/1000;
+	if(day==0){
+		var s = (new Date(getToday() + " 00:00:01").getTime())/1000;
+			s = Math.round(s);
+		var e = Math.round(now);
+	}
+	if(day==1){
+		var s = (new Date(getBeforeDate(day) + " 00:00:01").getTime())/1000;
+		var e = (new Date(getBeforeDate(day) + " 23:59:59").getTime())/1000;
+		s = Math.round(s);
+		e = Math.round(e);
+	}
+	else{
+		var s = (new Date(getBeforeDate(day) + " 00:00:01").getTime())/1000;
+			s = Math.round(s);
+		var e = Math.round(now);
+	}
+	switch (name){
+		case "cpu":
+			updateDetailHostBaseMonitorAvgLoadChartData(s, e);
+			break;
+		case "mem":
+			mem(s,e);
+			break;
+		case "disk":
+			disk(s,e);
+			break;
+		case "network":
+			network(s,e);
+			break;
+		case "getload":
+			getload(s,e);
+			break;
+	}
+}
+
 
 // 平均负载图表
 var avgLoadChart = {}
@@ -1590,10 +1639,57 @@ function initDetailHostBaseMonitorAvgLoadChart() {
       window.addEventListener("resize",function(){
         this.myChart.resize();
       });
+    },
+    setData(d) {
+      this.myChart.setOption({
+        xAxis: [{
+          data: d.xData
+        }],
+        series: [{
+          name: '资源使用率%',
+          data: d.yData
+        }, {
+          name: '1分钟',
+          data: d.zData
+        }, {
+          name: '5分钟',
+          data: d.aData
+        }, {
+          name: '15分钟',
+          data: d.bData
+        }]
+      });
+      this.myChart.resize();
     }
   }
   avgLoadChart.init();
 }
+
+
+function updateDetailHostBaseMonitorAvgLoadChartData(s, e) {
+  $.get('/system/get_cpu_io?host_id=' + detailHostId + 'start='+s+'&end='+e,function(rdata){
+    debugger
+  }, 'json');
+  // ! 模拟数据
+  let avg_load_history = [
+    {id: 162319, pro: 33.25, one: 1.33, five: 1.55, fifteen: 1.11, addtime: "10/27 00:12"},
+    {id: 162323, pro: 75.25, one: 3.01, five: 2.76, fifteen: 1.81, addtime: "10/27 00:21"},
+    {id: 162327, pro: 55.5, one: 2.22, five: 2.04, fifteen: 1.91, addtime: "10/27 00:30"},
+    {id: 162331, pro: 33.5, one: 1.34, five: 2.02, fifteen: 1.99, addtime: "10/27 00:38"},
+  ]
+
+  let xData = [], yData = [], zData = [], aData = [], bData = [];
+  for(var i = 0; i < avg_load_history.length; i++){
+    xData.push(avg_load_history[i].addtime);
+    yData.push(avg_load_history[i].pro);
+    zData.push(avg_load_history[i].one);
+    aData.push(avg_load_history[i].five);
+    bData.push(avg_load_history[i].fifteen);
+  }
+  avgLoadChart.setData({xData, yData, zData, aData, bData});
+}
+
+
 
 // CPU图表
 var memChart = {}
