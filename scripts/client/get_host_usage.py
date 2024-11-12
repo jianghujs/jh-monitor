@@ -2,12 +2,60 @@ import psutil
 import time
 import json
 import subprocess
+import os
+import re
+import sys
+
+def isAppleSystem():
+    if sys.platform == 'darwin':
+        return True
+    return False
+
+def readFile(filename):
+    # 读文件内容
+    try:
+        fp = open(filename, 'r')
+        fBody = fp.read()
+        fp.close()
+        return fBody
+    except Exception as e:
+        # print(e)
+        return False
+
+def get_cpu_type():
+    cpuType = ''
+    if isAppleSystem():
+        cmd = "system_profiler SPHardwareDataType | grep 'Processor Name' | awk -F ':' '{print $2}'"
+        cpuinfo = execShell(cmd)
+        return cpuinfo[0].strip()
+
+    # 取CPU类型
+    cpuinfo = open('/proc/cpuinfo', 'r').read()
+    rep = "model\s+name\s+:\s+(.+)"
+    tmp = re.search(rep, cpuinfo, re.I)
+    if tmp:
+        cpuType = tmp.groups()[0]
+    else:
+        cpuinfo = execShell('LANG="en_US.UTF-8" && lscpu')[0]
+        rep = "Model\s+name:\s+(.+)"
+        tmp = re.search(rep, cpuinfo, re.I)
+        if tmp:
+            cpuType = tmp.groups()[0]
+    return cpuType
+
 
 def get_cpu_info():
+
     # 获取CPU信息
+    cpuLogicalNum = psutil.cpu_count(logical=False)
+    if os.path.exists('/proc/cpuinfo'):
+        c_tmp = readFile('/proc/cpuinfo')
+        d_tmp = re.findall("physical id.+", c_tmp)
+        cpuLogicalNum = len(set(d_tmp))
+    cpu_name = get_cpu_type() + " * {}".format(cpuLogicalNum)
     return {
-        'logicalCores': psutil.cpu_count(logical=True),
-        'modelName': psutil.cpu_freq().current,
+        'logicalCores': cpuLogicalNum,
+        'modelName': cpu_name,
         'percent': psutil.cpu_percent(interval=1)
     }
 
