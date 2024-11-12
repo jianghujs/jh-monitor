@@ -142,11 +142,14 @@ CREATE TABLE IF NOT EXISTS `panel` (
 
 -------------------- 主机管理
 
+
 -- 主机
 CREATE TABLE IF NOT EXISTS `host` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `host_id` TEXT,
   `host_name` TEXT,
-  `host_group` TEXT,
+  `host_group_id` TEXT,
+  `host_group_name` TEXT,
   `ip` TEXT,
   `os` TEXT,
   `remark` TEXT,
@@ -167,14 +170,15 @@ CREATE TABLE IF NOT EXISTS `host` (
 -- 主机分组
 CREATE TABLE IF NOT EXISTS `host_group` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` TEXT,
+  `host_group_id` TEXT,
+  `host_group_name` TEXT,
   `addtime` TEXT
 );
 
 -- 主机状态数据（启动状态、运行天数、CPU型号、资源占用（负载、CPU、内存、流量、磁盘）、网络IO、磁盘IO、备份、备份状态、温度（CPU、磁盘））
 CREATE TABLE IF NOT EXISTS `host_detail` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `host_id` INTEGER,
+  `host_id` TEXT,
   `host_name` TEXT,
   `host_status` TEXT,
   `uptime` TEXT,
@@ -188,6 +192,7 @@ CREATE TABLE IF NOT EXISTS `host_detail` (
   `port_info` TEXT NOT NULL DEFAULT '{}',
   `backup_info` TEXT NOT NULL DEFAULT '{}',
   `temperature_info` TEXT NOT NULL DEFAULT '{}',  
+  `ssh_user_list` TEXT NOT NULL DEFAULT '{}',
   `last_update` TEXT, 
   `addtime` TEXT
 );
@@ -195,7 +200,7 @@ CREATE TABLE IF NOT EXISTS `host_detail` (
 -- 主机告警事件
 CREATE TABLE IF NOT EXISTS `host_alarm` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `host_id` INTEGER,
+  `host_id` TEXT,
   `host_name` TEXT,
   `alarm_type` TEXT,
   `alarm_level` TEXT,
@@ -206,7 +211,7 @@ CREATE TABLE IF NOT EXISTS `host_alarm` (
 -- 主机危险命令
 CREATE TABLE IF NOT EXISTS `host_danger_cmd` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `host_id` INTEGER,
+  `host_id` TEXT,
   `host_name` TEXT,
   `cmd` TEXT,
   `addtime` TEXT
@@ -215,11 +220,12 @@ CREATE TABLE IF NOT EXISTS `host_danger_cmd` (
 -- 主机日志
 CREATE TABLE IF NOT EXISTS `host_log` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `host_id` INTEGER,
+  `host_id` TEXT,
   `host_name` TEXT,
   `log` TEXT,
   `addtime` TEXT
 );
+
 
 -- 视图
 CREATE VIEW view01_host AS

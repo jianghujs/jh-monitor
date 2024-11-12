@@ -43,31 +43,36 @@ class host_api:
         p = request.form.get('p', '1')
         host_group_id = request.form.get('host_group_id', '')
         start = (int(p) - 1) * (int(limit))
+        try:
+            hostM = jh.M('view01_host')
+            
+            if host_group_id != '' and host_group_id != '-1':
+                hostM.where('host_group_id=?', (host_group_id,))
 
-        hostM = jh.M('view01_host')
-        
-        if host_group_id != '' and host_group_id != '-1':
-            hostM.where('host_group_id=?', (host_group_id,))
+            _list = hostM.field(self.host_field).limit(
+                (str(start)) + ',' + limit).order('id desc').select()
 
-        _list = hostM.field(self.host_field).limit(
-            (str(start)) + ',' + limit).order('id desc').select()
-        
-        # 循环转换详情数据
-        for i in range(len(_list)):
-            _list[i] = self.parseDetailJSONValue(_list[i])
-        
-        _ret = {}
-        _ret['data'] = _list
+            if type(_list) == str:
+                return jh.returnJson(False, '获取失败!' + _list)
 
-        count = hostM.count()
-        _page = {}
-        _page['count'] = count
-        _page['tojs'] = 'getWeb'
-        _page['p'] = p
-        _page['row'] = limit
+            # 循环转换详情数据
+            for i in range(len(_list)):
+                _list[i] = self.parseDetailJSONValue(_list[i])
+            
+            _ret = {}
+            _ret['data'] = _list
 
-        _ret['page'] = jh.getPage(_page)
-        return jh.getJson(_ret)
+            count = hostM.count()
+            _page = {}
+            _page['count'] = count
+            _page['tojs'] = 'getWeb'
+            _page['p'] = p
+            _page['row'] = limit
+
+            _ret['page'] = jh.getPage(_page)
+            return jh.getJson(_ret)
+        except Exception as e:
+            return jh.returnJson(False, '获取失败!' + str(e))
 
     
     def getHostGroupListApi(self):
