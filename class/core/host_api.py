@@ -160,7 +160,7 @@ class host_api:
         server_ip = jh.getHostAddr()
         github_script_url = "https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh"
         gitee_script_url = "https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/client/install.sh"
-        command_template = "wget -O install.sh %s && bash install.sh install http://%s:10844"
+        command_template = "wget -O /tmp/install.sh %s && bash /tmp/install.sh install http://%s:10844"
         return jh.returnJson(True, 'ok', {
             'github': command_template % (github_script_url, server_ip),
             'gitee': command_template % (gitee_script_url, server_ip)
