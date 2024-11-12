@@ -111,7 +111,7 @@ def initInitD():
         shutil.copyfile(script_bin, initd_bin)
         jh.execShell('chmod +x ' + initd_bin)
         # 加入自启动
-        jh.execShell('which chkconfig && chkconfig --add jh')
+        jh.execShell('which chkconfig && chkconfig --add jhm')
 
     if os.path.exists('/etc/init.d'):
         initd_bin = '/etc/init.d/jhm'
@@ -119,7 +119,7 @@ def initInitD():
         shutil.copyfile(script_bin, initd_bin)
         jh.execShell('chmod +x ' + initd_bin)
         # 加入自启动
-        jh.execShell('which update-rc.d && update-rc.d -f jh defaults')
+        jh.execShell('which update-rc.d && update-rc.d -f jhm defaults')
 
     # 获取系统IPV4
     # jh.setHostAddr(jh.getLocalIp())
