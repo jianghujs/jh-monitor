@@ -515,7 +515,8 @@ function openHostAdd() {
 }
 
 function copyClientInstallShellLAN(key) {
-    copyText($("#" + key).html());
+  let text = ($("#" + key).html() || '').replace(/&amp;/g, '&');
+  copyText(text);
 }
 
 
