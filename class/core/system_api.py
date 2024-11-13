@@ -1,7 +1,7 @@
 # coding: utf-8
 
 # ---------------------------------------------------------------------------------
-# 江湖云控
+# 江湖云监控
 # ---------------------------------------------------------------------------------
 # copyright (c) 2018-∞(https://github.com/jianghujs/jh-monitor) All rights reserved.
 # ---------------------------------------------------------------------------------
@@ -254,7 +254,7 @@ class system_api:
 
     def getTitle(self):
         titlePl = 'data/title.pl'
-        title = '江湖云控'
+        title = '江湖云监控'
         if os.path.exists(titlePl):
             title = jh.readFile(titlePl).strip()
         return title

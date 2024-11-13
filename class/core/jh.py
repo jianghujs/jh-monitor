@@ -1,7 +1,7 @@
 # coding:utf-8
 
 # ---------------------------------------------------------------------------------
-# 江湖云控
+# 江湖云监控
 # ---------------------------------------------------------------------------------
 # copyright (c) 2018-∞(https://github.com/jianghujs/jh-monitor) All rights reserved.
 # ---------------------------------------------------------------------------------
@@ -1413,7 +1413,7 @@ def makeConf():
     file = getRunDir() + '/data/json/config.json'
     if not os.path.exists(file):
         c = {}
-        c['title'] = '江湖云控'
+        c['title'] = '江湖云监控'
         c['home'] = 'http://github/jianghujs/jh-monitor'
         c['recycle_bin'] = True
         c['template'] = 'default'
@@ -1936,7 +1936,7 @@ def emailNotifyMessage(data):
 
 def emailNotifyTest(data):
     # print(data)
-    data['subject'] = '江湖云控通知测试'
+    data['subject'] = '江湖云监控通知测试'
     data['content'] = data['mail_test']
     return emailNotifyMessage(data)
 
@@ -1982,7 +1982,7 @@ def checkLockValid(lock_type, cycle_type = 'day'):
         return True
 
 @retry(max_retry=3, delay=3)
-def notifyMessageTry(msg, msgtype='text', title='江湖云控通知', stype='common', trigger_time=300, is_write_log=True):
+def notifyMessageTry(msg, msgtype='text', title='江湖云监控通知', stype='common', trigger_time=300, is_write_log=True):
   try:
     lock_file = getPanelTmp() + '/notify_lock.json'
     lock_data = {}
@@ -2040,7 +2040,7 @@ def notifyMessageTry(msg, msgtype='text', title='江湖云控通知', stype='com
 # stype 通知类型
 # trigger_time 间隔时间（秒）
 # is_write_log 是否写入日志
-def notifyMessage(msg, msgtype='text', title='江湖云控通知', stype='common', trigger_time=300, is_write_log=True):
+def notifyMessage(msg, msgtype='text', title='江湖云监控通知', stype='common', trigger_time=300, is_write_log=True):
     try:
         return notifyMessageTry(msg, msgtype, title, stype, trigger_time, is_write_log)
     except Exception as e:
