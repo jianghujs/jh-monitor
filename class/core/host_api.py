@@ -207,6 +207,13 @@ class host_api:
         data = self.getHostCpuIoData(host_id, start, end)
         return jh.getJson(data)
 
+    def getHostMemIoApi(self):
+        host_id = request.form.get('host_id', '')
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        data = self.getHostMemIoData(host_id, start, end)
+        return jh.getJson(data)
+
     def getHostDiskIoApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
@@ -218,24 +225,23 @@ class host_api:
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
-        data = self.getHostNetWorkIoData(host_id, host_id, start, end)
+        data = self.getHostNetWorkIoData(host_id, start, end)
         return jh.getJson(data)
     
     def getHostNetWorkIoData(self, host_id, start, end):
         # 取指定时间段的网络Io
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
             # 'id,up,down,total_up,total_down,down_packets,up_packets,addtime'
-            self.host_detail_field
+            'id,net_info,addtime'
         ).order('id asc').select()
         
-        print("data", data)
         return self.toAddtime(data)
 
     def getHostDiskIoData(self, host_id, start, end):
         # 取指定时间段的磁盘Io
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
             # 'id,read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime'
-            self.host_detail_field
+            'id,disk_info,addtime'
         ).order('id asc').select()
         return self.toAddtime(data)
 
@@ -243,17 +249,22 @@ class host_api:
         # 取指定时间段的CpuIo
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
             # 'id,pro,mem,addtime'
-            self.host_detail_field
+            'id,cpu_info,mem_info,addtime'
         ).order('id asc').select()
         return self.toAddtime(data, False)
 
+    def getHostMemIoData(self, host_id, start, end):
+        # 取指定时间段的内存Io
+        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
+            # 'id,pro,mem,addtime'
+            'id,mem_info,addtime'
+        ).order('id asc').select()
+        return self.toAddtime(data, True)
+
     def getHostLoadAverageData(self, host_id, start, end):
-        print("host_id", host_id)
-        print("start", start)
-        print("end", end)
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", ( host_id, start, end)).field(
             # 'id,pro,one,five,fifteen,addtime'
-            'id,load_avg,addtime'
+            'id,load_avg,cpu_info,addtime'
         ).order('id asc').select()
         return self.toAddtime(data)
     

@@ -523,11 +523,14 @@ function openHostAdd() {
   });
 }
 
+/**
+ * 复制添加主机命令
+ * @param {*} key 
+ */
 function copyClientInstallShellLAN(key) {
   let text = ($("#" + key).html() || '').replace(/&amp;/g, '&');
   copyText(text);
 }
-
 
 //添加主机
 function hostAdd() {
@@ -544,8 +547,6 @@ function hostAdd() {
     layer.close(loadT);
   },'json');
 }
-
-
 
 /**
  * 删除一个主机
@@ -803,7 +804,6 @@ function detailHostSummary(host_id, name, msg, status) {
 
 }
 
-
 /**
  * 基础监控
  * @param {Int} host_id 网站ID
@@ -926,8 +926,9 @@ function detailBaseMonitor(host_id, name, msg, status) {
   $("#hostdetail-con").html(bodyHtml);
 
   initDetailHostBaseMonitorChart();
-
-  updateDetailHostBaseMonitorChartData();
+  setTimeout(() => {
+    updateDetailHostBaseMonitorChartData();
+  }, 0);
 }
 
 /**
@@ -1138,7 +1139,7 @@ function getDetailHostSummaryData(host_id) {
     updateDetailHostSummaryNetChart(net_info);
 
     // 告警事件
-    updateDetailHostSummaryAlarm(host_id);
+    // updateDetailHostSummaryAlarm(host_id);
 
     // 在线的SSH用户
     // ! 模拟sshUser数据
@@ -1161,7 +1162,7 @@ function getDetailHostSummaryData(host_id) {
   },'json');
 }
 
-// 图标相关
+// 图表相关
 var netChart = {}
 
 function initDetailHostSummaryNetChart(net_info) {
@@ -1342,6 +1343,10 @@ function initDetailHostSummaryNetChart(net_info) {
   netChart.init();
 }
 
+/**
+ * 更新网络图表数据
+ * @param {*} net_info 
+ */
 function updateDetailHostSummaryNetChart(net_info) {
   if (net_info && net_info.length > 0) {
     const { sent_per_second, recv_per_second } = net_info[0];
@@ -1350,6 +1355,10 @@ function updateDetailHostSummaryNetChart(net_info) {
   netChart.updateOption();
 }
 
+/**
+ * 更新告警事件
+ * @param {*} host_id 
+ */
 function updateDetailHostSummaryAlarm(host_id) {
   $.post('/host/alarm', {host_id}, function(data) {
     const alarmList = data.data;
@@ -1370,7 +1379,7 @@ function updateDetailHostSummaryAlarm(host_id) {
   }, 'json');
 }
 
-function initDetailHostBaseMonitorChart(host_id) {
+function initDetailHostBaseMonitorChart() {
   initDetailHostBaseMonitorAvgLoadChart();
   initDetailHostBaseMonitorCPUChart();
   initDetailHostBaseMonitorMemChart();
@@ -1379,11 +1388,11 @@ function initDetailHostBaseMonitorChart(host_id) {
 }
 
 function updateDetailHostBaseMonitorChartData() {
-  // updateDetailHostBaseMonitorAvgLoadChartData();
-  // updateDetailHostBaseMonitorCPUChartData();
-  // updateDetailHostBaseMonitorMemChartData();
-  // updateDetailHostBaseMonitorDiskIoChartData();
-  // updateDetailHostBaseMonitorNetIoChartData();
+	Wday(0,'getload');
+  Wday(0,'cpu');
+  Wday(0,'mem');
+  Wday(0,'disk');
+  Wday(0,'network');
 }
 
 //指定天数
@@ -1428,12 +1437,7 @@ function Wday(day, name){
 // 平均负载图表
 var avgLoadChart = {}
 function initDetailHostBaseMonitorAvgLoadChart() {
-  // ! 模拟数据
   let avg_load_history = [
-    {id: 162319, pro: 33.25, one: 1.33, five: 1.55, fifteen: 1.11, addtime: "10/27 00:12"},
-    {id: 162323, pro: 75.25, one: 3.01, five: 2.76, fifteen: 1.81, addtime: "10/27 00:21"},
-    {id: 162327, pro: 55.5, one: 2.22, five: 2.04, fifteen: 1.91, addtime: "10/27 00:30"},
-    {id: 162331, pro: 33.5, one: 1.34, five: 2.02, fifteen: 1.99, addtime: "10/27 00:38"},
   ]
   avgLoadChart = {
     aData: [],
@@ -1443,6 +1447,24 @@ function initDetailHostBaseMonitorAvgLoadChart() {
     zData: [],
     myChart: echarts.init(document.getElementById('avgloadview')),
     init() {
+      this.setData(avg_load_history);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    },
+    setData(d) {
+      this.xData = [];
+      this.yData = [];
+      this.zData = [];
+      this.aData = [];
+      this.bData = [];
+      for(var i = 0; i < d.length; i++){
+        this.xData.push(d[i].addtime);
+        this.yData.push(d[i].pro);
+        this.zData.push(d[i].one);
+        this.aData.push(d[i].five);
+        this.bData.push(d[i].fifteen);
+      }
       let option = {
         animation: false,
         tooltip: {
@@ -1642,56 +1664,39 @@ function initDetailHostBaseMonitorAvgLoadChart() {
         }
       };
       this.myChart.setOption(option);
-      this.setData(avg_load_history);
-      window.addEventListener("resize",function(){
-        this.myChart.resize();
-      });
-    },
-    setData(d) {
-      for(var i = 0; i < d.length; i++){
-        this.xData.push(d[i].addtime);
-        this.yData.push(d[i].pro);
-        this.zData.push(d[i].one);
-        this.aData.push(d[i].five);
-        this.bData.push(d[i].fifteen);
-      }
       this.myChart.resize();
     }
   }
   avgLoadChart.init();
 }
 
-
+/**
+ * 更新平均负载图表数据
+ * @param {*} s 
+ * @param {*} e 
+ */
 function updateDetailHostBaseMonitorAvgLoadChartData(s, e) {
-  debugger
   $.post('/host/get_host_load_average', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
     let avg_load_history = rdata.map(item => {
-      let itemAvg = JSON.parse(item['load_avg'] || '{}');
+      let itemLoadAvg = JSON.parse(item['load_avg'] || '{}');
+      let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
       return {
         id: item.id,
-        pro: itemAvg.pro,
-        one: itemAvg['1min'],
-        five: itemAvg['5min'],
-        fifteen: itemAvg['15min'],
+        pro: itemCpuInfo.percent,
+        one: itemLoadAvg['1min'],
+        five: itemLoadAvg['5min'],
+        fifteen: itemLoadAvg['15min'],
         addtime: item.addtime
       }
     });
-    debugger
     avgLoadChart.setData(avg_load_history);
   }, 'json');
 }
 
-
-
 // CPU图表
-var memChart = {}
+var cpuChart = {}
 function initDetailHostBaseMonitorCPUChart() {
-  // ! 模拟数据
   let cpu_history = [
-    {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
-    {id: 168902, pro: 100, mem: 54.07751697121776, addtime: "11/03 00:01"},
-    {id: 168903, pro: 71.6, mem: 60.346975585265625, addtime: "11/03 00:03"},
-    {id: 168904, pro: 90.5, mem: 72.29185875221229, addtime: "11/03 00:05"}
   ]
 
   cpuChart = {
@@ -1699,10 +1704,18 @@ function initDetailHostBaseMonitorCPUChart() {
     yData: [],
     myChart: echarts.init(document.getElementById('cupview')),
     init() {
-      for(var i = 0; i < cpu_history.length; i++){
+      this.setData(cpu_history);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    },
+    setData(d) {
+      this.xData = [];
+      this.yData = [];
+      for(var i = 0; i < d.length; i++){
         
-        this.xData.push(cpu_history[i].addtime);
-        this.yData.push(cpu_history[i].pro);
+        this.xData.push(d[i].addtime);
+        this.yData.push(d[i].pro);
       }
       let option = {
         tooltip: {
@@ -1774,23 +1787,30 @@ function initDetailHostBaseMonitorCPUChart() {
         ]
       };
       this.myChart.setOption(option);
-      window.addEventListener("resize",function(){
-        this.myChart.resize();
-      });
     }
   }
   cpuChart.init();
 }
 
+// 更新CPU图表数据
+function updateDetailHostBaseMonitorCPUChartData(s, e) {
+  $.post('/host/get_host_cpu_io', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
+    let cpu_history = rdata.map(item => {
+      let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
+      return {
+        id: item.id,
+        pro: itemCpuInfo.percent,
+        addtime: item.addtime
+      }
+    });
+    cpuChart.setData(cpu_history);
+  }, 'json');
+}
+
 // 内存图表
 var memChart = {}
 function initDetailHostBaseMonitorMemChart() {
-  // ! 模拟数据
   let mem_history = [
-    {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
-    {id: 168902, pro: 100, mem: 54.07751697121776, addtime: "11/03 00:01"},
-    {id: 168903, pro: 71.6, mem: 60.346975585265625, addtime: "11/03 00:03"},
-    {id: 168904, pro: 90.5, mem: 72.29185875221229, addtime: "11/03 00:05"}
   ]
 
   memChart = {
@@ -1798,10 +1818,19 @@ function initDetailHostBaseMonitorMemChart() {
     zData: [],
     myChart: echarts.init(document.getElementById('memview')),
     init() {
-      for(var i = 0; i < mem_history.length; i++){
-        this.xData.push(mem_history[i].addtime);
-        // this.yData.push(mem_history[i].pro);
-        this.zData.push(mem_history[i].mem);
+      this.setData(mem_history);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    },
+    setData(d) {
+      this.xData = [];
+      this.zData = [];
+
+      for(var i = 0; i < d.length; i++){
+        this.xData.push(d[i].addtime);
+        // this.yData.push(d[i].pro);
+        this.zData.push(d[i].mem);
       }
       let option = {
         tooltip: {
@@ -1873,27 +1902,31 @@ function initDetailHostBaseMonitorMemChart() {
         ]
       };
       this.myChart.setOption(option);
-      window.addEventListener("resize",function(){
-        this.myChart.resize();
-      });
     }
   }
   memChart.init();
 }
 
+// 更新内存图表数据
+function updateDetailHostBaseMonitorMemChartData(s, e) {
+  $.post('/host/get_host_cpu_io', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
+    let mem_history = rdata.map(item => {
+      let itemMemInfo = JSON.parse(item['mem_info'] || '{}');
+      return {
+        id: item.id,
+        pro: itemMemInfo.percent,
+        mem: itemMemInfo.usedPercent,
+        addtime: item.addtime
+      }
+    });
+    memChart.setData(mem_history);
+  }, 'json');
+}
+
 // 磁盘IO图表
 var diskIoChart = {}
 function initDetailHostBaseMonitorDiskIoChart() {
-  // ! 模拟数据
   let disk_io_history = [
-    {"id": 168906, "read_count": 386, "write_count": 531, "read_bytes": 5439488, "write_bytes": 9777152, "read_time": 1561, "write_time": 22025, "addtime": "11/03 00:00"}, 
-    {"id": 168907, "read_count": 5, "write_count": 625, "read_bytes": 20480, "write_bytes": 6459392, "read_time": 4, "write_time": 20821, "addtime": "11/03 00:01"}, 
-    {"id": 168908, "read_count": 0, "write_count": 277, "read_bytes": 0, "write_bytes": 3047424, "read_time": 0, "write_time": 21336, "addtime": "11/03 00:03"}, 
-    {"id": 168909, "read_count": 0, "write_count": 254, "read_bytes": 0, "write_bytes": 3067904, "read_time": 0, "write_time": 22231, "addtime": "11/03 00:05"}, 
-    {"id": 168910, "read_count": 0, "write_count": 311, "read_bytes": 0, "write_bytes": 4100096, "read_time": 0, "write_time": 637, "addtime": "11/03 00:06"}, 
-    {"id": 168911, "read_count": 0, "write_count": 332, "read_bytes": 0, "write_bytes": 3985408, "read_time": 0, "write_time": 97995, "addtime": "11/03 00:08"}, 
-    {"id": 168912, "read_count": 3, "write_count": 549, "read_bytes": 217088, "write_bytes": 6299648, "read_time": 1416, "write_time": 105301, "addtime": "11/03 00:10"}, 
-    {"id": 168913, "read_count": 0, "write_count": 276, "read_bytes": 0, "write_bytes": 2994176, "read_time": 0, "write_time": 1676, "addtime": "11/03 00:12"}
   ]
 
   diskIoChart = {
@@ -1902,10 +1935,19 @@ function initDetailHostBaseMonitorDiskIoChart() {
     xData: [],
     myChart: echarts.init(document.getElementById('diskview')),
     init() {
-      for(var i = 0; i < disk_io_history.length; i++){
-        this.rData.push((disk_io_history[i].read_bytes/1024/60).toFixed(3));
-        this.wData.push((disk_io_history[i].write_bytes/1024/60).toFixed(3));
-        this.xData.push(disk_io_history[i].addtime);
+      this.setData(disk_io_history);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    },
+    setData(d) {
+      this.rData = [];
+      this.wData = [];
+      this.xData = [];
+      for(var i = 0; i < d.length; i++){
+        this.rData.push((d[i].read_bytes/1024/60).toFixed(3));
+        this.wData.push((d[i].write_bytes/1024/60).toFixed(3));
+        this.xData.push(d[i].addtime);
       }
       let option = {
         tooltip: {
@@ -1991,12 +2033,26 @@ function initDetailHostBaseMonitorDiskIoChart() {
         ]
       };
       this.myChart.setOption(option);
-      window.addEventListener("resize",function(){
-        this.myChart.resize();
-      });
     }
   }
   diskIoChart.init();
+}
+
+// 更新磁盘IO图表数据
+function updateDetailHostBaseMonitorDiskIoChartData(s, e) {
+  $.post('/host/get_host_disk_io', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
+    let disk_io_history = rdata.map(item => {
+      let itemDiskInfoList = JSON.parse(item['disk_info'] || '[]');
+      let itemDiskInfo = itemDiskInfoList[0] || {};
+      return {
+        id: item.id,
+        read_bytes: itemDiskInfo.readSpeed,
+        write_bytes: itemDiskInfo.writeSpeed,
+        addtime: item.addtime
+      }
+    });
+    diskIoChart.setData(disk_io_history);
+  }, 'json');
 }
 
 // 网络IO图表
@@ -2019,14 +2075,28 @@ function initDetailHostBaseMonitorNetIoChart() {
     zData: [],
     myChart: echarts.init(document.getElementById('network')),
     init() {
-      for(var i = 0; i < net_io_history.length; i++){
-        this.aData.push(net_io_history[i].total_up);
-        this.bData.push(net_io_history[i].total_down);
-        this.cData.push(net_io_history[i].down_packets);
-        this.dData.push(net_io_history[i].up_packets);
-        this.xData.push(net_io_history[i].addtime);
-        this.yData.push(net_io_history[i].up);
-        this.zData.push(net_io_history[i].down);
+      this.setData(net_io_history);
+      window.addEventListener("resize",function(){
+        this.myChart.resize();
+      });
+    },
+    setData(d) {
+      this.aData = [];
+      this.bData = [];
+      this.cData = [];
+      this.dData = [];
+      this.xData = [];
+      this.yData = [];
+      this.zData = [];
+
+      for(var i = 0; i < d.length; i++){
+        this.aData.push(d[i].total_up);
+        this.bData.push(d[i].total_down);
+        this.cData.push(d[i].down_packets);
+        this.dData.push(d[i].up_packets);
+        this.xData.push(d[i].addtime);
+        this.yData.push(d[i].up);
+        this.zData.push(d[i].down);
       }
       let option = {
         tooltip: {
@@ -2111,12 +2181,30 @@ function initDetailHostBaseMonitorNetIoChart() {
         ]
       };
       this.myChart.setOption(option);
-      window.addEventListener("resize",function(){
-        this.myChart.resize();
-      });
     }
   }
   netIoChart.init();
+}
+
+// 更新网络IO图表数据
+function updateDetailHostBaseMonitorNetIoChartData(s, e) {
+  $.post('/host/get_host_network_io', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
+    let net_io_history = rdata.map(item => {
+      let itemNetIoList = JSON.parse(item['net_info'] || '[]');
+      let itemNetIo = itemNetIoList[0] || {};
+      return {
+        id: item.id,
+        up: itemNetIo.sent_per_second,
+        down: itemNetIo.recv_per_second,
+        total_up: itemNetIo.sent,
+        total_down: itemNetIo.recv,
+        down_packets: itemNetIo.recv_packets,
+        up_packets: itemNetIo.sent_packets,
+        addtime: item.addtime
+      }
+    });
+    netIoChart.setData(net_io_history);
+  }, 'json');
 }
 
 // 日志文件列表
