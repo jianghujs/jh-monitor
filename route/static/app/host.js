@@ -916,12 +916,9 @@ function detailBaseMonitor(host_id, name, msg, status) {
 
   $("#hostdetail-con").html(bodyHtml);
 
-  getDetailHostBaseMonitorData();
+  initDetailHostBaseMonitorChart();
 
-  updateDetailHostBaseMonitorAvgLoadChartData();
-  updateDetailHostBaseMonitorTask =  setInterval(function() {
-    updateDetailHostBaseMonitorAvgLoadChartData();
-  }, 3000);
+  updateDetailHostBaseMonitorChartData();
 }
 
 /**
@@ -1364,12 +1361,20 @@ function updateDetailHostSummaryAlarm(host_id) {
   }, 'json');
 }
 
-function getDetailHostBaseMonitorData(host_id) {
+function initDetailHostBaseMonitorChart(host_id) {
   initDetailHostBaseMonitorAvgLoadChart();
   initDetailHostBaseMonitorCPUChart();
   initDetailHostBaseMonitorMemChart();
   initDetailHostBaseMonitorDiskIoChart();
   initDetailHostBaseMonitorNetIoChart();
+}
+
+function updateDetailHostBaseMonitorChartData() {
+  updateDetailHostBaseMonitorAvgLoadChartData();
+  // updateDetailHostBaseMonitorCPUChartData();
+  // updateDetailHostBaseMonitorMemChartData();
+  // updateDetailHostBaseMonitorDiskIoChartData();
+  // updateDetailHostBaseMonitorNetIoChartData();
 }
 
 //指定天数
@@ -1392,20 +1397,20 @@ function Wday(day, name){
 		var e = Math.round(now);
 	}
 	switch (name){
+		case "getload":
+			updateDetailHostBaseMonitorAvgLoadChartData(s,e);
+			break;
 		case "cpu":
-			updateDetailHostBaseMonitorAvgLoadChartData(s, e);
+			updateDetailHostBaseMonitorCPUChartData(s, e);
 			break;
 		case "mem":
-			mem(s,e);
+			updateDetailHostBaseMonitorMemChartData(s,e);
 			break;
 		case "disk":
-			disk(s,e);
+			updateDetailHostBaseMonitorDiskIoChartData(s,e);
 			break;
 		case "network":
-			network(s,e);
-			break;
-		case "getload":
-			getload(s,e);
+			updateDetailHostBaseMonitorNetIoChartData(s,e);
 			break;
 	}
 }
