@@ -237,6 +237,9 @@ function openHostGroupManage(){
     getHostGroupListTable();
 }
 
+/**
+ * 主机分组管理列表
+ */
 function getHostGroupListTable() {
   $.post('/host/get_host_group_list',function(rdata){
 		var list = '';
@@ -249,9 +252,9 @@ function getHostGroupListTable() {
 	},'json');
 }
 
-
-
-
+/**
+ * 添加主机分组
+ */
 function addHostGroup(){
 	var host_group_name = $("input[name=host_group_name]").val();
 	$.post('/host/add_host_group','host_group_name='+host_group_name, function(rdata){
@@ -264,6 +267,9 @@ function addHostGroup(){
 	},'json');
 }
 
+/**
+ * 删除主机分组
+ */
 function removeHostGroup(id,host_group_id,host_group_name){
 	if (id == 0){
 		layer.msg('默认分组不可删除/不可编辑!',{icon:2});
@@ -281,7 +287,9 @@ function removeHostGroup(id,host_group_id,host_group_name){
 	});
 }
 
-
+/**
+ * 编辑主机分组
+ */
 function openEditHostGroup(id,host_group_name){
 	if (id == 0){
 		layer.msg('默认分组不可删除/不可编辑!',{icon:2});
