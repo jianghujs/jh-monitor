@@ -207,3 +207,8 @@ INSERT INTO `host_log` (host_id, host_name, log, addtime) VALUES
 ('H00001', 'Host1', 'Security patch applied', '2023-10-06 22:00:00'),
 ('H00002', 'Host2', 'System backup initiated', '2023-10-07 23:00:00');
 
+
+
+
+
+

@@ -96,7 +96,11 @@ Add_Host_To_Monitor(){
       exit 1
     fi
 
-    default_client_ssh_port=port=$(grep -E "^#?Port\s+[0-9]+" "$file" | sed -E 's/#?Port\s+([0-9]+)/\1/' | head -n 1)
+    sys_default_ssh_port=22
+    default_client_ssh_port=$(grep -E "^Port [0-9]+" /etc/ssh/sshd_config | awk '{print $2}')
+    if [ -z "$default_client_ssh_port" ]; then
+        default_client_ssh_port=$sys_default_ssh_port
+    fi
     prompt "请输入服务端连接到当前机器的SSH端口（默认为：${default_client_ssh_port}）：" client_ssh_port $default_client_ssh_port
     if [ -z "$client_ssh_port" ]; then
       show_error "错误:未指定本地SSH端口"
@@ -111,7 +115,7 @@ Add_Host_To_Monitor(){
       exit 1
     fi
 
-    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" -d "host_name=$client_name" -d "ip=$client_ip")
+    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" -d "host_name=$client_name" -d "ip=$client_ip" -d "port=$client_ssh_port")
     echo $add_res
     # 判断返回的json中status是否为true
     if [[ "$add_res" =~ "true" ]]; then
