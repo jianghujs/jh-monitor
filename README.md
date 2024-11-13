@@ -12,13 +12,13 @@
 ##### 国际源
 
 ```bash
-apt update -y && apt install -y wget && wget -O install.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/install.sh && bash install.sh
+apt update -y && apt install -y wget && wget -O /tmp/install.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/install.sh && bash /tmp/install.sh
 ```
 
 ##### 中国源
 
 ```bash
-apt update -y && apt install -y wget && wget -O install.sh https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/install.sh && bash install.sh cn
+apt update -y && apt install -y wget && wget -O /tmp/install.sh https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/install.sh && bash /tmp/install.sh cn
 ```
 
 ### 卸载
@@ -26,13 +26,13 @@ apt update -y && apt install -y wget && wget -O install.sh https://gitee.com/jia
 ##### 国际源
 
 ```bash
-wget -O uninstall.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/uninstall.sh && bash uninstall.sh
+wget -O /tmp/uninstall.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/uninstall.sh && bash /tmp/uninstall.sh
 ```
 
 ##### 中国源
 
 ```bash
-wget -O uninstall.sh https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/uninstall.sh && bash uninstall.sh
+wget -O /tmp/uninstall.sh https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/uninstall.sh && bash /tmp/uninstall.sh
 ```
 
 ### 授权许可
