@@ -1385,6 +1385,65 @@ function initDetailHostBaseMonitorChart() {
   initDetailHostBaseMonitorMemChart();
   initDetailHostBaseMonitorDiskIoChart();
   initDetailHostBaseMonitorNetIoChart();
+  
+  $(".st").unbind().hover(function(){
+    $(this).next().show();
+  },function(){
+    $(this).next().hide();
+    $(this).next().hover(function(){
+      $(this).show();
+    },function(){
+      $(this).hide();
+    })
+  })
+  $(".searcTime .gt").unbind().click(function(){
+    $(this).addClass("on").siblings().removeClass("on");
+  })
+  $(".loadbtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateDetailHostBaseMonitorAvgLoadChartData(b,e);
+  })
+  $(".cpubtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateDetailHostBaseMonitorCPUChartData(b,e);
+  })
+  $(".membtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateDetailHostBaseMonitorMemChartData(b,e);
+  })
+  $(".diskbtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateDetailHostBaseMonitorDiskIoChartData(b,e);
+  })
+  $(".networkbtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateDetailHostBaseMonitorNetIoChartData(b,e);
+  })
 }
 
 function updateDetailHostBaseMonitorChartData() {
