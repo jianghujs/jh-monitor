@@ -111,7 +111,7 @@ Add_Host_To_Monitor(){
       exit 1
     fi
 
-    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" -d "host_name=$client_name" -d "ip=$client_ip")
+    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" -d "host_name=$client_name" -d "ip=$client_ip" -d "port=$client_ssh_port")
     echo $add_res
     # 判断返回的json中status是否为true
     if [[ "$add_res" =~ "true" ]]; then

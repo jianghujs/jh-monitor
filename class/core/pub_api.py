@@ -43,6 +43,7 @@ class pub_api:
     def addHostApi(self):
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
+        port = request.form.get('port', '10022')
         host_id = 'H_' + host_name + '_' + jh.getRandomString(4)
         host_group_id = 'default'
         host_group_name = ''
@@ -52,12 +53,12 @@ class pub_api:
             return jh.returnJson(False, '主机已经存在!')
         
         # 添加主机
-        jh.M('host').add("host_id,host_name,host_group_id,host_group_name,ip,addtime", (host_id,host_name,host_group_id,host_group_name,ip,time.strftime('%Y-%m-%d %H:%M:%S')))
+        jh.M('host').add("host_id,host_name,host_group_id,host_group_name,ip,ssh_port,addtime", (host_id,host_name,host_group_id,host_group_name,ip,port,time.strftime('%Y-%m-%d %H:%M:%S')))
         # 添加到host文件
         with open('/etc/ansible/hosts', 'r+') as f:
             lines = f.readlines()
             existing_ips = set(line.strip() for line in lines)
-            ip_conf = f"{ip} ansible_ssh_user=ansible_user"
+            ip_conf = f"{ip} ansible_ssh_user=ansible_user ansible_ssh_port={port}"
             if ip_conf not in existing_ips:
                 f.write(f"{ip_conf}\n")
 
