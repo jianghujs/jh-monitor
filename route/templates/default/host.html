@@ -67,6 +67,9 @@
 <script type="text/javascript">		
 setTimeout(function(){
 	getWeb(1);
+  setInterval(() => {
+    getWeb(1);
+  }, 3000)
 },500);
 </script>
 {% endblock %}
