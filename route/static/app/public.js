@@ -72,6 +72,42 @@ function toSizeM(bytes){
 	return b;
 }
 
+
+//获取当前日期
+function getToday(){
+  var mydate = new Date();
+  var str = "" + mydate.getFullYear() + "/";
+  str += (mydate.getMonth()+1) + "/";
+  str += mydate.getDate();
+  return str;
+}
+
+
+//定义周期时间
+function getBeforeDate(n){
+  var n = n;
+  var d = new Date();
+  var year = d.getFullYear();
+  var mon=d.getMonth()+1;
+  var day=d.getDate();
+  if(day <= n){
+  if(mon>1) {
+     mon=mon-1;
+  }
+  else {
+   year = year-1;
+   mon = 12;
+  }
+}
+d.setDate(d.getDate()-n);
+year = d.getFullYear();
+mon=d.getMonth()+1;
+day=d.getDate();
+  s = year+"/"+(mon<10?('0'+mon):mon)+"/"+(day<10?('0'+day):day);
+  return s;
+}
+
+
 function toSizeMWithUnit(bytes){
   var c = 1024 * 1024;
   var b = '';

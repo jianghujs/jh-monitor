@@ -34,7 +34,7 @@ app = Flask(__name__)
 
 class host_api:
     
-    host_field = 'id,host_id,host_name,host_group_id,host_group_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime,host_status,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,last_update'
+    host_field = 'id,host_id,host_name,host_group_id,host_group_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime,host_status,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,detail_addtime'
     host_detail_field = 'id,host_id,host_name,host_status,uptime,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,last_update,addtime'
     host_alarm_field = "id,host_id,host_name,alarm_type,alarm_level,alarm_content,addtime"
 
@@ -248,9 +248,12 @@ class host_api:
         return self.toAddtime(data, False)
 
     def getHostLoadAverageData(self, host_id, start, end):
+        print("host_id", host_id)
+        print("start", start)
+        print("end", end)
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", ( host_id, start, end)).field(
             # 'id,pro,one,five,fifteen,addtime'
-            self.host_detail_field
+            'id,load_avg,addtime'
         ).order('id asc').select()
         return self.toAddtime(data)
     

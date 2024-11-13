@@ -114,6 +114,7 @@ function getWeb(page, search, host_group_id) {
 					<td>" + net_total + "</td>\
 					<td>" + disk_speed + "</td>\
 					<td>" + disk_status + "</td>\
+					<td>" + toTime(data.data[i]['detail_addtime']) + "</td>\
 					<td style='text-align:right; color:#bbb'>" + opt + "</td>\
         </tr>"
 			
@@ -1370,7 +1371,7 @@ function initDetailHostBaseMonitorChart(host_id) {
 }
 
 function updateDetailHostBaseMonitorChartData() {
-  updateDetailHostBaseMonitorAvgLoadChartData();
+  // updateDetailHostBaseMonitorAvgLoadChartData();
   // updateDetailHostBaseMonitorCPUChartData();
   // updateDetailHostBaseMonitorMemChartData();
   // updateDetailHostBaseMonitorDiskIoChartData();
@@ -1426,7 +1427,6 @@ function initDetailHostBaseMonitorAvgLoadChart() {
     {id: 162327, pro: 55.5, one: 2.22, five: 2.04, fifteen: 1.91, addtime: "10/27 00:30"},
     {id: 162331, pro: 33.5, one: 1.34, five: 2.02, fifteen: 1.99, addtime: "10/27 00:38"},
   ]
-
   avgLoadChart = {
     aData: [],
     bData: [],
@@ -1435,13 +1435,6 @@ function initDetailHostBaseMonitorAvgLoadChart() {
     zData: [],
     myChart: echarts.init(document.getElementById('avgloadview')),
     init() {
-      for(var i = 0; i < avg_load_history.length; i++){
-        this.xData.push(avg_load_history[i].addtime);
-        this.yData.push(avg_load_history[i].pro);
-        this.zData.push(avg_load_history[i].one);
-        this.aData.push(avg_load_history[i].five);
-        this.bData.push(avg_load_history[i].fifteen);
-      }
       let option = {
         animation: false,
         tooltip: {
@@ -1641,29 +1634,19 @@ function initDetailHostBaseMonitorAvgLoadChart() {
         }
       };
       this.myChart.setOption(option);
+      this.setData(avg_load_history);
       window.addEventListener("resize",function(){
         this.myChart.resize();
       });
     },
     setData(d) {
-      this.myChart.setOption({
-        xAxis: [{
-          data: d.xData
-        }],
-        series: [{
-          name: '资源使用率%',
-          data: d.yData
-        }, {
-          name: '1分钟',
-          data: d.zData
-        }, {
-          name: '5分钟',
-          data: d.aData
-        }, {
-          name: '15分钟',
-          data: d.bData
-        }]
-      });
+      for(var i = 0; i < d.length; i++){
+        this.xData.push(d[i].addtime);
+        this.yData.push(d[i].pro);
+        this.zData.push(d[i].one);
+        this.aData.push(d[i].five);
+        this.bData.push(d[i].fifteen);
+      }
       this.myChart.resize();
     }
   }
@@ -1672,26 +1655,22 @@ function initDetailHostBaseMonitorAvgLoadChart() {
 
 
 function updateDetailHostBaseMonitorAvgLoadChartData(s, e) {
-  $.get('/system/get_cpu_io?host_id=' + detailHostId + 'start='+s+'&end='+e,function(rdata){
-    // debugger
+  debugger
+  $.post('/host/get_host_load_average', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
+    let avg_load_history = rdata.map(item => {
+      let itemAvg = JSON.parse(item['load_avg'] || '{}');
+      return {
+        id: item.id,
+        pro: itemAvg.pro,
+        one: itemAvg['1min'],
+        five: itemAvg['5min'],
+        fifteen: itemAvg['15min'],
+        addtime: item.addtime
+      }
+    });
+    debugger
+    avgLoadChart.setData(avg_load_history);
   }, 'json');
-  // ! 模拟数据
-  let avg_load_history = [
-    {id: 162319, pro: 33.25, one: 1.33, five: 1.55, fifteen: 1.11, addtime: "10/27 00:12"},
-    {id: 162323, pro: 75.25, one: 3.01, five: 2.76, fifteen: 1.81, addtime: "10/27 00:21"},
-    {id: 162327, pro: 55.5, one: 2.22, five: 2.04, fifteen: 1.91, addtime: "10/27 00:30"},
-    {id: 162331, pro: 33.5, one: 1.34, five: 2.02, fifteen: 1.99, addtime: "10/27 00:38"},
-  ]
-
-  let xData = [], yData = [], zData = [], aData = [], bData = [];
-  for(var i = 0; i < avg_load_history.length; i++){
-    xData.push(avg_load_history[i].addtime);
-    yData.push(avg_load_history[i].pro);
-    zData.push(avg_load_history[i].one);
-    aData.push(avg_load_history[i].five);
-    bData.push(avg_load_history[i].fifteen);
-  }
-  avgLoadChart.setData({xData, yData, zData, aData, bData});
 }
 
 
