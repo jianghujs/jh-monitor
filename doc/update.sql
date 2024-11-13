@@ -1,10 +1,12 @@
 
 -------------------- 20241113 
 
--- 更新view01_host视图
-CREATE OR REPLACE VIEW view01_host AS
+-- sqlite更新view01_host视图
+DROP VIEW IF EXISTS view01_host;
+
+CREATE VIEW view01_host AS
 SELECT h.*, hg.host_group_name,
-hd.host_status, hd.host_info, hd.cpu_info, hd.mem_info, hd.disk_info, hd.net_info, hd.load_avg, hd.firewall_info, hd.port_info, hd.backup_info, hd.temperature_info, hd.ssh_user_list, hd.last_update 
+hd.host_status, hd.host_info, hd.cpu_info, hd.mem_info, hd.disk_info, hd.net_info, hd.load_avg, hd.firewall_info, hd.port_info, hd.backup_info, hd.temperature_info, hd.ssh_user_list, hd.addtime AS detail_addtime, hd.last_update AS detail_last_update 
 FROM host h 
 LEFT JOIN (
     SELECT 
