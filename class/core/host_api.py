@@ -245,7 +245,20 @@ class host_api:
             data[i]['addtime'] = time.strftime(
                 '%m/%d %H:%M', time.localtime(float(data[i]['addtime'])))
         
-        return data
+        # 按host_id分组
+        host_data = {}
+        for value in data:
+            if value['host_id'] not in host_data:
+                host_data[value['host_id']] = []
+            host_data[value['host_id']].append(value)
+        # 防止线过于密集，每个host_id最多只取平均分布的100条
+        for key in host_data:
+            length = len(host_data[key])
+            if length > 100:
+                step = int(length / 100)
+                host_data[key] = host_data[key][::step]
+        
+        return host_data
 
 
     def getHostNetWorkIoData(self, host_id, start, end):

@@ -275,12 +275,7 @@ function updateHostChartData(s, e) {
     for (let hostIndex in hostList) {
       let host = hostList[hostIndex];
       let {host_id} = host;
-      let host_data = rdata.filter(item => item.host_id == host_id);
-      // 防止线过于密集，只取100个点
-      if (host_data.length > 100) {
-        let step = Math.ceil(host_data.length / 100);
-        host_data = host_data.filter((item, index) => index % step == 0);
-      } 
+      let host_data = rdata[host_id] || [];
       let cpu_history = [];
       let mem_history = [];
       let disk_io_history = [];
@@ -321,7 +316,7 @@ function updateHostChartData(s, e) {
           addtime: item.addtime
         });
       };
-      
+
       hostChartMap[host_id].setData({
         cpu_history,
         mem_history,
