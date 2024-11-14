@@ -1,63 +1,28 @@
 // ==================== 初始化事件开始 ====================
-$(".st").unbind().hover(function(){
-  $(this).next().show();
-},function(){
-  $(this).next().hide();
-  $(this).next().hover(function(){
-    $(this).show();
+setTimeout(() => {
+  $(".st").unbind().hover(function(){
+    $(this).next().show();
   },function(){
-    $(this).hide();
+    $(this).next().hide();
+    $(this).next().hover(function(){
+      $(this).show();
+    },function(){
+      $(this).hide();
+    })
+  })
+  $(".searcTime .gt").unbind().click(function(){
+    $(this).addClass("on").siblings().removeClass("on");
+  })
+  $(".hostbtn").click(function(){
+    $(this).parents(".searcTime").find("span").removeClass("on");
+    $(this).parents(".searcTime").find(".st").addClass("on");
+    var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+    var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+    b = Math.round(b);
+    e = Math.round(e);
+    updateHostChartData(b,e);
   })
 })
-$(".searcTime .gt").unbind().click(function(){
-  $(this).addClass("on").siblings().removeClass("on");
-})
-$(".loadbtn").click(function(){
-  $(this).parents(".searcTime").find("span").removeClass("on");
-  $(this).parents(".searcTime").find(".st").addClass("on");
-  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
-  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
-  b = Math.round(b);
-  e = Math.round(e);
-  updateDetailHostBaseMonitorAvgLoadChartData(b,e);
-})
-$(".cpubtn").click(function(){
-  $(this).parents(".searcTime").find("span").removeClass("on");
-  $(this).parents(".searcTime").find(".st").addClass("on");
-  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
-  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
-  b = Math.round(b);
-  e = Math.round(e);
-  updateDetailHostBaseMonitorCPUChartData(b,e);
-})
-$(".membtn").click(function(){
-  $(this).parents(".searcTime").find("span").removeClass("on");
-  $(this).parents(".searcTime").find(".st").addClass("on");
-  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
-  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
-  b = Math.round(b);
-  e = Math.round(e);
-  updateDetailHostBaseMonitorMemChartData(b,e);
-})
-$(".diskbtn").click(function(){
-  $(this).parents(".searcTime").find("span").removeClass("on");
-  $(this).parents(".searcTime").find(".st").addClass("on");
-  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
-  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
-  b = Math.round(b);
-  e = Math.round(e);
-  updateDetailHostBaseMonitorDiskIoChartData(b,e);
-})
-$(".networkbtn").click(function(){
-  $(this).parents(".searcTime").find("span").removeClass("on");
-  $(this).parents(".searcTime").find(".st").addClass("on");
-  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
-  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
-  b = Math.round(b);
-  e = Math.round(e);
-  updateDetailHostBaseMonitorNetIoChartData(b,e);
-})
-
 
 //指定天数
 function Wday(day, name){
@@ -137,7 +102,7 @@ function createHostChart(host) {
       const writeData = disk_io_history.map(item => (item.write_bytes / 1024).toFixed(2));
       const netUpData = net_io_history.map(item => item.up.toFixed(2));
       const netDownData = net_io_history.map(item => item.down.toFixed(2));
-      debugger
+      
       // 配置项
       let option = {
         title: {
@@ -312,6 +277,11 @@ function updateHostChartData(s, e) {
       let host = hostList[hostIndex];
       let {host_id} = host;
       let host_data = rdata.filter(item => item.host_id == host_id);
+      // 防止线过于密集，只取100个点
+      if (host_data.length > 100) {
+        let step = Math.ceil(host_data.length / 100);
+        host_data = host_data.filter((item, index) => index % step == 0);
+      } 
       let cpu_history = [];
       let mem_history = [];
       let disk_io_history = [];
@@ -352,7 +322,7 @@ function updateHostChartData(s, e) {
           addtime: item.addtime
         });
       };
-      debugger
+      
       hostChartMap[host_id].setData({
         cpu_history,
         mem_history,
