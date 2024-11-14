@@ -23,7 +23,19 @@
         </div>
         
         <div class="my-5 conter-box bgw clearfix col-span-1">
-          <div class="title c6 f16 plr15">主机图表</div>
+          <div class="title c6 plr15">
+            <h3 class="c-tit f16">主机图表</h3>
+            <div class="searcTime pull-right"><span class="tit">$data['lan']['S1']</span><span class="gt" onclick="Wday(1,'network')">昨天</span><span class="gt on" onclick="Wday(0,'network')">今天</span><span class="gt" onclick="Wday(7,'network')">最近7天</span><span class="gt" onclick="Wday(30,'network')">最近30天</span>
+              <div class="ss">
+                <span class="st">自定义时间</span>
+                <div class="time">
+                  <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                  <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                  <div class="sbtn networkbtn">提交</div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="mtb20">
             <div id="hostCharts" class="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-3 grid-flow-col grid-flow-row-dense gap-4 my-5 w-full">
             </div>
@@ -42,7 +54,7 @@
 <script type="text/javascript">
 
 setTimeout(function() {
-  getHostCharts();
+  initHostCharts();
 }, 0);
 
 </script>

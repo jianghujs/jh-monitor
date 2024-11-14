@@ -193,6 +193,13 @@ class host_api:
 
         return host_detail
 
+    def getAllHostChartApi(self):
+        start = request.form.get('start', '')
+        end = request.form.get('end', '')
+        print(start, end)
+        data = self.getAllHostChartData(start, end)
+        return jh.getJson(data)
+
     def getHostLoadAverageApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
@@ -228,6 +235,14 @@ class host_api:
         data = self.getHostNetWorkIoData(host_id, start, end)
         return jh.getJson(data)
     
+    def getAllHostChartData(self, start, end):
+        # 取所有主机的数据
+        data = jh.M('host_detail').where("addtime>=? AND addtime<=?", (start, end)).field(
+            'id,host_id,host_name,cpu_info,mem_info,disk_info,net_info,load_avg,addtime'
+        ).order('id desc').select()
+        return self.toAddtime(data)
+
+
     def getHostNetWorkIoData(self, host_id, start, end):
         # 取指定时间段的网络Io
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(

@@ -1,14 +1,116 @@
+// ==================== 初始化事件开始 ====================
+$(".st").unbind().hover(function(){
+  $(this).next().show();
+},function(){
+  $(this).next().hide();
+  $(this).next().hover(function(){
+    $(this).show();
+  },function(){
+    $(this).hide();
+  })
+})
+$(".searcTime .gt").unbind().click(function(){
+  $(this).addClass("on").siblings().removeClass("on");
+})
+$(".loadbtn").click(function(){
+  $(this).parents(".searcTime").find("span").removeClass("on");
+  $(this).parents(".searcTime").find(".st").addClass("on");
+  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+  b = Math.round(b);
+  e = Math.round(e);
+  updateDetailHostBaseMonitorAvgLoadChartData(b,e);
+})
+$(".cpubtn").click(function(){
+  $(this).parents(".searcTime").find("span").removeClass("on");
+  $(this).parents(".searcTime").find(".st").addClass("on");
+  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+  b = Math.round(b);
+  e = Math.round(e);
+  updateDetailHostBaseMonitorCPUChartData(b,e);
+})
+$(".membtn").click(function(){
+  $(this).parents(".searcTime").find("span").removeClass("on");
+  $(this).parents(".searcTime").find(".st").addClass("on");
+  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+  b = Math.round(b);
+  e = Math.round(e);
+  updateDetailHostBaseMonitorMemChartData(b,e);
+})
+$(".diskbtn").click(function(){
+  $(this).parents(".searcTime").find("span").removeClass("on");
+  $(this).parents(".searcTime").find(".st").addClass("on");
+  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+  b = Math.round(b);
+  e = Math.round(e);
+  updateDetailHostBaseMonitorDiskIoChartData(b,e);
+})
+$(".networkbtn").click(function(){
+  $(this).parents(".searcTime").find("span").removeClass("on");
+  $(this).parents(".searcTime").find(".st").addClass("on");
+  var b = (new Date($(this).parent().find(".btime").val()).getTime())/1000;
+  var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
+  b = Math.round(b);
+  e = Math.round(e);
+  updateDetailHostBaseMonitorNetIoChartData(b,e);
+})
 
-function getHostCharts() {
-  for (let i = 0; i < 6; i++) {
-    createHostChart(i);
-  }
+
+//指定天数
+function Wday(day, name){
+	var now = (new Date().getTime())/1000;
+	if(day==0){
+		var s = (new Date(getToday() + " 00:00:01").getTime())/1000;
+			s = Math.round(s);
+		var e = Math.round(now);
+	}
+	if(day==1){
+		var s = (new Date(getBeforeDate(day) + " 00:00:01").getTime())/1000;
+		var e = (new Date(getBeforeDate(day) + " 23:59:59").getTime())/1000;
+		s = Math.round(s);
+		e = Math.round(e);
+	}
+	else{
+		var s = (new Date(getBeforeDate(day) + " 00:00:01").getTime())/1000;
+			s = Math.round(s);
+		var e = Math.round(now);
+	}
+	switch (name){
+		case "host":
+			updateHostChartData(s,e);
+	}
 }
 
+// ==================== 初始化事件结束 ====================
 
+
+
+
+var loadT = layer.load();
+var hostList = [];
+function initHostCharts() {
+	//取回数据
+	$.post('/host/list', '', function(rdata) {
+    let data = JSON.parse(rdata);
+    hostList = data.data;
+		layer.close(loadT);
+    for (var i = 0; i < hostList.length; i++) {
+      let host = hostList[i];
+      createHostChart(host);
+    }
+
+    Wday(0,'host');
+  });
+}
+
+var hostChartMap = {};
 // 主机图表
-function createHostChart(host_id) {
-  
+function createHostChart(host) {
+  const { host_id, host_name } = host;
+
   let chartId = 'host-chart-' + host_id;
   $('#hostCharts').append(`<div id="${chartId}" style="width:100%; height:330px"></div>`);
   let dom = document.getElementById(chartId);
@@ -23,42 +125,23 @@ function createHostChart(host_id) {
         this.myChart.resize();
       });
     },
-    setData(d) {
+    setData(d = {}) {
       const colors = ['#5470C6', '#91CC75', '#EE6666', ];
-      // 模拟数据
-      let cpu_history = [
-        {id: 168901, pro: 43.7, mem: 53.13726627703006, addtime: "11/03 00:00"},
-        {id: 168902, pro: 100, mem: 54.07751697121776, addtime: "11/03 00:01"},
-        {id: 168903, pro: 71.6, mem: 60.346975585265625, addtime: "11/03 00:03"},
-        {id: 168904, pro: 90.5, mem: 72.29185875221229, addtime: "11/03 00:05"}
-      ];
-
-      let disk_io_history = [
-        {"id": 168906, "read_bytes": 5439488, "write_bytes": 9777152, "addtime": "11/03 00:00"}, 
-        {"id": 168907, "read_bytes": 20480, "write_bytes": 6459392, "addtime": "11/03 00:01"}, 
-        {"id": 168908, "read_bytes": 0, "write_bytes": 3047424, "addtime": "11/03 00:03"}, 
-        {"id": 168909, "read_bytes": 0, "write_bytes": 3067904, "addtime": "11/03 00:05"}
-      ];
-
-      let net_io_history = [
-        {"id": 168905, "up": 74.066, "down": 82.152, "addtime": "11/03 00:00"},
-        {"id": 168905, "up": 74.066, "down": 82.152, "addtime": "11/03 00:01"},
-        {"id": 168905, "up": 74.066, "down": 82.152, "addtime": "11/03 00:03"}
-      ];
+      const { cpu_history = [], mem_history = [], disk_io_history = [], net_io_history = [] } = d;
 
       // 数据处理
       const xData = cpu_history.map(item => item.addtime);
       const cpuData = cpu_history.map(item => item.pro.toFixed(2));
-      const memData = cpu_history.map(item => item.mem.toFixed(2));
+      const memData = mem_history.map(item => item.mem.toFixed(2));
       const readData = disk_io_history.map(item => (item.read_bytes / 1024).toFixed(2));
       const writeData = disk_io_history.map(item => (item.write_bytes / 1024).toFixed(2));
       const netUpData = net_io_history.map(item => item.up.toFixed(2));
       const netDownData = net_io_history.map(item => item.down.toFixed(2));
-
+      debugger
       // 配置项
       let option = {
         title: {
-          text: `主机${host_id}`,
+          text: `${host_name}`,
           top: '10px',
           left: 'center',
           textStyle: {
@@ -215,4 +298,82 @@ function createHostChart(host_id) {
     }
   }
   hostChart.init();
+  hostChartMap[host_id] = hostChart;
+}
+
+/**
+ * 更新主机图表数据
+ * @param {*} s 
+ * @param {*} e 
+ */
+function updateHostChartData(s, e) {
+  $.post('/host/get_all_host_chart', '&start='+s+'&end='+e,function(rdata){
+    for (let hostIndex in hostList) {
+      let host = hostList[hostIndex];
+      let {host_id} = host;
+      let host_data = rdata.filter(item => item.host_id == host_id);
+      let cpu_history = [];
+      let mem_history = [];
+      let disk_io_history = [];
+      let net_io_history = [];
+      for ( let i = 0; i < host_data.length; i++) {
+        let item = host_data[i];
+        let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
+        let itemMemInfo = JSON.parse(item['mem_info'] || '{}');
+        let itemDiskIoList = JSON.parse(item['disk_info'] || '[]');
+        let itemDiskInfo = itemDiskIoList[0] || {};
+        let itemNetIoList = JSON.parse(item['net_info'] || '[]');
+        let itemNetIo = itemNetIoList[0] || {};
+
+        cpu_history.push({
+          id: item.id,
+          pro: itemCpuInfo.percent,
+          addtime: item.addtime
+        });
+        mem_history.push({
+          id: item.id,
+          mem: itemMemInfo.usedPercent,
+          addtime: item.addtime
+        });
+        disk_io_history.push({
+          id: item.id,
+          read_bytes: itemDiskInfo.readSpeed,
+          write_bytes: itemDiskInfo.writeSpeed,
+          addtime: item.addtime
+        });
+        net_io_history.push({
+          id: item.id,
+          up: itemNetIo.sent_per_second,
+          down: itemNetIo.recv_per_second,
+          total_up: itemNetIo.sent,
+          total_down: itemNetIo.recv,
+          down_packets: itemNetIo.recv_packets,
+          up_packets: itemNetIo.sent_packets,
+          addtime: item.addtime
+        });
+      };
+      debugger
+      hostChartMap[host_id].setData({
+        cpu_history,
+        mem_history,
+        disk_io_history,
+        net_io_history
+      });
+    }
+
+
+    // let host_history = rdata.map(item => {
+    //   let itemLoadAvg = JSON.parse(item['load_avg'] || '{}');
+    //   let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
+    //   return {
+    //     id: item.id,
+    //     pro: itemCpuInfo.percent,
+    //     one: itemLoadAvg['1min'],
+    //     five: itemLoadAvg['5min'],
+    //     fifteen: itemLoadAvg['15min'],
+    //     addtime: item.addtime
+    //   }
+    // });
+    // avgLoadChart.setData(avg_load_history);
+  }, 'json');
 }
