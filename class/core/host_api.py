@@ -198,6 +198,7 @@ class host_api:
         end = request.form.get('end', '')
         print(start, end)
         data = self.getAllHostChartData(start, end)
+        
         return jh.getJson(data)
 
     def getHostLoadAverageApi(self):
@@ -240,7 +241,11 @@ class host_api:
         data = jh.M('host_detail').where("addtime>=? AND addtime<=?", (start, end)).field(
             'id,host_id,host_name,cpu_info,mem_info,disk_info,net_info,load_avg,addtime'
         ).order('addtime asc').select()
-        return self.toAddtime(data)
+        for i in range(len(data)):
+            data[i]['addtime'] = time.strftime(
+                '%m/%d %H:%M', time.localtime(float(data[i]['addtime'])))
+        
+        return data
 
 
     def getHostNetWorkIoData(self, host_id, start, end):

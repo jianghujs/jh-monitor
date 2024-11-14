@@ -66,7 +66,6 @@ function initHostCharts() {
       let host = hostList[i];
       createHostChart(host);
     }
-
     Wday(0,'host');
   });
 }
@@ -282,8 +281,6 @@ function updateHostChartData(s, e) {
         let step = Math.ceil(host_data.length / 100);
         host_data = host_data.filter((item, index) => index % step == 0);
       } 
-      // 根据addtime排序
-      host_data.sort((a, b) => a.addtime - b.addtime);
       let cpu_history = [];
       let mem_history = [];
       let disk_io_history = [];
