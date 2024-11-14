@@ -282,6 +282,8 @@ function updateHostChartData(s, e) {
         let step = Math.ceil(host_data.length / 100);
         host_data = host_data.filter((item, index) => index % step == 0);
       } 
+      // 根据addtime排序
+      host_data.sort((a, b) => a.addtime - b.addtime);
       let cpu_history = [];
       let mem_history = [];
       let disk_io_history = [];
@@ -330,20 +332,5 @@ function updateHostChartData(s, e) {
         net_io_history
       });
     }
-
-
-    // let host_history = rdata.map(item => {
-    //   let itemLoadAvg = JSON.parse(item['load_avg'] || '{}');
-    //   let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
-    //   return {
-    //     id: item.id,
-    //     pro: itemCpuInfo.percent,
-    //     one: itemLoadAvg['1min'],
-    //     five: itemLoadAvg['5min'],
-    //     fifteen: itemLoadAvg['15min'],
-    //     addtime: item.addtime
-    //   }
-    // });
-    // avgLoadChart.setData(avg_load_history);
   }, 'json');
 }

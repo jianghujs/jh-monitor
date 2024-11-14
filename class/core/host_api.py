@@ -239,7 +239,7 @@ class host_api:
         # 取所有主机的数据
         data = jh.M('host_detail').where("addtime>=? AND addtime<=?", (start, end)).field(
             'id,host_id,host_name,cpu_info,mem_info,disk_info,net_info,load_avg,addtime'
-        ).order('id desc').select()
+        ).order('addtime asc').select()
         return self.toAddtime(data)
 
 
@@ -248,7 +248,7 @@ class host_api:
         data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
             # 'id,up,down,total_up,total_down,down_packets,up_packets,addtime'
             'id,net_info,addtime'
-        ).order('id asc').select()
+        ).order('addtime asc').select()
         
         return self.toAddtime(data)
 
