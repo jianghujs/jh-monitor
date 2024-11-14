@@ -47,13 +47,15 @@ def get_cpu_type():
 def get_cpu_info():
 
     # 获取CPU信息
+    cpuCount = psutil.cpu_count()
     cpuLogicalNum = psutil.cpu_count(logical=False)
     if os.path.exists('/proc/cpuinfo'):
         c_tmp = readFile('/proc/cpuinfo')
         d_tmp = re.findall("physical id.+", c_tmp)
         cpuLogicalNum = len(set(d_tmp))
-    cpu_name = get_cpu_type() + " * {}".format(cpuLogicalNum)
+    cpu_name = get_cpu_type() + " * {}".format(cpuCount)
     return {
+        'cpuCount': cpuCount,
         'logicalCores': cpuLogicalNum,
         'modelName': cpu_name,
         'percent': psutil.cpu_percent(interval=1)

@@ -1104,11 +1104,11 @@ function getDetailHostSummaryData(host_id) {
 
     // CPU
     $("#cpu").html(cpu_info.percent);
-    $("#cpuState").html(cpu_info.logicalCores + ' 核心');
+    $("#cpuState").html(cpu_info.cpuCount + ' 核心');
 
     // 内存
     $("#memory").html(mem_info.usedPercent);
-    $("#memoryState").html(toSize(parseInt(mem_info.used)) + '/' + toSize(parseInt(mem_info.total)) + ' (MB)');
+    $("#memoryState").html(parseInt(mem_info.used) + '/' + parseInt(mem_info.total) + ' (MB)');
 
     setImg();
 
