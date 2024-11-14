@@ -1,0 +1,351 @@
+{% extends "layout.html" %} {% block content %}
+<div class="main-content">
+
+    <div class="index-pos-box bgw">
+        <div class="position f12 c6 pull-left" style="background:none;padding-left:15px">
+            <span class="ico-system">系统:</span><span id="info" style="margin-left:10px;">正在获取中...</span>&#12288;&#12288;<span id="running"></span>
+        </div>
+        <span class="pull-right f12 c6" style="line-height:52px; margin-right:15px">
+            <span id="version" style="margin-right:10px">版本: {{config.jhpanelVersion}}</span> ｜
+            <!-- <span id="toUpdate"><a class="btlink" href="javascript:checkUpdate();">更新</a></span>  -->
+            <!-- <span style="margin:0 10px"><a class="btlink" href="javascript:rePanel();">修复</a></span> -->
+            <!-- <span><a class="btlink" href="javascript:reBoot();">重启</a></span> -->
+            <span><a class="btlink" href="javascript:updateServerCode();">更新面板</a></span> ｜ 
+            <span><a class="btlink" href="javascript:reBootPanel();">重启面板</a></span> ｜
+            <span><a class="btlink" href="javascript:reBootServer();">重启服务器</a></span> 
+        </span>
+    </div>
+
+    <div class="container-fluid" style="padding-bottom: 66px;">
+        
+        <div class="danger-tips">
+            <div class="alert alert-warning" id="messageError" style="display: none;background-color: #ffe0e0;border-color: #ffb0b0;color: #ff2020; margin-bottom:0;margin-top: 12px;"></div>
+        </div>
+        
+        <div class="grid sm:grid-cols-1 md:grid-cols-3 grid-flow-col grid-flow-row-dense gap-4 my-5 w-full">
+
+          <!-- 主机统计 -->
+          <div class="conter-box bgw clearfix col-span-1">
+            <div class="title c6 f16 plr15">主机统计</div>
+            <div class="mtb20">
+                <ul class="clearfix text-center text-white" id='index_overview'>
+                  <li class="sys-li-box col-xs-3 col-sm-3 col-md-3 col-lg-3 bg-green-500">
+                      <p class="name f15">正常</p>
+                      <div class="f24"><a class="btlink text-white" href="/site">{{data['site_count']}}</a></div>
+                  </li>
+                  <li class="sys-li-box col-xs-3 col-sm-3 col-md-3 col-lg-3 bg-orange-500">
+                      <p class="name f15">告警中</p>
+                      <div class="f24"><a class="btlink text-white" href="/site">{{data['site_count']}}</a></div>
+                  </li>
+                  <li class="sys-li-box col-xs-3 col-sm-3 col-md-3 col-lg-3 bg-red-500">
+                      <p class="name f15">离线</p>
+                      <div class="f24"><a class="btlink text-white" href="/site">{{data['site_count']}}</a></div>
+                  </li>
+                </ul>
+            </div>
+          </div>
+
+          <!-- 主机概览 -->
+          <div class="conter-box bgw clearfix col-span-2 row-span-2">
+            <div class="title c6 f16 plr15">主机概览</div>
+            <div>
+              <div class="divtable m-1">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" class="cursor-pointer">主机名</th>
+                      <th width="40" class="cursor-pointer">状态</th>
+                      <th width="40" class="cursor-pointer">CPU</th>
+                      <th width="40" class="cursor-pointer">内存</th>
+                      <th width="40" class="cursor-pointer">流量</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hostSummaryBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 今日告警次数 -->
+          <div class="conter-box bgw clearfix col-span-1 h-full">
+            <div class="title c6 f16 plr15">今日告警次数</div>
+            <div class="mtb20 text-center f24 text-orange-500">5</div>
+          </div>
+        </div>
+
+        <div class="grid xs:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 grid-flow-col grid-flow-row-dense gap-4 my-5 w-full">
+            
+          <!-- 告警事件 -->
+          <div class="conter-box bgw clearfix" style="height: 300px;">
+            <div class="title c6 f16 plr15">告警事件</div>
+            <div>
+              <div class="divtable m-1">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" class="cursor-pointer">主机名</th>
+                      <th width="40" class="cursor-pointer">告警事件</th>
+                      <th width="40" class="cursor-pointer">级别</th>
+                      <th width="40" class="cursor-pointer">告警内容</th>
+                    </tr>
+                  </thead>
+                  <tbody id="alarmEventBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 危险命令执行 -->
+          <div class="conter-box bgw clearfix" style="height: 300px;">
+            <div class="title c6 f16 plr15">危险命令执行</div>
+            <div>
+              <div class="divtable m-1">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" class="cursor-pointer">主机名</th>
+                      <th width="40" class="cursor-pointer">执行时间</th>
+                      <th width="40" class="cursor-pointer">命令</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dangerCmdBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SSH登陆日志 -->
+          <div class="conter-box bgw clearfix" style="height: 300px;">
+            <div class="title c6 f16 plr15">SSH登陆日志</div>
+            <div>
+              <div class="divtable m-1">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" class="cursor-pointer">主机名</th>
+                      <th width="40" class="cursor-pointer">登陆IP</th>
+                      <th width="40" class="cursor-pointer">登陆时间</th>
+                      <th width="40" class="cursor-pointer">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sshLoginBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 远程桌面登陆日志 -->
+          <div class="conter-box bgw clearfix" style="height: 300px;">
+            <div class="title c6 f16 plr15">远程桌面登陆日志</div>
+            <div>
+              <div class="divtable m-1">
+                <div class="tablescroll">
+                <table class="table table-hover" style="border: 0 none;">
+                  <thead>
+                    <tr>
+                      <th width="40" class="cursor-pointer">主机名</th>
+                      <th width="40" class="cursor-pointer">登陆IP</th>
+                      <th width="40" class="cursor-pointer">登陆时间</th>
+                      <th width="40" class="cursor-pointer">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rdpLoginBody"></tbody>
+                </table>
+                </div>
+                <div class="dataTables_paginate paging_bootstrap pagination">
+                  <ul id="webPage" class="page"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="grid xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 2xl:grid-cols-6 grid-flow-col grid-flow-row-dense gap-4 my-5 w-full">
+          
+          <!-- 主机CPU使用率 -->
+          <div class="row-span-2">
+            <div class="bgw pb15">
+              <div class="title c6 plr15 mb15">
+                <h3 class="c-tit f16">主机CPU使用率</h3>
+                <div class="searcTime pull-right">
+                  <span class="tit">区间检索：</span>
+                  <span class="gt" onclick="Wday(1,'getload')">昨天</span>
+                  <span class="gt on" onclick="Wday(0,'getload')">今天</span>
+                  <span class="gt" onclick="Wday(7,'getload')">最近7天</span>
+                  <span class="gt" onclick="Wday(30,'getload')">最近30天</span>
+                  <div class="ss">
+                    <span class="st">自定义时间</span>
+                    <div class="time">
+                      <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                      <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                      <div class="sbtn loadbtn">提交</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="cpuUsageView" style="width:100%; height:330px"></div>
+            </div>
+          </div>
+
+          <!-- 主机内存使用率 -->
+          <div class="row-span-2">
+            <div class="bgw pb15">
+              <div class="title c6 plr15 mb15">
+                <h3 class="c-tit f16">主机内存使用率</h3>
+                <div class="searcTime pull-right">
+                  <span class="tit">区间检索：</span>
+                  <span class="gt" onclick="Wday(1,'getload')">昨天</span>
+                  <span class="gt on" onclick="Wday(0,'getload')">今天</span>
+                  <span class="gt" onclick="Wday(7,'getload')">最近7天</span>
+                  <span class="gt" onclick="Wday(30,'getload')">最近30天</span>
+                  <div class="ss">
+                    <span class="st">自定义时间</span>
+                    <div class="time">
+                      <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                      <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                      <div class="sbtn loadbtn">提交</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="memUsageView" style="width:100%; height:330px"></div>
+            </div>
+          </div>
+
+          <!-- 主机带宽排行 -->
+          <div class="row-span-2">
+            <div class="bgw pb15">
+              <div class="title c6 plr15 mb15">
+                <h3 class="c-tit f16">主机带宽排行</h3>
+                <div class="searcTime pull-right">
+                  <span class="tit">区间检索：</span>
+                  <span class="gt" onclick="Wday(1,'getload')">昨天</span>
+                  <span class="gt on" onclick="Wday(0,'getload')">今天</span>
+                  <span class="gt" onclick="Wday(7,'getload')">最近7天</span>
+                  <span class="gt" onclick="Wday(30,'getload')">最近30天</span>
+                  <div class="ss">
+                    <span class="st">自定义时间</span>
+                    <div class="time">
+                      <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                      <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                      <div class="sbtn loadbtn">提交</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="bandwidthUsageView" style="width:100%; height:330px"></div>
+            </div>
+          </div>
+
+          <!-- 所有主机登陆次数 -->
+          <div class="col-span-2">
+            <div class="bgw pb-5">
+              <div class="title c6 plr15">
+                <h3 class="c-tit f16">所有主机登陆次数</h3>
+                <div class="searcTime pull-right">
+                  <span class="tit">区间检索：</span>
+                  <span class="gt" onclick="Wday(1,'getload')">昨天</span>
+                  <span class="gt on" onclick="Wday(0,'getload')">今天</span>
+                  <span class="gt" onclick="Wday(7,'getload')">最近7天</span>
+                  <span class="gt" onclick="Wday(30,'getload')">最近30天</span>
+                  <div class="ss">
+                    <span class="st">自定义时间</span>
+                    <div class="time">
+                      <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                      <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                      <div class="sbtn loadbtn">提交</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="hostLoginView" style="width:100%; height:142px"></div>
+            </div>
+          </div>
+
+          <!-- 主机危险命令执行次数 -->
+          <div class="col-span-2">
+            <div class="bgw">
+              <div class="title c6 plr15">
+                <h3 class="c-tit f16">主机危险命令执行</h3>
+                <div class="searcTime pull-right">
+                  <span class="tit">区间检索：</span>
+                  <span class="gt" onclick="Wday(1,'getload')">昨天</span>
+                  <span class="gt on" onclick="Wday(0,'getload')">今天</span>
+                  <span class="gt" onclick="Wday(7,'getload')">最近7天</span>
+                  <span class="gt" onclick="Wday(30,'getload')">最近30天</span>
+                  <div class="ss">
+                    <span class="st">自定义时间</span>
+                    <div class="time">
+                      <span class="bt">开始时间<input class="btime" type="text" value="2017/1/10 00:00:00"></span>
+                      <span class="et">结束时间<input class="etime" type="text" value="2017/1/13 00:00:00"></span>
+                      <div class="sbtn loadbtn">提交</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="hostDangerCmdView" style="width:100%; height:142px"></div>
+            </div>
+          </div>
+          
+          <!-- 硬盘状态 -->
+          <div class="conter-box bgw clearfix col-span-1">
+            <div class="title c6 f16 plr15">硬盘状态</div>
+            <div class="text-center align-middle f24 bg-green-500 text-white" style="height: 142px;">
+              <div class="pt-14">充裕</div>
+              <div>2</div>
+            </div>
+          </div>
+
+          <!-- SSH登陆最多次 -->
+          <div class="conter-box bgw clearfix col-span-1">
+            <div class="title c6 f16 plr15">SSH登陆最多次</div>
+            <div class="text-center align-middle f24 bg-green-500 text-white" style="height: 142px;">
+              <div class="pt-16">localhost</div>
+            </div>
+          </div>
+        </div>
+    </div>
+</div>
+</div>
+<script type="text/javascript" src="/static/app/site.js?v={{config.version}}"></script>
+<script type="text/javascript" src="/static/app/soft.js?v={{config.version}}"></script>
+<script type="text/javascript" src="/static/app/index.js?v={{config.version}}"></script>
+<script type="text/javascript">
+
+netImg();
+setImg();
+pluginInit();
+//加载关键数据总数
+loadKeyDataCount();
+
+setTimeout(function() {
+    getDiskInfo();
+}, 500)
+
+setTimeout(function() {
+    getInfo();
+}, 1500);
+
+</script>
+{% endblock %}
