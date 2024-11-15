@@ -92,15 +92,15 @@ function createHostChart(host) {
     setData(d = {}) {
       const colors = ['#5470C6', '#91CC75', '#EE6666', ];
       const { cpu_history = [], mem_history = [], disk_io_history = [], net_io_history = [] } = d;
-
+      
       // 数据处理
       const xData = cpu_history.map(item => item.addtime);
       const cpuData = cpu_history.map(item => item.pro.toFixed(2));
       const memData = mem_history.map(item => item.mem.toFixed(2));
       const readData = disk_io_history.map(item => (item.read_bytes / 1024).toFixed(2));
       const writeData = disk_io_history.map(item => (item.write_bytes / 1024).toFixed(2));
-      const netUpData = net_io_history.map(item => item.up.toFixed(2));
-      const netDownData = net_io_history.map(item => item.down.toFixed(2));
+      const netUpData = net_io_history.map(item => (item.up || 0).toFixed(2));
+      const netDownData = net_io_history.map(item => (item.down || 0).toFixed(2));
       
       // 配置项
       let option = {

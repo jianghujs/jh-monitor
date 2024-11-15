@@ -199,42 +199,42 @@ class host_api:
         print(start, end)
         data = self.getAllHostChartData(start, end)
         
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
 
     def getHostLoadAverageApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
         data = self.getHostLoadAverageData(host_id, start, end)
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
 
     def getHostCpuIoApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
         data = self.getHostCpuIoData(host_id, start, end)
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
 
     def getHostMemIoApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
         data = self.getHostMemIoData(host_id, start, end)
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
 
     def getHostDiskIoApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
         data = self.getHostDiskIoData(host_id, start, end)
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
 
     def getHostNetworkIoApi(self):
         host_id = request.form.get('host_id', '')
         start = request.form.get('start', '')
         end = request.form.get('end', '')
         data = self.getHostNetWorkIoData(host_id, start, end)
-        return jh.getJson(data)
+        return jh.getJson(self.lessenData(data))
     
     def getAllHostChartData(self, start, end):
         # 取所有主机的数据
@@ -253,10 +253,7 @@ class host_api:
             host_data[value['host_id']].append(value)
         # 防止线过于密集，每个host_id最多只取平均分布的100条
         for key in host_data:
-            length = len(host_data[key])
-            if length > 100:
-                step = int(length / 100)
-                host_data[key] = host_data[key][::step]
+            host_data[key] = self.lessenData(host_data[key])
         
         return host_data
 
@@ -338,4 +335,10 @@ class host_api:
                 count = 0
             return tmp
 
-
+    # 防止线过于密集，每个host_id最多只取平均分布的100条
+    def lessenData(self, data, count = 100):
+        length = len(data)
+        if length > count:
+            step = int(length / count)
+            data = data[::step]
+        return data

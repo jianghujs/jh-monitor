@@ -798,7 +798,7 @@ function detailHostSummary(host_id, name, msg, status) {
   getDetailHostSummaryData(host_id);
   getDetailHostSummaryDataTask =  setInterval(function() {
     getDetailHostSummaryData(host_id);
-  }, 3000);
+  }, 30000);
 
 }
 
@@ -1347,7 +1347,11 @@ function initDetailHostSummaryNetChart(net_info) {
  */
 function updateDetailHostSummaryNetChart(net_info) {
   if (net_info) {
-    const { up, down } = net_info;
+    const { up, down, upTotal, downTotal } = net_info;
+    $("#upSpeed").html(up + ' KB');
+    $("#downSpeed").html(down + ' KB');
+    $("#downAll").html(toSize(downTotal));
+    $("#upAll").html(toSize(upTotal));
     netChart.addData(up, down, true);
   }
   netChart.updateOption();
