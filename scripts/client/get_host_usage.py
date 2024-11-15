@@ -5,6 +5,9 @@ import subprocess
 import os
 import re
 import sys
+import datetime
+import shlex
+import tempfile
 
 def isAppleSystem():
     if sys.platform == 'darwin':
@@ -21,6 +24,68 @@ def readFile(filename):
     except Exception as e:
         # print(e)
         return False
+    
+def getPercent(num, total):
+    try:
+        num = float(num)
+        total = float(total)
+    except ValueError:
+        return None
+    
+    if total <= 0:
+        return 0
+    
+    return round(num / total * 100, 2)
+
+def execShell(cmdstring, cwd=None, timeout=None, shell=True, useTmpFile=False):
+
+    if shell:
+        cmdstring_list = cmdstring
+    else:
+        cmdstring_list = shlex.split(cmdstring)
+    if timeout:
+        end_time = datetime.datetime.now() + datetime.timedelta(seconds=timeout)
+    
+    if useTmpFile:
+        with tempfile.TemporaryFile() as tempf:
+            sub = subprocess.Popen(cmdstring_list, cwd=cwd, stdin=subprocess.PIPE,
+                                shell=shell, bufsize=4096, stdout=tempf, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+
+            sub.wait()
+            tempf.seek(0)
+            data = tempf.read()
+        # python3 fix 返回byte数据
+        
+        if isinstance(data, bytes):
+            t = str(data, encoding='utf-8')
+        
+
+        return (t, '', sub.returncode)
+    else:
+        sub = subprocess.Popen(cmdstring_list, cwd=cwd, stdin=subprocess.PIPE,
+                           shell=shell, bufsize=4096, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+
+        while sub.poll() is None:
+            time.sleep(0.1)
+            if timeout:
+                if end_time <= datetime.datetime.now():
+                    raise Exception("Timeout：%s" % cmdstring)
+
+        if sys.version_info[0] == 2:
+            return sub.communicate()
+
+        data = sub.communicate()
+        # python3 fix 返回byte数据
+        if isinstance(data[0], bytes):
+            t1 = str(data[0], encoding='utf-8')
+
+        if isinstance(data[1], bytes):
+            t2 = str(data[1], encoding='utf-8')
+        
+        if sub.returncode != 0:
+            t1 = t1 if t1 else t2
+
+        return (t1, t2, sub.returncode)
 
 def get_cpu_type():
     cpuType = ''
@@ -71,7 +136,8 @@ def get_mem_info():
         'total': virtual_mem.total / (1024 ** 2),  # 转换为 MB
         'used': virtual_mem.used / (1024 ** 2),
         'free': virtual_mem.free / (1024 ** 2),
-        'usedPercent': virtual_mem.percent,
+        # 'usedPercent': virtual_mem.percent,
+        'usedPercent': getPercent(virtual_mem.used, virtual_mem.total),
         'buffers': virtual_mem.buffers / (1024 ** 2),
         'cached': virtual_mem.cached / (1024 ** 2),
         'swapTotal': virtual_mem.total / (1024 ** 2),

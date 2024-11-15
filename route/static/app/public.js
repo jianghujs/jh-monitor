@@ -272,6 +272,20 @@ function getLocalTime(a) {
 	return new Date(parseInt(a) * 1000).format("yyyy/MM/dd hh:mm:ss")
 }
 
+/**
+ * 获取百分比
+ * @param {*} num
+ * @param {*} total
+ */
+function getPercent(num, total) {
+  num = parseFloat(num);
+  total = parseFloat(total);
+  if (isNaN(num) || isNaN(total)) {
+      return "-";
+  }
+  return total <= 0 ? "0%" : (Math.round(num / total * 10000) / 100.00);
+}
+
 function getFormatTime(tm, format) {
 	if (format == undefined) format = "yyyy/MM/dd hh:mm:ss";
 	tm = tm.toString();

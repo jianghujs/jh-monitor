@@ -1107,7 +1107,7 @@ function getDetailHostSummaryData(host_id) {
     $("#cpuState").html(cpu_info.cpuCount + ' 核心');
 
     // 内存
-    $("#memory").html(mem_info.usedPercent);
+    $("#memory").html(getPercent(mem_info.used, mem_info.total));
     $("#memoryState").html(parseInt(mem_info.used) + '/' + parseInt(mem_info.total) + ' (MB)');
 
     setImg();
