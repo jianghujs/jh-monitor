@@ -380,8 +380,6 @@ function submitEditHostName() {
 	},'json');
 }
 
-
-
 /**
  * 
  * 修改主机所属分组
@@ -1349,8 +1347,8 @@ function initDetailHostSummaryNetChart(net_info) {
  */
 function updateDetailHostSummaryNetChart(net_info) {
   if (net_info && net_info.length > 0) {
-    const { sent_per_second, recv_per_second } = net_info[0];
-    netChart.addData(sent_per_second, recv_per_second, true);
+    const { up, down } = net_info[0];
+    netChart.addData(up, down, true);
   }
   netChart.updateOption();
 }

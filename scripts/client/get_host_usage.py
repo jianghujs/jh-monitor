@@ -8,6 +8,7 @@ import sys
 import datetime
 import shlex
 import tempfile
+from flask import Flask, session
 
 def isAppleSystem():
     if sys.platform == 'darwin':
@@ -212,26 +213,38 @@ def get_disk_io_speed(interval=1):
     return read_speed, write_speed
 
 def get_net_info(interval=1):
-    # 获取初始网络 IO 信息
-    net_info_start = psutil.net_io_counters(pernic=True)
-    time.sleep(interval)  # 等待指定的时间间隔
-    # 获取时间间隔后的网络 IO 信息
-    net_info_end = psutil.net_io_counters(pernic=True)
 
-    net_info = []
-    for name, io_start in net_info_start.items():
-        io_end = net_info_end[name]
-        recv_per_second = (io_end.bytes_recv - io_start.bytes_recv) / interval
-        sent_per_second = (io_end.bytes_sent - io_start.bytes_sent) / interval
-        net_info.append({
-            'name': name,
-            'recv': io_end.bytes_recv,
-            'recv_per_second': recv_per_second,
-            'sent': io_end.bytes_sent,
-            'sent_per_second': sent_per_second
-        })
-    
-    return net_info
+    # 计算网速
+    initial_io = psutil.net_io_counters()
+    initial_time = time.time()
+    time.sleep(interval)
+    current_io = psutil.net_io_counters()
+    current_time = time.time()
+    # 时间差
+    time_diff = current_time - initial_time
+    if time_diff == 0:
+        time_diff = 1  # 防止除以零
+    # 计算流量差异
+    bytes_sent = current_io.bytes_sent - initial_io.bytes_sent
+    bytes_recv = current_io.bytes_recv - initial_io.bytes_recv
+    # 速度
+    up_speed = round(float(bytes_sent) / 1024 / time_diff, 2)
+    down_speed = round(float(bytes_recv) / 1024 / time_diff, 2)
+
+    # 其他网卡信息
+    local_lo = (0, 0, 0, 0)
+    all_io = psutil.net_io_counters()[:4]
+    networkIo = tuple([all_io[i] - local_lo[i]
+                        for i in range(0, len(all_io))])
+
+    return {
+        'upTotal': networkIo[0],
+        'downTotal': networkIo[1],
+        'up': up_speed,
+        'down': down_speed,
+        'downPackets': networkIo[3],
+        'upPackets': networkIo[2]
+    }
 
 # def get_network_speed(interval=1):
 #     # 获取初始网络 IO 统计
