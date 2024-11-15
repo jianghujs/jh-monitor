@@ -130,7 +130,7 @@ function renderPercentColor() {
   let percentColors = $('.percent-color');
   percentColors.each(function() {
     let val = ($(this).text() || '').replace('%', '');
-    let color = 'auto';
+    let color = 'rgb(92, 184, 92)';
     if (val > 80) {
       color = 'red';
     } else if (val > 60) {
