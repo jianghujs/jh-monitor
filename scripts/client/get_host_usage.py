@@ -231,8 +231,13 @@ def get_net_info(interval=1):
     up_speed = round(float(bytes_sent) / 1024 / time_diff, 2)
     down_speed = round(float(bytes_recv) / 1024 / time_diff, 2)
 
-    # 其他网卡信息
+    # 其他
     local_lo = (0, 0, 0, 0)
+    test_io = psutil.net_io_counters(pernic=True)
+    for x in test_io.keys():
+        if x.find("lo") > -1:
+            local_lo = psutil.net_io_counters(pernic=True).get(x)[:4]
+    
     all_io = psutil.net_io_counters()[:4]
     networkIo = tuple([all_io[i] - local_lo[i]
                         for i in range(0, len(all_io))])
