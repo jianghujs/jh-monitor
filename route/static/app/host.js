@@ -29,6 +29,8 @@ function getWeb(page, search, host_group_id) {
 		var body = '';
 		$("#webBody").html(body);
 		for (var i = 0; i < data.data.length; i++) {
+
+      const { net_info, load_avg } = data.data[i];
       // 主机名称
       let name = '';
       name += `
@@ -56,14 +58,21 @@ function getWeb(page, search, host_group_id) {
         </div>
       `;
 
+      // 负载状态 
+      var loadColor, occupy, averageText = '';
+      let avg = load_avg['1min']
+      let max = load_avg['max'] || 1
+      occupy = Math.round((avg / max) * 100);
+      if (occupy > 100) Occupy = 100;
+
       // 流量
       let net_speed = '';
       let net_total = '';
-      if (data.data[i].net_info && data.data[i].net_info.length > 0) {
-        net_speed += "<div>" + toSize(data.data[i].net_info[0]['sent_per_second']) + "</div>";
-        net_speed += "<div>" + toSize(data.data[i].net_info[0]['recv_per_second']) + "</div>";
-        net_total += "<div>" + toSize(data.data[i].net_info[0]['sent']) + "</div>";
-        net_total += "<div>" + toSize(data.data[i].net_info[0]['recv']) + "</div>";
+      if (net_info) {
+        net_speed += "<div>" + net_info.up + "KB</div>";
+        net_speed += "<div>" + net_info.down + "KB</div>";
+        net_total += "<div>" + toSize(net_info.upTotal) + "</div>";
+        net_total += "<div>" + toSize(net_info.downTotal) + "</div>";
       }
 
       // 磁盘;
@@ -75,8 +84,8 @@ function getWeb(page, search, host_group_id) {
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
         disk_total += (data.data[i].disk_info[0]['total'] || 0)
         disk_used += (data.data[i].disk_info[0]['used'] || 0)
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed']) + "</div>";
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed']) + "</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed'] || 0) + "/S</div>";
+        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed'] || 0) + "/S</div>";
         if(data.data[i].disk_info[0]['usedPercent'] < 80) {
           disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span></span>";
         } else {
@@ -107,7 +116,7 @@ function getWeb(page, search, host_group_id) {
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
 					<td>" + host_group + "</td>\
-					<td class='percent-color'>" + formatValue(data.data[i]['load_avg']['1min']) + "</td>\
+					<td class='percent-color'>" + formatValue(occupy, '%') + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['cpu_info']['percent'], '%') + "</td>\
 					<td class='percent-color'>" + formatValue(data.data[i]['mem_info']['usedPercent'], '%') + "</td>\
 					<td>" + net_speed + "</td>\

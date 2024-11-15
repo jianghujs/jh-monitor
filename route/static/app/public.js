@@ -9,7 +9,7 @@ $(document).ready(function() {
 });
 
 function toSize(a) {
-  if (a == '' || a == null) {
+  if (a === '' || a === null) {
     return '';
   }
 	var d = [" B", " KB", " MB", " GB", " TB", " PB"];
