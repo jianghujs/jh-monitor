@@ -259,7 +259,8 @@ def get_load_avg():
     return {
         '1min': load_avg[0],
         '5min': load_avg[1],
-        '15min': load_avg[2]
+        '15min': load_avg[2],
+        'max': psutil.cpu_count() * 2
     }
 
 def get_firewall_info():
