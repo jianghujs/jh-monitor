@@ -1346,8 +1346,8 @@ function initDetailHostSummaryNetChart(net_info) {
  * @param {*} net_info 
  */
 function updateDetailHostSummaryNetChart(net_info) {
-  if (net_info && net_info.length > 0) {
-    const { up, down } = net_info[0];
+  if (net_info) {
+    const { up, down } = net_info;
     netChart.addData(up, down, true);
   }
   netChart.updateOption();
