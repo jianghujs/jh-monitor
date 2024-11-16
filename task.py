@@ -257,7 +257,7 @@ def clientTask():
             host_list = hostM.field(h_api.host_field).select()
 
             # 执行脚本
-            script_list = ['get_host_info.py', 'get_host_usage.py']
+            script_list = ['get_host_info.py', 'get_host_usage.py', 'get_panel_backup_report.py']
             batch_result = run_script_batch(script_list)
 
             print("✅", batch_result)
@@ -265,22 +265,22 @@ def clientTask():
             # 循环主机列表获取状态
             for host in host_list:
                 ip = host['ip']
+                host_detail = {
+                    'host_id': host['host_id'],
+                    'host_name': host['host_name'],
+                    'host_status': 'Stopped',
+                    'uptime': '',
+                    'host_info': '{}',
+                    'cpu_info': '{}',
+                    'mem_info': '{}',
+                    'disk_info': '{}',
+                    'net_info': '{}',
+                    'load_avg': '{}',
+                    'firewall_info': {},
+                    'addtime': addtime
+                }
                 if batch_result.get(ip, None) is not None:
                     ip_batch_result = batch_result[ip]
-                    host_detail = {
-                        'host_id': host['host_id'],
-                        'host_name': host['host_name'],
-                        'host_status': 'Stopped',
-                        'uptime': '',
-                        'host_info': '{}',
-                        'cpu_info': '{}',
-                        'mem_info': '{}',
-                        'disk_info': '{}',
-                        'net_info': '{}',
-                        'load_avg': '{}',
-                        'firewall_info': {},
-                        'addtime': addtime
-                    }
                     if ip_batch_result:
                         if ip_batch_result['status'] == 'ok':
                             data = ip_batch_result.get('data', {}) 
@@ -293,6 +293,7 @@ def clientTask():
                             net_info = host_usage.get('net_info', [])
                             load_avg = host_usage.get('load_avg', {})
                             firewall_info = host_usage.get('firewall_info', {})
+                            backup_info = data.get('get_panel_backup_report', {})
                             
                             host_detail.update({
                                 'host_status': 'Running',
@@ -304,6 +305,7 @@ def clientTask():
                                 'net_info': json.dumps(net_info),
                                 'load_avg': json.dumps(load_avg),
                                 'firewall_info': json.dumps(firewall_info),
+                                'backup_info': json.dumps(backup_info),
                                 'addtime': addtime
                             })
 
