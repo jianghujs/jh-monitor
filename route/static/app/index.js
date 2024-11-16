@@ -95,12 +95,15 @@ function createHostChart(host) {
       
       // 数据处理
       const xData = cpu_history.map(item => item.addtime);
-      const cpuData = cpu_history.map(item => item.pro.toFixed(2));
-      const memData = mem_history.map(item => item.mem.toFixed(2));
-      const readData = disk_io_history.map(item => (item.read_bytes / 1024).toFixed(2));
-      const writeData = disk_io_history.map(item => (item.write_bytes / 1024).toFixed(2));
-      const netUpData = net_io_history.map(item => (item.up || 0).toFixed(2));
-      const netDownData = net_io_history.map(item => (item.down || 0).toFixed(2));
+      const cpuData = cpu_history.map(item => item.pro);
+      const memData = mem_history.map(item => item.mem);
+      const readData = disk_io_history.map(item => (item.read_bytes / 1024));
+      const writeData = disk_io_history.map(item => (item.write_bytes / 1024));
+      const netUpData = net_io_history.map(item => (item.up || 0));
+      const netDownData = net_io_history.map(item => (item.down || 0));
+      // 获取最大值
+      let maxPercent = cpu_history.length == 0? 100:Math.max(...cpuData, ...memData);
+      let maxIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData, ...netUpData, ...netDownData);
       
       // 配置项
       let option = {
@@ -168,7 +171,7 @@ function createHostChart(host) {
             type: 'value',
             name: '百分比 (%)',
             min: 0,
-            max: 100,
+            max: maxPercent,
             position: 'left',
             axisLine: {
               lineStyle: {
@@ -180,7 +183,7 @@ function createHostChart(host) {
             type: 'value',
             name: 'IO (KB/s)',
             min: 0,
-            max: 10000, // 根据数据适当调整最大值
+            max: maxIO, // 根据数据适当调整最大值
             position: 'right',
             axisLine: {
               lineStyle: {
