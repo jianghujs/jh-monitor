@@ -291,7 +291,7 @@ def clientTask():
                             net_info = host_usage.get('net_info', [])
                             load_avg = host_usage.get('load_avg', {})
                             firewall_info = host_usage.get('firewall_info', {})
-                            backup_info = data.get('get_panel_backup_report.py', [])
+                            # backup_info = data.get('get_panel_backup_report.py', [])
                             
                             host_detail.update({
                                 'host_status': 'Running',
@@ -303,11 +303,9 @@ def clientTask():
                                 'net_info': json.dumps(net_info),
                                 'load_avg': json.dumps(load_avg),
                                 'firewall_info': json.dumps(firewall_info),
-                                'backup_info': json.dumps(backup_info),
+                                # 'backup_info': json.dumps(backup_info),
                                 'addtime': addtime
                             })
-
-                print("！！！！！！！！！！", host_detail)
 
                 host_detail_keys = ','.join(list(host_detail.keys()))
                 host_detail_values = tuple(host_detail.values())
