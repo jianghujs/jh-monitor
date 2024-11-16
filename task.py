@@ -260,8 +260,6 @@ def clientTask():
             script_list = ['get_host_info.py', 'get_host_usage.py', 'get_panel_backup_report.py']
             batch_result = run_script_batch(script_list)
 
-            print("✅", batch_result)
-
             # 循环主机列表获取状态
             for host in host_list:
                 ip = host['ip']
@@ -293,7 +291,7 @@ def clientTask():
                             net_info = host_usage.get('net_info', [])
                             load_avg = host_usage.get('load_avg', {})
                             firewall_info = host_usage.get('firewall_info', {})
-                            backup_info = data.get('get_panel_backup_report', {})
+                            backup_info = data.get('get_panel_backup_report.py', [])
                             
                             host_detail.update({
                                 'host_status': 'Running',

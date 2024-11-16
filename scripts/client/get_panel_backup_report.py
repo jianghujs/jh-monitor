@@ -16,9 +16,11 @@ def get_panel_backup_report():
         report_tool = reportTools()
         
         # 调用 getBackupReport 方法
-        report = report_tool.getBackupReport()
+        mysql_master_slave_info, xtrabackup_info, xtrabackup_inc_info, mysql_dump_info, rsyncd_info, backup_tips = report_tool.getBackupReport()
         
-        return report
+        return {
+          "mysql_master_slave_info": mysql_master_slave_info
+        }
     except Exception as e:
         print(f"An error occurred while getting the backup report: {e}")
         return {}
