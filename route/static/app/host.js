@@ -69,8 +69,8 @@ function getWeb(page, search, host_group_id) {
       let net_speed = '';
       let net_total = '';
       if (net_info) {
-        net_speed += "<div>" + net_info.up + "KB</div>";
-        net_speed += "<div>" + net_info.down + "KB</div>";
+        net_speed += "<div>" + net_info.up + "KB/S</div>";
+        net_speed += "<div>" + net_info.down + "KB/S</div>";
         net_total += "<div>" + toSize(net_info.upTotal) + "</div>";
         net_total += "<div>" + toSize(net_info.downTotal) + "</div>";
       }
