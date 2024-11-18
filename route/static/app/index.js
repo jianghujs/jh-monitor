@@ -105,7 +105,7 @@ function createHostChart(host) {
       let maxPercent = cpu_history.length == 0? 100:Math.max(...cpuData, ...memData);
       let maxDiskIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData);
       let maxNetIO = cpu_history.length == 0? 10000: Math.max(...netUpData, ...netDownData);
-      
+      debugger
       // 配置项
       let option = {
         title: {
