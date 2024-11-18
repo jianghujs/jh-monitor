@@ -103,7 +103,8 @@ function createHostChart(host) {
       const netDownData = net_io_history.map(item => (item.down || 0));
       // 获取最大值
       let maxPercent = cpu_history.length == 0? 100:Math.max(...cpuData, ...memData);
-      let maxIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData, ...netUpData, ...netDownData);
+      let maxDiskIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData);
+      let maxNetIO = cpu_history.length == 0? 10000: Math.max(...netUpData, ...netDownData);
       
       // 配置项
       let option = {
@@ -126,8 +127,8 @@ function createHostChart(host) {
         grid: {
           top: '150px', // 增加顶部间距以避免重叠
           left: '3%',
-          right: '4%',
-          bottom: '3%',
+          right: '15%',
+          bottom: '5%',
           containLabel: true
         },
         tooltip: {
@@ -171,7 +172,7 @@ function createHostChart(host) {
             type: 'value',
             name: '百分比 (%)',
             min: 0,
-            max: maxPercent,
+            max: 100,
             position: 'left',
             axisLine: {
               lineStyle: {
@@ -181,35 +182,51 @@ function createHostChart(host) {
           },
           {
             type: 'value',
-            name: 'IO (KB/s)',
+            name: 'Disk IO (KB/s)',
             min: 0,
-            max: maxIO, // 根据数据适当调整最大值
+            max: maxDiskIO, // 根据数据适当调整最大值
             position: 'right',
             axisLine: {
               lineStyle: {
                 color: 'rgb(255, 70, 131)'
               }
             }
+          },
+          {
+            type: 'value',
+            name: 'Net (KB/s)',
+            min: 0,
+            max: maxNetIO, // 根据数据适当调整最大值
+            position: 'right',
+            offset: 80,
+            axisLine: {
+              lineStyle: {
+                color: 'rgb(255, 162, 131)'
+              }
+            }
           }
         ],
-        dataZoom: [{
-          type: 'inside',
-          start: 0,
-          end: 100,
-          zoomLock:true
-        }, {
-          start: 0,
-          end: 100,
-          handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
-          handleSize: '80%',
-          handleStyle: {
-            color: '#fff',
-            shadowBlur: 3,
-            shadowColor: 'rgba(0, 0, 0, 0.6)',
-            shadowOffsetX: 2,
-            shadowOffsetY: 2
+        dataZoom: [
+          {
+            show: true,
+            start: 0,
+            end: 100
+          },
+          {
+            type: 'inside',
+            start: 0,
+            end: 100
+          },
+          {
+            show: true,
+            yAxisIndex: [0, 1, 2],
+            filterMode: 'empty',
+            width: 30,
+            bottom: 10,
+            showDataShadow: false,
+            left: '93%'
           }
-        }],
+        ],
         series: [
           {
             name: 'CPU',
@@ -258,7 +275,7 @@ function createHostChart(host) {
           {
             name: '网络上传',
             type: 'line',
-            yAxisIndex: 1,
+            yAxisIndex: 2,
             data: netUpData,
             smooth: true,
             symbol: 'none',
@@ -269,7 +286,7 @@ function createHostChart(host) {
           {
             name: '网络下载',
             type: 'line',
-            yAxisIndex: 1,
+            yAxisIndex: 2,
             data: netDownData,
             smooth: true,
             symbol: 'none',
