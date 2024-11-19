@@ -93,6 +93,17 @@ function getWeb(page, search, host_group_id) {
         }
       }
 
+      // 报告概览
+      let report_summary = '';
+      if (data.data[i].panel_report && data.data[i].panel_report.error_tips) {
+        let error_tips = data.data[i].panel_report.error_tips;
+        if (error_tips.length > 0) {
+          report_summary += `<div style='color: red;'>${error_tips.join('<br/>')}</div>`;
+        } else {
+          report_summary += `<div style='color: rgb(92, 184, 92);'>正常</div>`;
+        }
+      }
+
       // 操作列
       let opt = ``;
       // 打开江湖面板
@@ -123,6 +134,7 @@ function getWeb(page, search, host_group_id) {
 					<td>" + net_total + "</td>\
 					<td>" + disk_speed + "</td>\
 					<td>" + disk_status + "</td>\
+					<td>" + report_summary + "</td>\
 					<td>" + toTime(data.data[i]['detail_addtime']) + "</td>\
 					<td style='text-align:right; color:#bbb'>" + opt + "</td>\
         </tr>"

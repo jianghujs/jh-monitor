@@ -257,7 +257,11 @@ def clientTask():
             host_list = hostM.field(h_api.host_field).select()
 
             # 执行脚本
-            script_list = ['get_host_info.py', 'get_host_usage.py', 'get_panel_backup_report.py']
+            script_list = [
+                'get_host_info.py', 
+                'get_host_usage.py', 
+                # 'get_panel_backup_report.py'
+            ]
             batch_result = run_script_batch(script_list)
 
             # 循环主机列表获取状态

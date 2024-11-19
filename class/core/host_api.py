@@ -21,7 +21,7 @@ import re
 import json
 import shutil
 import psutil
-
+import traceback
 
 from flask import request
 
@@ -55,10 +55,13 @@ class host_api:
             if type(_list) == str:
                 return jh.returnJson(False, '获取失败!' + _list)
 
+            panel_report = self.getPanelReportFromES()
+
             # 循环转换详情数据
             for i in range(len(_list)):
+                _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
                 _list[i] = self.parseDetailJSONValue(_list[i])
-            
+
             _ret = {}
             _ret['data'] = _list
 
@@ -72,6 +75,7 @@ class host_api:
             _ret['page'] = jh.getPage(_page)
             return jh.getJson(_ret)
         except Exception as e:
+            traceback.print_exc()
             return jh.returnJson(False, '获取失败!' + str(e))
 
     
@@ -179,18 +183,21 @@ class host_api:
         return jh.returnJson(False, '获取为空', {})
 
     def parseDetailJSONValue(self, host_detail):
-        # 转成json
-        host_detail['host_info'] = json.loads(host_detail['host_info']) if host_detail.get('host_info') is not None else {}
-        host_detail['cpu_info'] = json.loads(host_detail['cpu_info']) if host_detail.get('cpu_info') is not None else {}
-        host_detail['mem_info'] = json.loads(host_detail['mem_info']) if host_detail.get('mem_info') is not None else {}
-        host_detail['disk_info'] = json.loads(host_detail['disk_info']) if host_detail.get('disk_info') is not None else []
-        host_detail['net_info'] = json.loads(host_detail['net_info']) if host_detail.get('net_info') is not None else []
-        host_detail['load_avg'] = json.loads(host_detail['load_avg']) if host_detail.get('load_avg') is not None else {}
-        host_detail['firewall_info'] = json.loads(host_detail['firewall_info']) if host_detail.get('firewall_info') is not None else {}
-        host_detail['port_info'] = json.loads(host_detail['port_info']) if host_detail.get('port_info') is not None else {}
-        host_detail['backup_info'] = json.loads(host_detail['backup_info']) if host_detail.get('backup_info') is not None else {}
-        host_detail['temperature_info'] = json.loads(host_detail['temperature_info']) if host_detail.get('temperature_info') is not None else {}
-
+        try:
+            # 转成json
+            host_detail['host_info'] = json.loads(host_detail['host_info']) if host_detail.get('host_info') is not None else {}
+            host_detail['cpu_info'] = json.loads(host_detail['cpu_info']) if host_detail.get('cpu_info') is not None else {}
+            host_detail['mem_info'] = json.loads(host_detail['mem_info']) if host_detail.get('mem_info') is not None else {}
+            host_detail['disk_info'] = json.loads(host_detail['disk_info']) if host_detail.get('disk_info') is not None else []
+            host_detail['net_info'] = json.loads(host_detail['net_info']) if host_detail.get('net_info') is not None else []
+            host_detail['load_avg'] = json.loads(host_detail['load_avg']) if host_detail.get('load_avg') is not None else {}
+            host_detail['firewall_info'] = json.loads(host_detail['firewall_info']) if host_detail.get('firewall_info') is not None else {}
+            host_detail['port_info'] = json.loads(host_detail['port_info']) if host_detail.get('port_info') is not None else {}
+            host_detail['backup_info'] = json.loads(host_detail['backup_info']) if host_detail.get('backup_info') is not None else {}
+            host_detail['temperature_info'] = json.loads(host_detail['temperature_info']) if host_detail.get('temperature_info') is not None else {}    
+            host_detail['panel_report'] = json.loads(host_detail['panel_report']) if host_detail.get('panel_report') is not None else {}
+        except Exception as e:
+            traceback.print_exc()
         return host_detail
 
     def getAllHostChartApi(self):
@@ -342,3 +349,54 @@ class host_api:
             step = int(length / count)
             data = data[::step]
         return data
+
+    # 从ES获取面板报告
+    def getPanelReportFromES(self):
+        es = jh.getES()
+        query = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {
+                            "term": {
+                                "log.file.path": "/www/server/jh-panel/logs/report.log"
+                            }
+                        }
+                    ]
+                }
+            },
+            "aggs": {
+                "by_host_ip": {
+                    "terms": {
+                        "field": "host.ip",
+                        "size": 1000
+                    },
+                    "aggs": {
+                        "top_host_hits": {
+                            "top_hits": {
+                                "size": 1,
+                                "sort": [
+                                  {
+                                    "@timestamp": {
+                                      "order": "desc"
+                                    }
+                                  }
+                                ],
+                                "_source": ["message", "@timestamp"] 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        response = es.search(index="filebeat-8.15.3", body=query)
+        panel_report = {} 
+
+        for bucket in response["aggregations"]["by_host_ip"]["buckets"]:
+            ip = bucket["key"]
+            top_hit = bucket["top_host_hits"]["hits"]["hits"][0]
+            panel_report[ip] = top_hit["_source"]["message"]
+        
+        return panel_report

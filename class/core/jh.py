@@ -1826,6 +1826,14 @@ def getDDB(db_dir):
     import ddb
     return ddb.DDB(db_dir)
 
+def getES():
+    '''
+    获取ES资源
+    '''
+    sys.path.append(os.getcwd() + "/class/plugin")
+    import es
+    return es.ES()
+
 def getAllVms():
     result = subprocess.run(['VBoxManage', 'list', 'vms'], stdout=subprocess.PIPE)
     return result.stdout.decode('utf-8')
