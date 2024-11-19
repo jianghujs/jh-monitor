@@ -1093,7 +1093,7 @@ function detailSysMonitor(host_id, name, msg, status) {
 function detailPanelReport(host_id) {
   let host = hostList.find(item => item.host_id == host_id);
   let { panel_report } = host;
-  let { title, ip, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = panel_report;
+  let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = panel_report;
   let bodyHtml = '';
   if ( panel_report && panel_report.title) {
     bodyHtml = `
@@ -1102,14 +1102,14 @@ function detailPanelReport(host_id) {
           <h3 class="c6 f16 pull-left">${title}(${ip})-服务器运行报告</h3>
         </div>
         <div class="mx-auto leading-10 plr15">
-          <h3 class="pt-5" style="color: #cecece">日期：${start_date}至${end_date}</h3>
+          <h3 class="pt-5" style="color: #cecece">日期：${start_date}至${end_date}（报告时间：${report_time}）</h3>
           <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
               <h3 class="text-2xl mb-2">概要信息：</h3>
               <ul>
               ${summary_tips.map(item => `<li>${item}</li>`).join('')}
               </ul>
           </div>
-          <div class="w-5/6 m-auto">
+          <div class="m-auto" style="width: 600px;">
             <h3 class="font-bold my-5">系统状态：</h3>
             <table border class="system-table w-full">
             ${sysinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}

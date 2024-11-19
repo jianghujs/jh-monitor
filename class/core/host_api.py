@@ -352,6 +352,7 @@ class host_api:
 
     # 从ES获取面板报告
     def getPanelReportFromES(self):
+      try:
         es = jh.getES()
         query = {
             "size": 0,
@@ -400,3 +401,6 @@ class host_api:
             panel_report[ip] = top_hit["_source"]["message"]
         
         return panel_report
+      except Exception as e:
+        traceback.print_exc()
+        return None
