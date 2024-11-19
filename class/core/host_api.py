@@ -59,7 +59,8 @@ class host_api:
 
             # 循环转换详情数据
             for i in range(len(_list)):
-                _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
+                if panel_report:
+                  _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
                 _list[i] = self.parseDetailJSONValue(_list[i])
 
             _ret = {}
