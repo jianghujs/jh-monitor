@@ -222,9 +222,9 @@ function createHostChart(host) {
             yAxisIndex: [0, 1, 2],
             filterMode: 'empty',
             width: 30,
-            bottom: 20,
+            bottom: 30,
             showDataShadow: false,
-            right: 10
+            right: 30
           }
         ],
         series: [
