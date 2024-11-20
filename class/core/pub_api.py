@@ -63,3 +63,6 @@ class pub_api:
                 f.write(f"{ip_conf}\n")
 
         return jh.returnJson(True, '主机添加成功!')
+    
+    def getHostAddrApi(self):
+        return jh.returnJson(True, 'ok', jh.getHostAddr())

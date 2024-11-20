@@ -31,11 +31,11 @@ show_error()
   echo -e "\033[1;31m× ${tip}\033[0m"
 }
 
-Command_Exists() {
+check_command_exist() {
     command -v "$@" >/dev/null 2>&1
 }
 
-Add_Ansible_User(){
+add_ansible_user(){
     if id "$USERNAME" &>/dev/null; then
         echo "用户 $USERNAME 已经存在。"
     else
@@ -44,7 +44,7 @@ Add_Ansible_User(){
     fi
 }
 
-Config_Ansible_User() {
+config_ansible_user() {
     # 创建脚本执行目录
     mkdir -p /home/ansible_user/jh-monitor-scripts/
     chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
@@ -56,7 +56,7 @@ Config_Ansible_User() {
     
 }
 
-Setup_SSH_Config(){
+add_server_ssh_cert(){
     if [ ! -d "$SSH_DIR" ]; then
         mkdir -p "$SSH_DIR"
         echo ".ssh 目录创建成功。"
@@ -87,7 +87,12 @@ Setup_SSH_Config(){
     fi
 }
 
-Add_Host_To_Monitor(){
+config_filebeat() {
+    # 安装filebeat
+    wget -O /tmp/install_filebeat.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install/filebeat/install.sh && bash /tmp/install_filebeat.sh
+}
+
+notify_server_add_host(){
     
     default_client_ip=$(hostname -I | awk '{print $1}')
     prompt "请输入服务端连接到当前机器的IP（默认为：${default_client_ip}）：" client_ip $default_client_ip
@@ -136,15 +141,21 @@ elif [ "$action" == "install" ]; then
     SERVER_IP=$(echo "${monitor_url}" | cut -d'/' -f3 | cut -d':' -f1)
     SERVER_PORT=$(echo "${monitor_url}" | awk -F ":" '{print $3}')
 
+    export SERVER_IP
+    export SERVER_PORT
+
     # 添加ansible用户
-    Add_Ansible_User
+    add_ansible_user
 
     # 配置ansible用户权限
-    Config_Ansible_User
+    config_ansible_user
 
     # 配置服务端访问权限
-    Setup_SSH_Config
+    add_server_ssh_cert
+
+    # 配置filebeat
+    config_filebeat
 
     # 通知服务端添加主机
-    Add_Host_To_Monitor
+    notify_server_add_host
 fi
