@@ -45,10 +45,12 @@ class ES:
         try:
             # 从ES获取数据
             es = self.__ES_CONN
+
             query = {}
             # 执行搜索请求
-            indices_response = self.__ES_CONN.cat.indices()
-            search_response = self.__ES_CONN.search(index="filebeat-8.15.3", body=query)
+            indices_response = es.cat.indices()
+            search_response = es.search(index="filebeat-8.15.3", body=query)
+            
             print("========= Test ES Start =========")
             print("== indices_response:", indices_response)
             print("== search_response:", search_response)
