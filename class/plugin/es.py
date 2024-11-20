@@ -50,7 +50,7 @@ class ES:
             # 执行搜索请求
             indices_response = es.cat.indices()
             search_response = es.search(index="filebeat-8.15.3", body=query)
-            
+
             print("========= Test ES Start =========")
             print("== indices_response:", indices_response)
             print("== search_response:", search_response)
@@ -64,5 +64,4 @@ class ES:
 
 if __name__ == '__main__':
     es = ES()
-    print('es', es)
     es.test()
