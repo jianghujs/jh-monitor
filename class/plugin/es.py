@@ -41,7 +41,7 @@ class ES:
             self.__ES_ERR = e
             return None
   
-    def __Test(self):
+    def test(self):
         try:
             # 从ES获取数据
             es = self.__ES_CONN
@@ -57,3 +57,9 @@ class ES:
             self.__ES_ERR = e
             return False
         return True
+
+
+if __name__ == '__main__':
+    es = ES()
+    print('es', es)
+    es.test()
