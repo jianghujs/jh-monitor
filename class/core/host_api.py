@@ -393,7 +393,7 @@ class host_api:
             }
         }
 
-        response = es.search(index="filebeat-8.15.3", body=query)
+        response = es.search(index="filebeat-*", body=query)
         panel_report = {} 
 
         for bucket in response["aggregations"]["by_host_ip"]["buckets"]:
