@@ -47,7 +47,8 @@ class ES:
             es = self.__ES_CONN
             query = {}
             # 执行搜索请求
-            response = self.__ES_CONN.search(index="filebeat-8.15.3", body=query)
+            # response = self.__ES_CONN.search(index="filebeat-8.15.3", body=query)
+            response = self.__ES_CONN.cat.indices()
             print("========= Test ES Start =========")
             print("== query:", query)
             print("== response:", response)
