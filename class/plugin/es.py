@@ -49,7 +49,7 @@ class ES:
             query = {}
             # 执行搜索请求
             indices_response = es.cat.indices()
-            search_response = es.search(index="filebeat-8.15.3", body=query)
+            search_response = es.search(index="filebeat-*", body=query)
 
             print("========= Test ES Start =========")
             print("== indices_response:", indices_response)
