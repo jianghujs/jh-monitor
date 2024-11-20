@@ -47,11 +47,11 @@ class ES:
             es = self.__ES_CONN
             query = {}
             # 执行搜索请求
-            # response = self.__ES_CONN.search(index="filebeat-8.15.3", body=query)
-            response = self.__ES_CONN.cat.indices()
+            indices_response = self.__ES_CONN.cat.indices()
+            search_response = self.__ES_CONN.search(index="filebeat-8.15.3", body=query)
             print("========= Test ES Start =========")
-            print("== query:", query)
-            print("== response:", response)
+            print("== indices_response:", indices_response)
+            print("== search_response:", search_response)
             print("========= Test ES End =========")
         except Exception as e:
             traceback.print_exc()
