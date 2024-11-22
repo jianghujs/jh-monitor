@@ -30,6 +30,8 @@ filebeat.inputs:
   # Paths that should be crawled and fetched. Glob based paths.
   paths:
     - /var/log/*.log
+    - /www/wwwlogs/*.log
+    - /www/server/mysql-apt/data/*.log
     - /www/server/jh-panel/logs/report.log
     #- c:\programdata\elasticsearch\logs\*
 
