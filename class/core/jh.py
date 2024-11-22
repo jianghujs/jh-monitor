@@ -27,6 +27,7 @@ import re
 import db
 from random import Random
 import tempfile
+import pytz
 
 sys.path.append(os.getcwd() + "/class/plugin")
 from retry_tool import retry
@@ -286,6 +287,14 @@ def isInstalledWeb():
     if os.path.exists(path):
         return True
     return False
+
+
+def convertToLocalTime(utc_time_str, time_format='%Y-%m-%d %H:%M:%S'):
+    utc_time = datetime.datetime.strptime(utc_time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+    utc_time = pytz.utc.localize(utc_time)
+    local_timezone = pytz.timezone('Asia/Singapore')
+    local_time = utc_time.astimezone(local_timezone)
+    return local_time.strftime(time_format)
 
 
 # ------------------------------ openresty start -----------------------------

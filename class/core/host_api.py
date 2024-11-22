@@ -505,9 +505,12 @@ class host_api:
         if response["hits"]["hits"]:
             # 获取最新的一条日志记录
             latest_log = response["hits"]["hits"][0]["_source"]
-            log_details["last_updated"] = latest_log.get("@timestamp")
+            log_details["last_updated"] = jh.convertToLocalTime(latest_log.get("@timestamp"))
             for hit in response["hits"]["hits"]:
-                log_details["log_content"].append(hit["_source"]["message"])
+                log_details["log_content"].append({
+                    "create_time": jh.convertToLocalTime(hit["_source"]["@timestamp"]),
+                    "content": hit["_source"]["message"]
+                })
 
         return log_details
       except Exception as e:

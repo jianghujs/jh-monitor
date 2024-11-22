@@ -977,7 +977,7 @@ function detailLogMonitor(host_id, name, msg, status) {
           </div>
           <div>
               <ul id="logFileBody" class="log-path-list" style="line-height: 35px;">
-                  <li class="log-path-item px-5 log-path cursor-pointer bg-green-200 text-green-500">/www/wwwlogs</li>
+                  <li class="log-path-item px-5 log-path cursor-pointer bg-slate-50 text-green-500">/www/wwwlogs</li>
                   <li class="log-path-item px-5 log-path cursor-pointer">/www/wwwlogs</li>
               </ul>
           </div>
@@ -2391,7 +2391,7 @@ function getDetailHostLogMonitorData(host_id) {
 
     $(".log-path-item").click(function() {
       const logPath = $(this).text();
-      $(this).addClass('bg-green-200 text-green-500').siblings().removeClass('bg-green-200 text-green-500');
+      $(this).addClass('bg-slate-50 text-green-500').siblings().removeClass('bg-slate-50 text-green-500');
       getDetailHostLogMonitorDetailData(ip, logPath);
     });
     
@@ -2412,7 +2412,13 @@ function getDetailHostLogMonitorDetailData(host_ip, logPath) {
     // $("#logFileDetail .size").text(logFileDetail.size);
     // $("#logFileDetail .permission").text(logFileDetail.permission);
     $("#logFileDetail .modifyTime").text(logFileDetail.last_updated || '暂无');
-    $("#logFileDetail .content").html(logFileDetail.log_content.map(item => `<p>${item}</p>`));
+    $("#logFileDetail .content").html(logFileDetail.log_content.map(item => `
+      <p>
+        <span class="text-gray-400">${item.create_time} - </span>
+        <span>${item.content}</span>
+      </p>
+      <hr class="my-4">
+    `));
   });
 }
 

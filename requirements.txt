@@ -36,4 +36,4 @@ ansible-runner==2.4.0
 colorama==0.4.6
 elastic-transport==8.15.1
 elasticsearch==8.16.0
-
+pytz==2024.2
