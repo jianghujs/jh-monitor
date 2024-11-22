@@ -426,7 +426,7 @@ class host_api:
           "query": {
             "bool": {
               "filter": [
-                { "term": { "host.ip": "192.168.1.32" } }
+                { "term": { "host.ip": host_ip } }
               ]
             }
           },
@@ -495,12 +495,9 @@ class host_api:
           ]
         }
 
-        print("query", query)
-
         response = es.search(index="filebeat-*", body=query)
         log_details = {}
         log_details["log_content"] = []
-        print(response)
 
         if response["hits"]["hits"]:
             # 获取最新的一条日志记录

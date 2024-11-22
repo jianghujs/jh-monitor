@@ -2379,14 +2379,21 @@ function getDetailHostLogMonitorData(host_id) {
   $.post('/host/get_log_path_list', 'host_ip=' + ip,function(rdata){
     
     let logFileBody = '';
-    for(let logFile of rdata) {
-      logFileBody += `
-        <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis"
-          title="${logFile.path}"
-        >${logFile.path}</li>  
+    if (rdata.length == 0) {
+      logFileBody = `
+        <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis">暂无日志文件</li>
       `;
+    } else {
+      for(let logFile of rdata) {
+        logFileBody += `
+          <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis"
+            title="${logFile.path}"
+          >${logFile.path}</li>  
+        `;
+      }
     }
     $("#logFileBody").html(logFileBody);
+    layer.close(loadT);
 
 
     $(".log-path-item").click(function() {
@@ -2406,19 +2413,21 @@ function getDetailHostLogMonitorData(host_id) {
 
 // 日志详情
 function getDetailHostLogMonitorDetailData(host_ip, logPath) {
+  loadT = layer.load();
   $.post('/host/get_log_detail', `host_ip=${host_ip}&log_path=${logPath}`,function(rdata){
     let logFileDetail = JSON.parse(rdata);
     $("#logFileDetail .path").text(logPath);
     // $("#logFileDetail .size").text(logFileDetail.size);
     // $("#logFileDetail .permission").text(logFileDetail.permission);
     $("#logFileDetail .modifyTime").text(logFileDetail.last_updated || '暂无');
-    $("#logFileDetail .content").html(logFileDetail.log_content.map(item => `
+    $("#logFileDetail .content").html(logFileDetail.log_content.length == 0? '日志内容为空': logFileDetail.log_content.map(item => `
       <p>
         <span class="text-gray-400">${item.create_time} - </span>
         <span>${item.content}</span>
       </p>
       <hr class="my-4">
     `));
+    layer.close(loadT);
   });
 }
 
