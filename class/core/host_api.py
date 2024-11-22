@@ -165,6 +165,11 @@ class host_api:
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
     
+    def getPathListApi(self):
+        host_ip = request.form.get('host_ip', '')
+        path_list = self.getLogPathListFromES(host_ip)
+        return jh.getJson(path_list)
+
     def getClientInstallShellLanApi(self):
         client_install_shell = f"curl -sSO https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh && bash install.sh install http://{jh.getHostAddr()}:10844"
         server_ip = jh.getHostAddr()
@@ -402,6 +407,62 @@ class host_api:
             panel_report[ip] = top_hit["_source"]["message"]
         
         return panel_report
+      except Exception as e:
+        traceback.print_exc()
+        return None
+      
+    # 从ES获取面板报告
+    def getLogPathListFromES(self, host_ip):
+      try:
+        es = jh.getES()
+        query = {
+          "size": 0,
+          "query": {
+            "bool": {
+              "filter": [
+                { "term": { "host.ip": "192.168.1.32" } }
+              ]
+            }
+          },
+          "aggs": {
+            "unique_paths": {
+              "terms": {
+                "field": "log.file.path", 
+                "size": 10000 
+              },
+              "aggs": {
+                "latest_update": {
+                  "top_hits": {
+                    "sort": [
+                      {
+                        "@timestamp": {
+                          "order": "desc"
+                        }
+                      }
+                    ],
+                    "_source": {
+                      "includes": ["@timestamp"]
+                    },
+                    "size": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        response = es.search(index="filebeat-*", body=query)
+        path_list = [] 
+
+        for bucket in response["aggregations"]["unique_paths"]["buckets"]:
+            path = bucket["key"]
+            latest_update = bucket["latest_update"]["hits"]["hits"][0]["_source"]["@timestamp"]
+            path_list.append({
+                "path": path,
+                "lastest_update": latest_update
+            })
+        
+        return path_list
       except Exception as e:
         traceback.print_exc()
         return None

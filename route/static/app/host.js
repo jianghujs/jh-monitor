@@ -966,6 +966,7 @@ function detailBaseMonitor(host_id, name, msg, status) {
  * @param {Int} host_id 网站ID
  */
 function detailLogMonitor(host_id, name, msg, status) {
+  
   var bodyHtml = `
     <div class="flex flex-wrap">
       <!-- 日志路径列表 --> 
@@ -1002,18 +1003,8 @@ function detailLogMonitor(host_id, name, msg, status) {
 
   $("#hostdetail-con").html(bodyHtml);
 
-  getDetailHostLogMonitorData();
+  getDetailHostLogMonitorData(host_id);
 
-  $(".log-path-item").click(function() {
-    const logName = $(this).text();
-    $(this).addClass('bg-green-200 text-green-500').siblings().removeClass('bg-green-200 text-green-500');
-    getDetailHostLogMonitorDetailData(logName);
-  });
-  
-  // 默认选中第一个
-  if ($(".log-path-item").length > 0) {
-    $(".log-path-item").eq(0).click();
-  }
 }
 
 /**
@@ -2374,19 +2365,41 @@ function updateDetailHostBaseMonitorNetIoChartData(s, e) {
 }
 
 // 日志文件列表
-function getDetailHostLogMonitorData() {
-  let log_file_list = [
-    {id: 1, name: 'access.log', size: '100M', modifyTime: '2021-10-10 10:10:10'},
-    {id: 2, name: 'error.log', size: '200M', modifyTime: '2021-10-10 10:10:10'},
-    {id: 3, name: 'info.log', size: '300M', modifyTime: '2021-10-10 10:10:10'},
-  ]
-  let logFileBody = '';
-  for(let logFile of log_file_list) {
-    logFileBody += `
-      <li class="log-path-item px-5 log-path cursor-pointer">${logFile.name}</li>  
-    `;
+function getDetailHostLogMonitorData(host_id) {
+  loadT = layer.load();
+  bodyHtml = '';
+
+  host = hostList.find(item => item.host_id == host_id);
+  if (!host) {
+    layer.close(loadT);
+    return;
   }
-  $("#logFileBody").html(logFileBody);
+  const { ip } = host;
+
+  $.post('/host/get_path_list', 'host_ip=' + ip,function(rdata){
+    
+    let logFileBody = '';
+    for(let logFile of rdata) {
+      logFileBody += `
+        <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis"
+          title="${logFile.path}"
+        >${logFile.path}</li>  
+      `;
+    }
+    $("#logFileBody").html(logFileBody);
+
+    $(".log-path-item").click(function() {
+      const logName = $(this).text();
+      $(this).addClass('bg-green-200 text-green-500').siblings().removeClass('bg-green-200 text-green-500');
+      getDetailHostLogMonitorDetailData(logName);
+    });
+    
+    // 默认选中第一个
+    if ($(".log-path-item").length > 0) {
+      $(".log-path-item").eq(0).click();
+    }
+  }, 'json');
+  
 
 }
 
