@@ -165,10 +165,16 @@ class host_api:
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
     
-    def getPathListApi(self):
+    def getLogPathListApi(self):
         host_ip = request.form.get('host_ip', '')
         path_list = self.getLogPathListFromES(host_ip)
         return jh.getJson(path_list)
+
+    def getLogDetailApi(self):
+        host_ip = request.form.get('host_ip', '')
+        log_path = request.form.get('log_path', '')
+        log_detail = self.getLogDetailFromES(host_ip, log_path)
+        return jh.getJson(log_detail)
 
     def getClientInstallShellLanApi(self):
         client_install_shell = f"curl -sSO https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh && bash install.sh install http://{jh.getHostAddr()}:10844"
@@ -463,6 +469,47 @@ class host_api:
             })
         
         return path_list
+      except Exception as e:
+        traceback.print_exc()
+        return None
+      
+    def getLogDetailFromES(self, host_ip, log_file_path):
+      try:
+        es = jh.getES()
+        query = {
+          "size": 100,
+          "query": {
+            "bool": {
+              "filter": [
+                { "term": { "log.file.path": log_file_path } },
+                { "term": { "host.ip": host_ip } } 
+              ]
+            }
+          },
+          "sort": [
+            {
+              "@timestamp": {
+                "order": "desc"
+              }
+            }
+          ]
+        }
+
+        print("query", query)
+
+        response = es.search(index="filebeat-*", body=query)
+        log_details = {}
+        log_details["log_content"] = []
+        print(response)
+
+        if response["hits"]["hits"]:
+            # 获取最新的一条日志记录
+            latest_log = response["hits"]["hits"][0]["_source"]
+            log_details["last_updated"] = latest_log.get("@timestamp")
+            for hit in response["hits"]["hits"]:
+                log_details["log_content"].append(hit["_source"]["message"])
+
+        return log_details
       except Exception as e:
         traceback.print_exc()
         return None

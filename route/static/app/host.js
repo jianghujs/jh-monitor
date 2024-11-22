@@ -989,12 +989,12 @@ function detailLogMonitor(host_id, name, msg, status) {
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志路径: </span><span class="path"></span></div>
           </div>
           <div class="mt-2 flex">
-              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志大小:</span><span class="size"></span></div>
-              <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">文件权限:</span><span class="permission"></span></div>
+              <!-- <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志大小:</span><span class="size"></span></div> -->
+              <!-- <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">文件权限:</span><span class="permission"></span></div> -->
               <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">修改时间:</span><span class="modifyTime"></span></div>
           </div>
         </div>
-        <div class="mx-5 p-5 bgw" style="height: 390px;" class="content">
+        <div class="mx-5 p-5 bgw content overflow-auto" style="height: 390px;">
           日志内容为空
         </div>
       </div>
@@ -2376,7 +2376,7 @@ function getDetailHostLogMonitorData(host_id) {
   }
   const { ip } = host;
 
-  $.post('/host/get_path_list', 'host_ip=' + ip,function(rdata){
+  $.post('/host/get_log_path_list', 'host_ip=' + ip,function(rdata){
     
     let logFileBody = '';
     for(let logFile of rdata) {
@@ -2388,10 +2388,11 @@ function getDetailHostLogMonitorData(host_id) {
     }
     $("#logFileBody").html(logFileBody);
 
+
     $(".log-path-item").click(function() {
-      const logName = $(this).text();
+      const logPath = $(this).text();
       $(this).addClass('bg-green-200 text-green-500').siblings().removeClass('bg-green-200 text-green-500');
-      getDetailHostLogMonitorDetailData(logName);
+      getDetailHostLogMonitorDetailData(ip, logPath);
     });
     
     // 默认选中第一个
@@ -2404,21 +2405,15 @@ function getDetailHostLogMonitorData(host_id) {
 }
 
 // 日志详情
-function getDetailHostLogMonitorDetailData() {
-  
-  let logFileDetail = {
-    path: '/www/syslog',
-    size: 23,
-    permission: '--rw-r--r--',
-    modifyTime: '2021-10-10 10:10:10',
-    content: '测试日志内容'
-  }
-  $("#logFileDetail .path").text(logFileDetail.path);
-  $("#logFileDetail .size").text(logFileDetail.size);
-  $("#logFileDetail .permission").text(logFileDetail.permission);
-  $("#logFileDetail .modifyTime").text(logFileDetail.modifyTime);
-  $("#logFileDetail .content").text(logFileDetail.content);
-
+function getDetailHostLogMonitorDetailData(host_ip, logPath) {
+  $.post('/host/get_log_detail', `host_ip=${host_ip}&log_path=${logPath}`,function(rdata){
+    let logFileDetail = JSON.parse(rdata);
+    $("#logFileDetail .path").text(logPath);
+    // $("#logFileDetail .size").text(logFileDetail.size);
+    // $("#logFileDetail .permission").text(logFileDetail.permission);
+    $("#logFileDetail .modifyTime").text(logFileDetail.last_updated || '暂无');
+    $("#logFileDetail .content").html(logFileDetail.log_content.map(item => `<p>${item}</p>`));
+  });
 }
 
 // 主机SSH登陆信息
