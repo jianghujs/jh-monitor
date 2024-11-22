@@ -977,8 +977,7 @@ function detailLogMonitor(host_id, name, msg, status) {
           </div>
           <div>
               <ul id="logFileBody" class="log-path-list" style="line-height: 35px;">
-                  <li class="log-path-item px-5 log-path cursor-pointer bg-slate-50 text-green-500">/www/wwwlogs</li>
-                  <li class="log-path-item px-5 log-path cursor-pointer">/www/wwwlogs</li>
+                  <span>加载中...</span>
               </ul>
           </div>
         </div>
