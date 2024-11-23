@@ -975,7 +975,7 @@ function detailLogMonitor(host_id, name, msg, status) {
           <div class="title c6 f16 plr15">
               <h3 class="c6 f16 pull-left">日志路径列表</h3>
           </div>
-          <div>
+          <div class=" overflow-y-auto" style="height:460px">
               <ul id="logFileBody" class="log-path-list" style="line-height: 35px;">
                   <span>加载中...</span>
               </ul>
