@@ -58,4 +58,24 @@ setTimeout(function() {
 }, 0);
 
 </script>
+
+<style>
+
+.curve-selector button {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.curve-selector button.active {
+  background: #1890ff;
+  color: white;
+  border-color: #1890ff;
+}
+.curve-selector .select-all-btn, .curve-selector .select-none-btn {
+  background: #f0f0f0;
+}
+</style>
 {% endblock %}

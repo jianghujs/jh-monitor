@@ -76,7 +76,12 @@ function createHostChart(host) {
   const { host_id, host_name } = host;
 
   let chartId = 'host-chart-' + host_id;
-  $('#hostCharts').append(`<div id="${chartId}" style="width:100%; height:330px"></div>`);
+  // Add button group for curve selection
+  $('#hostCharts').append(`
+    <div class="chart-container">
+      <div id="${chartId}" style="width:100%; height:330px"></div>
+    </div>
+  `);
   let dom = document.getElementById(chartId);
 
   let hostChart = {
@@ -107,7 +112,6 @@ function createHostChart(host) {
       let maxDiskIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData);
       let maxNetIO = cpu_history.length == 0? 10000: Math.max(...netUpData, ...netDownData);
       // 配置项
-      debugger
       let option = {
         title: {
           text: `${host_name}`,
@@ -392,3 +396,60 @@ function updateHostChartData(s, e) {
     }
   }, 'json');
 }
+
+// 在文件末尾添加全局曲线控制按钮的HTML
+$('#hostCharts').before(`
+  <div class="curve-selector" style="margin: 10px 0; text-align: center;">
+    <div class="curve-buttons">
+      <button class="select-all-btn" onclick="toggleAllCurves(true)">显示全部曲线</button>
+      <button class="select-none-btn mr-2" onclick="toggleAllCurves(false)">隐藏全部曲线</button>
+      <button class="curve-btn" data-series="CPU">CPU</button>
+      <button class="curve-btn" data-series="内存">内存</button>
+      <button class="curve-btn" data-series="磁盘使用率">磁盘使用率</button>
+      <button class="curve-btn" data-series="磁盘读取">磁盘读取</button>
+      <button class="curve-btn" data-series="磁盘写入">磁盘写入</button>
+      <button class="curve-btn" data-series="网络上传">网络上传</button>
+      <button class="curve-btn" data-series="网络下载">网络下载</button>
+    </div>
+  </div>
+`);
+
+function toggleAllCurves(show) {
+  // 遍历所有图表
+  Object.values(hostChartMap).forEach(hostChart => {
+    const chart = hostChart.myChart;
+    const seriesNames = chart.getOption().series.map(s => s.name);
+    
+    seriesNames.forEach(seriesName => {
+      chart.dispatchAction({
+        type: show ? 'legendSelect' : 'legendUnSelect',
+        name: seriesName
+      });
+    });
+  });
+  
+  // 更新按钮状态
+  $('.curve-btn').toggleClass('active', show);
+}
+
+$(document).on('click', '.curve-btn', function() {
+  const button = $(this);
+  const seriesName = button.data('series');
+  const isActive = !button.hasClass('active');
+  
+  button.toggleClass('active', isActive);
+  
+  // 对所有图表应用相同的显示/隐藏设置
+  Object.values(hostChartMap).forEach(hostChart => {
+    const chart = hostChart.myChart;
+    chart.dispatchAction({
+      type: isActive ? 'legendSelect' : 'legendUnSelect',
+      name: seriesName
+    });
+  });
+});
+
+// Initialize all buttons as active
+setTimeout(() => {
+  $('.curve-btn').addClass('active');
+}, 1000);
