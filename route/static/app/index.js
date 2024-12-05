@@ -90,23 +90,24 @@ function createHostChart(host) {
       });
     },
     setData(d = {}) {
-      const colors = ['#5470C6', '#91CC75', '#EE6666', ];
-      const { cpu_history = [], mem_history = [], disk_io_history = [], net_io_history = [] } = d;
+      const colors = ['#5470C6', '#91CC75', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4'];
+      const { cpu_history = [], mem_history = [], disk_io_history = [], net_io_history = [], disk_usage_history = [] } = d;
       
       // 数据处理
       const xData = cpu_history.map(item => item.addtime);
       const cpuData = cpu_history.map(item => item.pro);
       const memData = mem_history.map(item => item.mem);
+      const diskUsageData = disk_usage_history.map(item => item.usedPercent);
       const readData = disk_io_history.map(item => (item.read_bytes / 1024));
       const writeData = disk_io_history.map(item => (item.write_bytes / 1024));
       const netUpData = net_io_history.map(item => (item.up || 0));
       const netDownData = net_io_history.map(item => (item.down || 0));
       // 获取最大值
-      let maxPercent = cpu_history.length == 0? 100:Math.max(...cpuData, ...memData);
+      let maxPercent = cpu_history.length == 0? 100:Math.max(...cpuData, ...memData, ...diskUsageData);
       let maxDiskIO = cpu_history.length == 0? 10000: Math.max(...readData, ...writeData);
       let maxNetIO = cpu_history.length == 0? 10000: Math.max(...netUpData, ...netDownData);
-      debugger
       // 配置项
+      debugger
       let option = {
         title: {
           text: `${host_name}`,
@@ -119,7 +120,7 @@ function createHostChart(host) {
           }
         },
         legend: {
-          data: ['CPU', '内存', '磁盘读取', '磁盘写入', '网络上传', '网络下载'],
+          data: ['CPU', '内存', '磁盘使用率', '磁盘读取', '磁盘写入', '网络上传', '网络下载'],
           top: '50px', // 将图例放在标题下方
           left: 'center',
           width: '80%'
@@ -143,6 +144,7 @@ function createHostChart(host) {
               switch (param.seriesName) {
                 case 'CPU':
                 case '内存':
+                case '磁盘使用率':
                   unit = '%';
                   break;
                 case '磁盘读取':
@@ -234,9 +236,10 @@ function createHostChart(host) {
             yAxisIndex: 0,
             data: cpuData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(0, 153, 238)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[0]
             }
           },
           {
@@ -245,9 +248,22 @@ function createHostChart(host) {
             yAxisIndex: 0,
             data: memData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(255, 165, 0)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[1]
+            }
+          },
+          {
+            name: '磁盘使用率',
+            type: 'line',
+            yAxisIndex: 0,
+            data: diskUsageData,
+            smooth: true,
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[2]
             }
           },
           {
@@ -256,9 +272,10 @@ function createHostChart(host) {
             yAxisIndex: 1,
             data: readData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(75, 192, 192)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[3]
             }
           },
           {
@@ -267,9 +284,10 @@ function createHostChart(host) {
             yAxisIndex: 1,
             data: writeData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(255, 99, 132)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[4]
             }
           },
           {
@@ -278,9 +296,10 @@ function createHostChart(host) {
             yAxisIndex: 2,
             data: netUpData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(54, 162, 235)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[5]
             }
           },
           {
@@ -289,9 +308,10 @@ function createHostChart(host) {
             yAxisIndex: 2,
             data: netDownData,
             smooth: true,
-            symbol: 'none',
-            itemStyle: {
-              color: 'rgb(153, 102, 255)'
+            showSymbol: false,
+            lineStyle: {
+              width: 2,
+              color: colors[6]
             }
           }
         ]
@@ -318,6 +338,7 @@ function updateHostChartData(s, e) {
       let mem_history = [];
       let disk_io_history = [];
       let net_io_history = [];
+      let disk_usage_history = [];
       for ( let i = 0; i < host_data.length; i++) {
         let item = host_data[i];
         let itemCpuInfo = JSON.parse(item['cpu_info'] || '{}');
@@ -353,13 +374,20 @@ function updateHostChartData(s, e) {
           up_packets: itemNetIo.sent_packets,
           addtime: item.addtime
         });
+        disk_usage_history.push({
+          id: item.id,
+          usedPercent: itemDiskInfo.usedPercent,
+          addtime: item.addtime
+        });
       };
+      debugger
 
       hostChartMap[host_id].setData({
         cpu_history,
         mem_history,
         disk_io_history,
-        net_io_history
+        net_io_history,
+        disk_usage_history
       });
     }
   }, 'json');
