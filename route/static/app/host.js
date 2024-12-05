@@ -94,7 +94,7 @@ function getWeb(page, search, host_group_id) {
         disk_status = `<div class="disk-usage">
           <div class="d-flex flex-column mt-2">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
-              <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger' : ''}" role="progressbar" 
+              <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger': (disk_percent >= 60? 'progress-bar-warning': '')}" role="progressbar" 
                 aria-valuenow="${disk_percent}" aria-valuemin="0" aria-valuemax="100" 
                 style="width: ${disk_percent}%;" title="${disk_percent}%">
                 <span class="absolute center">${disk_percent}%</span>
