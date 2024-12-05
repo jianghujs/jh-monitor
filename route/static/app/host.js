@@ -71,7 +71,7 @@ function getWeb(page, search, host_group_id) {
 
       // 负载
       let load_status = '';
-      if (occupy) {
+      if (occupy != undefined) {
         let load_percent = occupy;
         load_status = `<div class="load-usage" title="${load_percent}%">
           <div class="d-flex flex-column relative">
