@@ -1326,7 +1326,7 @@ function getDetailHostSummaryData(host_id) {
 /**
  * 图表相关
 var netChart = {}
-
+*/
 function initDetailHostSummaryNetChart(net_info) {
   netChart = {
     xData: [],
