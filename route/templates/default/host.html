@@ -15,20 +15,22 @@
 						<iframe name='hid' id="hid" style="display:none"></iframe>
 					</div>
 				</div>
-				<div class="safe bgw mtb15 pd15 flex">
-					<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
-					<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title" type="button">分组管理</button>
-					<div id="refreshControl" class="ml-2">
-						<div class="btn-group">
-							<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
-								刷新间隔: <span id="currentInterval">5</span>秒
-								<span class="caret"></span>
+				<div class="safe bgw mtb15 pd15">
+					<div class="flex align-center">
+						<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
+						<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title" type="button">分组管理</button>
+						
+						<div id="refreshControl" class="ml-4">
+							<div class="btn-group">
+								<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+									刷新间隔: <span id="currentInterval">5</span>秒
+									<span class="caret"></span>
 								</button>
 								<ul class="dropdown-menu">
-								<li><a href="javascript:;" onclick="setRefreshInterval(5)">5秒</a></li>
-								<li><a href="javascript:;" onclick="setRefreshInterval(10)">10秒</a></li>
-								<li><a href="javascript:;" onclick="setRefreshInterval(30)">30秒</a></li>
-								<li><a href="javascript:;" onclick="setRefreshInterval(60)">1分钟</a></li>
+									<li><a href="javascript:;" onclick="setRefreshInterval(5)">5秒</a></li>
+									<li><a href="javascript:;" onclick="setRefreshInterval(10)">10秒</a></li>
+									<li><a href="javascript:;" onclick="setRefreshInterval(30)">30秒</a></li>
+									<li><a href="javascript:;" onclick="setRefreshInterval(60)">1分钟</a></li>
 								</ul>
 							</div>
 							<button id="toggleRefresh" class="btn btn-default btn-sm" onclick="toggleRefresh()">
@@ -36,12 +38,11 @@
 								<span>停止刷新</span>
 							</button>
 						</div>
+						
+						<span>
+							<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
+						</span>
 					</div>
-					
-					<span>
-						<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
-					</span>
-
 					<div class="divtable mtb10">
 						<div class="tablescroll">
 						<table class="table table-hover" style="min-width: 900px;border: 0 none;">
