@@ -1,4 +1,5 @@
-
+var refreshTimer = null;
+var refreshInterval = 5000; // 默认5秒
 var loadT = layer.load();
 var hostList = [];
 
@@ -85,15 +86,25 @@ function getWeb(page, search, host_group_id) {
       let disk_speed = ''
       let disk_status = '';
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
-        disk_total += (data.data[i].disk_info[0]['total'] || 0)
-        disk_used += (data.data[i].disk_info[0]['used'] || 0)
+        disk_total = (data.data[i].disk_info[0]['total'] || 0)
+        disk_used = (data.data[i].disk_info[0]['used'] || 0)
+        disk_percent = data.data[i].disk_info[0]['usedPercent'] || 0;
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed'] || 0) + "/S</div>";
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed'] || 0) + "/S</div>";
-        if(data.data[i].disk_info[0]['usedPercent'] < 80) {
-          disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>充裕</span></span>";
-        } else {
-          disk_status = "<span href='javascript:;' class='btn-defsult'><span style='color:red'>不足</span></span>";
-        }
+        disk_status = `<div class="disk-usage">
+          <div class="d-flex flex-column mt-2">
+            <div class="progress relative" style="margin-bottom: 0;height: 20px;">
+              <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger' : ''}" role="progressbar" 
+                aria-valuenow="${disk_percent}" aria-valuemin="0" aria-valuemax="100" 
+                style="width: ${disk_percent}%;" title="${disk_percent}%">
+                <span class="absolute center">${disk_percent}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="usage-text">${toSize(disk_used)}/${toSize(disk_total)}</div>
+        </div>`;
+      } else {
+        disk_status = "<span>--</span>";
       }
 
       // 报告概览
@@ -590,6 +601,63 @@ function hostDelete(host_id, name){
 }
 
 
+// -------------------------- 自动刷新 --------------------------
+// 开始自动刷新
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(function() {
+    getWeb();
+  }, refreshInterval);
+  updateRefreshButtonState(true);
+}
+
+// 停止自动刷新
+function stopAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  updateRefreshButtonState(false);
+}
+
+// 更新刷新按钮状态
+function updateRefreshButtonState(isRefreshing) {
+  var $btn = $('#toggleRefresh');
+  if (isRefreshing) {
+    $btn.html('<span class="glyphicon glyphicon-pause"></span> <span>停止刷新</span>');
+    $btn.removeClass('btn-success').addClass('btn-default');
+  } else {
+    $btn.html('<span class="glyphicon glyphicon-play"></span> <span>开始刷新</span>');
+    $btn.removeClass('btn-default').addClass('btn-success');
+  }
+}
+
+// 设置刷新间隔
+function setRefreshInterval(interval) {
+  refreshInterval = interval * 1000;
+  $('#currentInterval').text(interval);
+  if (refreshTimer) {
+    stopAutoRefresh();
+    startAutoRefresh();
+  }
+}
+
+// 切换刷新状态
+function toggleRefresh() {
+  if (refreshTimer) {
+    stopAutoRefresh();
+  } else {
+    startAutoRefresh();
+  }
+}
+
+// 在页面加载完成后启动自动刷新
+$(function() {
+  // 初始化UI状态
+  $('#currentInterval').text(refreshInterval/1000);
+  startAutoRefresh();
+});
+// -------------------------- 自动刷新 --------------------------
 
 /*主机详情*/
 var detailHostId = null;
@@ -1255,7 +1323,8 @@ function getDetailHostSummaryData(host_id) {
   },'json');
 }
 
-// 图表相关
+/**
+ * 图表相关
 var netChart = {}
 
 function initDetailHostSummaryNetChart(net_info) {
@@ -1512,7 +1581,7 @@ function initDetailHostBaseMonitorChart() {
     var e = (new Date($(this).parent().find(".etime").val()).getTime())/1000;
     b = Math.round(b);
     e = Math.round(e);
-    updateDetailHostBaseMonitorCPUChartData(b,e);
+    updateDetailHostBaseMonitorCPUChartData(b, e);
   })
   $(".membtn").click(function(){
     $(this).parents(".searcTime").find("span").removeClass("on");
@@ -1553,7 +1622,7 @@ function updateDetailHostBaseMonitorChartData() {
 
 //指定天数
 function Wday(day, name){
-	var now = (new Date().getTime())/1000;
+	var now = (new Date()).getTime();
 	if(day==0){
 		var s = (new Date(getToday() + " 00:00:01").getTime())/1000;
 			s = Math.round(s);
@@ -1679,7 +1748,10 @@ function initDetailHostBaseMonitorAvgLoadChart() {
         ],
         yAxis: [{
             scale: true,
-            name: '资源使用率%',
+            name: lan.public.pre,
+            boundaryGap: [0, '100%'],
+            min:0,
+            max: 100,
             splitLine: { // y轴网格显示
               show: true,
               lineStyle:{
@@ -1693,7 +1765,7 @@ function initDetailHostBaseMonitorAvgLoadChart() {
             },
             axisLine:{
               lineStyle:{
-                color: '#666',
+                color:"#666"
               }
             }
           },
@@ -1714,7 +1786,7 @@ function initDetailHostBaseMonitorAvgLoadChart() {
             },
             axisLine:{
               lineStyle:{
-                color: '#666',
+                color:"#666"
               }
             }
           },
@@ -1723,7 +1795,6 @@ function initDetailHostBaseMonitorAvgLoadChart() {
           type: 'inside',
           start: 0,
           end: 100,
-          xAxisIndex:[0,1],
           zoomLock:true
         }, {
           xAxisIndex: [0, 1],
@@ -1738,9 +1809,7 @@ function initDetailHostBaseMonitorAvgLoadChart() {
             shadowColor: 'rgba(0, 0, 0, 0.6)',
             shadowOffsetX: 2,
             shadowOffsetY: 2
-          },
-          left:'5%',
-          right:'5%'
+          }
         }],
         series: [
           {
@@ -1868,6 +1937,7 @@ function initDetailHostBaseMonitorCPUChart() {
     setData(d) {
       this.xData = [];
       this.yData = [];
+
       for(var i = 0; i < d.length; i++){
         
         this.xData.push(d[i].addtime);
@@ -2295,6 +2365,8 @@ function initDetailHostBaseMonitorNetIoChart() {
           end: 100,
           zoomLock:true
         }, {
+          xAxisIndex: [0, 1],
+                type: 'slider',
           start: 0,
           end: 100,
           handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
@@ -2500,16 +2572,3 @@ function setImg() {
 }
 
 // <========================== 其他方法 End
-
-
-
-
-
-
-
-
-
-
-
-
-

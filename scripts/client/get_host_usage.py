@@ -179,9 +179,9 @@ def get_disk_info():
                 write_speed = write_bytes 
 
                 disk_info.append({
-                    'total': disk_usage.total / (1024 ** 3),  # 转换为 GB
-                    'used': disk_usage.used / (1024 ** 3),
-                    'free': disk_usage.free / (1024 ** 3),
+                    'total': disk_usage.total,
+                    'used': disk_usage.used,
+                    'free': disk_usage.free,
                     'usedPercent': disk_usage.percent,
                     'fstype': partition.fstype,
                     'name': partition.device,

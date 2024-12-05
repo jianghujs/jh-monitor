@@ -15,9 +15,28 @@
 						<iframe name='hid' id="hid" style="display:none"></iframe>
 					</div>
 				</div>
-				<div class="safe bgw mtb15 pd15">
+				<div class="safe bgw mtb15 pd15 flex">
 					<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
 					<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title" type="button">分组管理</button>
+					<div id="refreshControl" class="ml-2">
+						<div class="btn-group">
+							<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+								刷新间隔: <span id="currentInterval">5</span>秒
+								<span class="caret"></span>
+								</button>
+								<ul class="dropdown-menu">
+								<li><a href="javascript:;" onclick="setRefreshInterval(5)">5秒</a></li>
+								<li><a href="javascript:;" onclick="setRefreshInterval(10)">10秒</a></li>
+								<li><a href="javascript:;" onclick="setRefreshInterval(30)">30秒</a></li>
+								<li><a href="javascript:;" onclick="setRefreshInterval(60)">1分钟</a></li>
+								</ul>
+							</div>
+							<button id="toggleRefresh" class="btn btn-default btn-sm" onclick="toggleRefresh()">
+								<span class="glyphicon glyphicon-pause"></span>
+								<span>停止刷新</span>
+							</button>
+						</div>
+					</div>
 					
 					<span>
 						<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
@@ -38,7 +57,7 @@
 									<th class="cursor: pointer text-center" width="80" onclick="listOrder('cpu','host',this)">流量<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th class="cursor: pointer text-center" width="80" onclick="listOrder('cpu','host',this)">总流量<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th class="cursor: pointer text-center" width="80" onclick="listOrder('cpu','host',this)">磁盘读写<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
-									<th class="cursor: pointer text-center" width="80" onclick="listOrder('cpu','host',this)">磁盘状态<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
+									<th class="cursor: pointer text-center" width="150" onclick="listOrder('cpu','host',this)">磁盘状态<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th class="cursor: pointer text-center" width="80" onclick="listOrder('cpu','host',this)">报告概览<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th class="cursor: pointer text-center" width="150" onclick="listOrder('cpu','host',this)">更新时间<span hidden class="glyphicon glyphicon-triangle-top" style="margin-left:5px;color:#bbb"></span></th>
 									<th class="cursor: pointer text-center" width='220' class='text-right'>操作</th>
@@ -69,9 +88,6 @@
 <script type="text/javascript">		
 setTimeout(function(){
 	getWeb(1);
-  setInterval(() => {
-    getWeb(1);
-  }, 3000)
 },500);
 </script>
 
