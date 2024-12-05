@@ -39,7 +39,7 @@ class host_api:
     host_alarm_field = "id,host_id,host_name,alarm_type,alarm_level,alarm_content,addtime"
 
     def listApi(self):
-        limit = request.form.get('limit', '10')
+        limit = request.form.get('limit', '100')
         p = request.form.get('p', '1')
         host_group_id = request.form.get('host_group_id', '')
         start = (int(p) - 1) * (int(limit))
