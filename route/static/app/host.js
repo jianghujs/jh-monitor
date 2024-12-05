@@ -69,6 +69,69 @@ function getWeb(page, search, host_group_id) {
       occupy = Math.round((avg / max) * 100);
       if (occupy > 100) Occupy = 100;
 
+      // 负载
+      let load_status = '';
+      if (occupy) {
+        let load_percent = occupy;
+        load_status = `<div class="load-usage" title="${load_percent}%">
+          <div class="d-flex flex-column relative">
+            <div class="progress relative" style="margin-bottom: 0;height: 20px;">
+              <div class="progress-bar ${load_percent >= 80 ? 'progress-bar-danger': (load_percent >= 60? 'progress-bar-warning': 'progress-bar-success')}" role="progressbar" 
+                aria-valuenow="${load_percent}" aria-valuemin="0" aria-valuemax="100" 
+                style="width: ${load_percent}%;">
+                <div style="position: absolute; width: 100%; text-align: center; color: ${load_percent > 40 ? '#fff' : '#28a745'};">
+                  ${load_percent}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      } else {
+        load_status = "<span>--</span>";
+      }
+
+      // CPU使用率
+      let cpu_status = '';
+      if (data.data[i]['cpu_info']['percent'] !== undefined) {
+        let cpu_percent = data.data[i]['cpu_info']['percent'];
+        cpu_status = `<div class="cpu-usage" title="${cpu_percent}%">
+          <div class="d-flex flex-column">
+            <div class="progress relative" style="margin-bottom: 0;height: 20px;">
+              <div class="progress-bar ${cpu_percent >= 80 ? 'progress-bar-danger': (cpu_percent >= 60? 'progress-bar-warning': 'progress-bar-success')}" role="progressbar" 
+                aria-valuenow="${cpu_percent}" aria-valuemin="0" aria-valuemax="100" 
+                style="width: ${cpu_percent}%;">
+                <div style="position: absolute; width: 100%; text-align: center; color: ${cpu_percent > 40 ? '#fff' : '#28a745'};">
+                  ${cpu_percent}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      } else {
+        cpu_status = "<span>--</span>";
+      }
+
+      // 内存使用率
+      let mem_status = '';
+      if (data.data[i].mem_info) {
+        let mem_percent = data.data[i]['mem_info']['usedPercent']
+        mem_status = `<div class="mem-usage" title="${mem_percent}%">
+          <div class="d-flex flex-column">
+            <div class="progress relative" style="margin-bottom: 0;height: 20px;">
+              <div class="progress-bar ${mem_percent >= 80 ? 'progress-bar-danger': (mem_percent >= 60? 'progress-bar-warning': 'progress-bar-success')}" role="progressbar" 
+                aria-valuenow="${mem_percent}" aria-valuemin="0" aria-valuemax="100" 
+                style="width: ${mem_percent}%;">
+                <div style="position: absolute; width: 100%; text-align: center; color: ${mem_percent > 40 ? '#fff' : '#28a745'};">
+                  ${mem_percent}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      } else {
+        mem_status = "<span>--</span>";
+      }
+
       // 流量
       let net_speed = '';
       let net_total = '';
@@ -91,17 +154,18 @@ function getWeb(page, search, host_group_id) {
         disk_percent = data.data[i].disk_info[0]['usedPercent'] || 0;
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed'] || 0) + "/S</div>";
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed'] || 0) + "/S</div>";
-        disk_status = `<div class="disk-usage">
+        disk_status = `<div class="disk-usage" title="${disk_percent}%（${toSize(disk_used)}/${toSize(disk_total)}）">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
               <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger': (disk_percent >= 60? 'progress-bar-warning': 'progress-bar-success')}" role="progressbar" 
                 aria-valuenow="${disk_percent}" aria-valuemin="0" aria-valuemax="100" 
-                style="width: ${disk_percent}%;" title="${disk_percent}%">
-                <span class="absolute center">${disk_percent}%</span>
+                style="width: ${disk_percent}%;">
+                <div style="position: absolute; width: 100%; text-align: center; color: ${disk_percent > 40 ? '#fff' : '#28a745'};">
+                  ${disk_percent}%
+                </div>
               </div>
             </div>
           </div>
-          <div class="usage-tex mt-2">${toSize(disk_used)}/${toSize(disk_total)}</div>
         </div>`;
       } else {
         disk_status = "<span>--</span>";
@@ -144,9 +208,9 @@ function getWeb(page, search, host_group_id) {
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
 					<td>" + host_group + "</td>\
-					<td class='percent-color'>" + formatValue(occupy, '%') + "</td>\
-					<td class='percent-color'>" + formatValue(data.data[i]['cpu_info']['percent'], '%') + "</td>\
-					<td class='percent-color'>" + formatValue(data.data[i]['mem_info']['usedPercent'], '%') + "</td>\
+					<td class='percent-color'>" + load_status + "</td>\
+					<td class='percent-color'>" + cpu_status + "</td>\
+					<td class='percent-color'>" + mem_status + "</td>\
 					<td>" + net_speed + "</td>\
 					<td>" + net_total + "</td>\
 					<td>" + disk_speed + "</td>\
@@ -1758,11 +1822,6 @@ function initDetailHostBaseMonitorAvgLoadChart() {
                 color:"#ddd"
               }
             },
-            nameTextStyle: { // 坐标轴名样式
-              color: '#666',
-              fontSize: 12,
-              align: 'left'
-            },
             axisLine:{
               lineStyle:{
                 color:"#666"
@@ -1778,11 +1837,6 @@ function initDetailHostBaseMonitorAvgLoadChart() {
               lineStyle:{
                 color:"#ddd"
               }
-            },
-            nameTextStyle: { // 坐标轴名样式
-              color: '#666',
-              fontSize: 12,
-              align: 'left'
             },
             axisLine:{
               lineStyle:{
