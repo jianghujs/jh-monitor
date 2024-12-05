@@ -92,7 +92,7 @@ function getWeb(page, search, host_group_id) {
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed'] || 0) + "/S</div>";
         disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed'] || 0) + "/S</div>";
         disk_status = `<div class="disk-usage">
-          <div class="d-flex flex-column mt-2">
+          <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
               <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger': (disk_percent >= 60? 'progress-bar-warning': '')}" role="progressbar" 
                 aria-valuenow="${disk_percent}" aria-valuemin="0" aria-valuemax="100" 
@@ -101,7 +101,7 @@ function getWeb(page, search, host_group_id) {
               </div>
             </div>
           </div>
-          <div class="usage-text">${toSize(disk_used)}/${toSize(disk_total)}</div>
+          <div class="usage-tex mt-2">${toSize(disk_used)}/${toSize(disk_total)}</div>
         </div>`;
       } else {
         disk_status = "<span>--</span>";
