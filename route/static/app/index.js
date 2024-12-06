@@ -453,3 +453,503 @@ $(document).on('click', '.curve-btn', function() {
 setTimeout(() => {
   $('.curve-btn').addClass('active');
 }, 1000);
+
+
+
+
+
+
+
+// 检查更新
+// setTimeout(function() {
+//     $.get('/system/update_server?type=check', function(rdata) {
+//         if (rdata.status == false) return;
+//         if (rdata.data != undefined) {
+//             $("#toUpdate").html('<a class="btlink" href="javascript:updateMsg();">更新</a>');
+//             $('#toUpdate a').html('更新<i style="display: inline-block; color: red; font-size: 40px;position: absolute;top: -35px; font-style: normal; right: -8px;">.</i>');
+//             $('#toUpdate a').css("position","relative");
+//             return;
+//         }
+//     },'json').error(function() {
+//     });
+// }, 3000);
+
+
+//检查更新
+function checkUpdate() {
+  var loadT = layer.msg(lan.index.update_get, { icon: 16, time: 0, shade: [0.3, '#000'] });
+  $.get('/system/update_server?type=check', function(rdata) {
+      layer.close(loadT);
+
+      if (rdata.data == 'download'){
+          updateStatus();return;
+      }
+
+      if (rdata.status === false) {
+          layer.confirm(rdata.msg, { title: lan.index.update_check, icon: 1, closeBtn: 1, btn: [lan.public.know, lan.public.close] });
+          return;
+      }
+      layer.msg(rdata.msg, { icon: 1 });
+      if (rdata.data != undefined) updateMsg();
+  },'json');
+}
+
+async function updateServerCode() {
+  await execScriptAndShowLog(`${lan.index.update_server_code}...`, `cd /www/server/jh-monitor/ && git pull`);
+  var loadT = layer.msg("正在更新服务器...", { icon: 16, time: 0, shade: [0.3, '#000'] });
+  $.get('/system/update_server_code', function(rdata) {
+      layer.close(loadT);
+      if (rdata.status == true) {
+          layer.confirm('即将重启面板服务，继续吗？', { title: '重启面板服务', closeBtn: 1, icon: 3 }, function () {
+              var loadT = layer.load();
+              $.post('/system/restart','',function (rdata) {
+                  layer.close(loadT);
+                  layer.msg(rdata.msg);
+                  layer.msg('正在重启面板,请稍候...',{icon:16,time:0,shade: [0.3, '#000']});
+                  setInterval(function () {
+                      $.post('/system/restart_status','',function (rdata) {
+                          if (rdata.status) {
+                              window.location.reload();
+                          }
+                      },'json');
+                  }, 3000);
+                  
+              },'json');
+          });
+      } else {
+          layer.msg(rdata.msg, { icon: 1 });
+      }
+  },'json');
+}
+
+function updateMsg(){
+  $.get('/system/update_server?type=info',function(rdata){
+
+      if (rdata.data == 'download'){
+          updateStatus();return;
+      }
+
+      var v = rdata.data.version;
+      var v_info = '';
+      if (v.split('.').length>3){
+          v_info = "<span class='label label-warning'>测试版本</span>";
+      } else {
+          v_info = "<span class='label label-success arrowed'>正式版本</span>";
+      }
+
+      layer.open({
+          type:1,
+          title:v_info + '<span class="badge badge-inverse">升级到['+rdata.data.version+']</span>',
+          area: '400px', 
+          shadeClose:false,
+          closeBtn:2,
+          content:'<div class="setchmod bt-form pd20 pb70">'
+                  +'<p style="padding: 0 0 10px;line-height: 24px;">'+rdata.data.content+'</p>'
+                  +'<div class="bt-form-submit-btn">'
+                  +'<button type="button" class="btn btn-danger btn-sm btn-title" onclick="layer.closeAll()">取消</button>'
+                  +'<button type="button" class="btn btn-success btn-sm btn-title" onclick="updateVersion(\''+rdata.data.version+'\')" >立即更新</button>'
+                  +'</div>'
+                  +'</div>'
+      });
+  },'json');
+}
+
+
+//开始升级
+function updateVersion(version) {
+  var loadT = layer.msg('正在升级面板..', { icon: 16, time: 0, shade: [0.3, '#000'] });
+  $.get('/system/update_server?type=update&version='+version, function(rdata) {
+
+      layer.closeAll();
+      if (rdata.status === false) {
+          layer.msg(rdata.msg, { icon: 5, time: 5000 });
+          return;
+      }
+      layer.msg(rdata.msg, { icon: rdata.status ? 1 : 2 });
+      if (rdata.status) {
+          $("#btversion").html(version);
+          $("#toUpdate").html('');
+      }
+  },'json').error(function() {
+      layer.msg('更新失败,请重试!', { icon: 2 });
+      setTimeout(function() {
+          window.location.reload();
+      }, 3000);
+  });
+}
+
+function pluginIndexService(pname,pfunc, callback){
+  $.post('/plugins/run', {name:'openresty', func:pfunc}, function(data) {
+      if (!data.status){
+          layer.msg(data.msg,{icon:0,time:2000,shade: [0.3, '#000']});
+          return;
+      }
+
+      if(typeof(callback) == 'function'){
+          callback(data);
+      }
+  },'json'); 
+}
+
+//重启服务器
+function reBoot() {
+  layer.open({
+      type: 1,
+      title: '重启服务器或者面板',
+      area: '330px',
+      closeBtn: 1,
+      shadeClose: false,
+      content: '<div class="rebt-con"><div class="rebt-li"><a data-id="server" href="javascript:;">重启服务器</a></div><div class="rebt-li"><a data-id="panel" href="javascript:;">重启面板</a></div></div>'
+  });
+
+
+  $('.rebt-con a').click(function () {
+      var type = $(this).attr('data-id');
+      switch (type) {
+          case 'panel':
+              layer.confirm('即将重启面板服务，继续吗？', { title: '重启面板服务', closeBtn: 1, icon: 3 }, function () {
+                  var loadT = layer.load();
+                  $.post('/system/restart','',function (rdata) {
+                      layer.close(loadT);
+                      layer.msg(rdata.msg);
+                      setTimeout(function () { window.location.reload(); }, 3000);
+                  },'json');
+              });
+              break;
+          case 'server':
+              var rebootbox = layer.open({
+                  type: 1,
+                  title: '安全重启服务器',
+                  area: ['500px', '280px'],
+                  closeBtn: 1,
+                  shadeClose: false,
+                  content: "<div class='bt-form bt-window-restart'>\
+                          <div class='pd15'>\
+                          <p style='color:red; margin-bottom:10px; font-size:15px;'>注意，若您的服务器是一个容器，请取消。</p>\
+                          <div class='SafeRestart' style='line-height:26px'>\
+                              <p>安全重启有利于保障文件安全，将执行以下操作：</p>\
+                              <p>1.停止Web服务</p>\
+                              <p>2.停止MySQL服务</p>\
+                              <p>3.开始重启服务器</p>\
+                              <p>4.等待服务器启动</p>\
+                          </div>\
+                          </div>\
+                          <div class='bt-form-submit-btn'>\
+                              <button type='button' class='btn btn-danger btn-sm btn-reboot'>取消</button>\
+                              <button type='button' class='btn btn-success btn-sm WSafeRestart' >确定</button>\
+                          </div>\
+                      </div>"
+              });
+              setTimeout(function () {
+                  $(".btn-reboot").click(function () {
+                      rebootbox.close();
+                  })
+                  $(".WSafeRestart").click(function () {
+                      var body = '<div class="SafeRestartCode pd15" style="line-height:26px"></div>';
+                      $(".bt-window-restart").html(body);
+                      $(".SafeRestartCode").append("<p>正在停止Web服务</p>");
+                      pluginIndexService('openresty', 'stop', function (r1) {
+                          $(".SafeRestartCode p").addClass('c9');
+                          $(".SafeRestartCode").append("<p>正在停止MySQL服务...</p>");
+                          pluginIndexService('mysql','stop', function (r2) {
+                              $(".SafeRestartCode p").addClass('c9');
+                              $(".SafeRestartCode").append("<p>开始重启服务器...</p>");
+                              $.post('/system/restart_server', '',function (rdata) {
+                                  $(".SafeRestartCode p").addClass('c9');
+                                  $(".SafeRestartCode").append("<p>等待服务器启动...</p>");
+                                  var sEver = setInterval(function () {
+                                     $.get("/system/system_total", function(info) {
+                                          clearInterval(sEver);
+                                          $(".SafeRestartCode p").addClass('c9');
+                                          $(".SafeRestartCode").append("<p>服务器重启成功!...</p>");
+                                          setTimeout(function () {
+                                              layer.closeAll();
+                                          }, 3000);
+                                      })
+                                  }, 3000);
+                              })
+                          })
+                      })
+                  })
+              }, 100);
+              break;
+      }
+  });
+}
+
+function reBootPanel() {
+  layer.confirm('即将重启面板服务，继续吗？', { title: '重启面板服务', closeBtn: 1, icon: 3 }, function () {
+      var loadT = layer.load();
+      $.post('/system/restart','',function (rdata) {
+          layer.close(loadT);
+          layer.msg(rdata.msg);
+          layer.msg('正在重启面板,请稍候...',{icon:16,time:0,shade: [0.3, '#000']});
+          setInterval(function () {
+              $.post('/system/restart_status','',function (rdata) {
+                  if (rdata.status) {
+                      window.location.reload();
+                  }
+              },'json');
+          }, 3000);
+          
+      },'json');
+  });
+}
+
+function reBootServer() {
+  var rebootbox = layer.open({
+      type: 1,
+      title: '安全重启服务器',
+      area: ['500px', '280px'],
+      closeBtn: 1,
+      shadeClose: false,
+      content: "<div class='bt-form bt-window-restart'>\
+              <div class='pd15'>\
+              <p style='color:red; margin-bottom:10px; font-size:15px;'>注意，若您的服务器是一个容器，请取消。</p>\
+              <div class='SafeRestart' style='line-height:26px'>\
+                  <p>安全重启有利于保障文件安全，将执行以下操作：</p>\
+                  <p>1.停止Web服务</p>\
+                  <p>2.停止MySQL服务</p>\
+                  <p>3.开始重启服务器</p>\
+                  <p>4.等待服务器启动</p>\
+              </div>\
+              </div>\
+              <div class='bt-form-submit-btn'>\
+                  <button type='button' class='btn btn-danger btn-sm btn-reboot'>取消</button>\
+                  <button type='button' class='btn btn-success btn-sm WSafeRestart' >确定</button>\
+              </div>\
+          </div>"
+  });
+  setTimeout(function () {
+      $(".btn-reboot").click(function () {
+          rebootbox.close();
+      })
+      $(".WSafeRestart").click(function () {
+          var body = '<div class="SafeRestartCode pd15" style="line-height:26px"></div>';
+          $(".bt-window-restart").html(body);
+          $(".SafeRestartCode").append("<p>正在停止Web服务</p>");
+          pluginIndexService('openresty', 'stop', function (r1) {
+              $(".SafeRestartCode p").addClass('c9');
+              $(".SafeRestartCode").append("<p>正在停止MySQL服务...</p>");
+              pluginIndexService('mysql','stop', function (r2) {
+                  $(".SafeRestartCode p").addClass('c9');
+                  $(".SafeRestartCode").append("<p>开始重启服务器...</p>");
+                  $.post('/system/restart_server', '',function (rdata) {
+                      $(".SafeRestartCode p").addClass('c9');
+                      $(".SafeRestartCode").append("<p>等待服务器启动...</p>");
+                      var sEver = setInterval(function () {
+                         $.get("/system/system_total", function(info) {
+                              clearInterval(sEver);
+                              $(".SafeRestartCode p").addClass('c9');
+                              $(".SafeRestartCode").append("<p>服务器重启成功!...</p>");
+                              setTimeout(function () {
+                                  layer.closeAll();
+                              }, 3000);
+                          })
+                      }, 3000);
+                  })
+              })
+          })
+      })
+  }, 100);
+}
+
+//修复面板
+function repPanel() {
+  layer.confirm(lan.index.rep_panel_msg, { title: lan.index.rep_panel_title, closeBtn: 1, icon: 3 }, function() {
+      var loadT = layer.msg(lan.index.rep_panel_the, { icon: 16, time: 0, shade: [0.3, '#000'] });
+      $.get('/system?action=RepPanel', function(rdata) {
+          layer.close(loadT);
+          layer.msg(lan.index.rep_panel_ok, { icon: 1 });
+      }).error(function() {
+          layer.close(loadT);
+          layer.msg(lan.index.rep_panel_ok, { icon: 1 });
+      });
+  });
+}
+
+//获取警告信息
+function getWarning() {
+  $.get('/ajax?action=GetWarning', function(wlist) {
+      var num = 0;
+      for (var i = 0; i < wlist.data.length; i++) {
+          if (wlist.data[i].ignore_count >= wlist.data[i].ignore_limit) continue;
+          if (wlist.data[i].ignore_time != 0 && (wlist.time - wlist.data[i].ignore_time) < wlist.data[i].ignore_timeout) continue;
+          var btns = '';
+          for (var n = 0; n < wlist.data[i].btns.length; n++) {
+              if (wlist.data[i].btns[n].type == 'javascript') {
+                  btns += '<a href="javascript:WarningTo(\'' + wlist.data[i].btns[n].url + '\',' + wlist.data[i].btns[n].reload + ');" class="' + wlist.data[i].btns[n].class + '"> ' + wlist.data[i].btns[n].title + '</a>'
+              } else {
+                  btns += '<a href="' + wlist.data[i].btns[n].url + '" class="' + wlist.data[i].btns[n].class + '" target="' + wlist.data[i].btns[n].target + '"> ' + wlist.data[i].btns[n].title + '</a>'
+              }
+          }
+          $("#messageError").append('<p><img src="' + wlist.icon[wlist.data[i].icon] + '" style="margin-right:14px;vertical-align:-3px">' + wlist.data[i].body + btns + '</p>');
+          num++;
+      }
+      if (num > 0) $("#messageError").show();
+  });
+}
+
+//按钮调用
+function warningTo(to_url, def) {
+  var loadT = layer.msg(lan.public.the_get, { icon: 16, time: 0, shade: [0.3, '#000'] });
+  $.post(to_url, {}, function(rdata) {
+      layer.close(loadT);
+      layer.msg(rdata.msg, { icon: rdata.status ? 1 : 2 });
+      if (rdata.status && def) setTimeout(function() { location.reload(); }, 1000);
+  },'json');
+}
+
+function setSafeHide() {
+  setCookie('safeMsg', '1');
+  $("#safeMsg").remove();
+}
+//查看报告
+function showDanger(num, port) {
+  var atxt = "因未使用安全隔离登录，所有IP都可以尝试连接，存在较高风险，请立即处理。";
+  if (port == "22") {
+      atxt = "因未修改SSH默认22端口，且未使用安全隔离登录，所有IP都可以尝试连接，存在较高风险，请立即处理。";
+  }
+  layer.open({
+      type: 1,
+      area: ['720px', '410px'],
+      title: '安全提醒(如你想放弃任何安全提醒通知，请删除宝塔安全登录插件)',
+      closeBtn: 1,
+      shift: 5,
+      content: '<div class="pd20">\
+      <table class="f14 showDanger"><tbody>\
+      <tr><td class="text-right" width="150">风险类型：</td><td class="f16" style="color:red">暴力破解 <a href="https://www.bt.cn/bbs/thread-9562-1-1.html" class="btlink f14" style="margin-left:10px" target="_blank">说明</a></td></tr>\
+      <tr><td class="text-right">累计遭遇攻击总数：</td><td class="f16" style="color:red">' + num + ' <a href="javascript:showDangerIP();" class="btlink f14" style="margin-left:10px">详细</a><span class="c9 f12" style="margin-left:10px">（数据直接来源本服务器日志）</span></td></tr>\
+      <tr><td class="text-right">风险等级：</td><td class="f16" style="color:red">较高风险</td></tr>\
+      <tr><td class="text-right" style="vertical-align:top">风险描述：</td><td style="line-height:20px">' + atxt + '</td></tr>\
+      <tr><td class="text-right" style="vertical-align:top">可参考解决方案：</td><td><p style="margin-bottom:8px">方案一：修改SSH默认端口，修改SSH验证方式为数字证书，清除近期登陆日志。</p><p>方案二：购买宝塔企业运维版，一键部署安全隔离服务，高效且方便。</p></td></tr>\
+      </tbody></table>\
+      <div class="mtb20 text-center"><a href="https://www.bt.cn/admin/index.html" target="_blank" class="btn btn-success">立即部署隔离防护</a></div>\
+      </div>'
+  });
+  $(".showDanger td").css("padding", "8px")
+}
+
+function pluginInit(){
+  $.post('/plugins/init', function(data){
+      if (!data.status){
+          return false;
+      }
+
+      var rdata = data.data;
+      var plugin_list = '';
+
+      for (var i = 0; i < rdata.length; i++) {
+          var ver = rdata[i]['versions'];
+          var select_list = '';
+          if (typeof(ver)=='string'){
+              select_list = '<option value="' + ver +'">' + rdata[i]['title'] + ' - ' + ver + '</option>';
+          } else {
+              for (var vi = 0; vi < ver.length; vi++) {
+
+                  if (ver[vi] == rdata[i]['default_ver']){
+                      select_list += '<option value="'+ver[vi]+'" selected="selected">'+ rdata[i]['title'] + ' - '+ ver[vi] + '</option>';
+                  } else {
+                      select_list += '<option value="'+ver[vi]+'">'+ rdata[i]['title'] + ' - '+ ver[vi] + '</option>';
+                  }
+              }
+          }
+
+          var pn_checked = '<input id="data_'+rdata[i]['name']+'" type="checkbox" checked>';
+          if (rdata[i]['name'] == 'swap'){
+              var pn_checked = '<input id="data_'+rdata[i]['name']+'" type="checkbox" disabled="disabled" checked>';
+          }
+          
+          plugin_list += '<li><span class="ico"><img src="/plugins/file?name='+rdata[i]['name']+'&f=ico.png"></span>\
+          <span class="name">\
+              <select id="select_'+rdata[i]['name']+'" class="sl-s-info">'+select_list+'</select>\
+          </span>\
+          <span class="pull-right">'+pn_checked+'</span></li>';
+      }
+
+      layer.open({
+          type: 1,
+          title: '推荐安装',
+          area: ["320px", "400px"],
+          closeBtn: 2,
+          shadeClose: false,
+          content:"\
+      <div class='rec-install'>\
+          <div class='important-title'>\
+              <p><span class='glyphicon glyphicon-alert' style='color: #f39c12; margin-right: 10px;'></span>推荐以下一键套件，或在<a href='javascript:jump()' style='color:#20a53a'>软件管理</a>按需选择。</p>\
+              <!-- <button style='margin-top: 8px;height: 30px;' type='button' class='btn btn-sm btn-default no-show-rec-btn'>不再显示推荐</button> -->\
+          </div>\
+          <div class='rec-box'>\
+              <h3 style='text-align: center'>经典LNMP</h3>\
+              <div class='rec-box-con'>\
+                  <ul class='rec-list'>" + plugin_list + "</ul>\
+                  <div class='onekey'>一键安装</div>\
+              </div>\
+          </div>\
+      </div>",
+          success:function(l,index){
+              $('.rec-box-con .onekey').click(function(){
+                  var post_data = [];
+                  for (var i = 0; i < rdata.length; i++) {
+                      var key_ver = '#select_'+rdata[i]['name'];
+                      var key_checked = '#data_'+rdata[i]['name'];
+
+                      var val_checked = $(key_checked).prop("checked");
+                      if (val_checked){
+
+                          var tmp = {};
+                          var val_key = $(key_ver).val();
+
+                          tmp['version'] = val_key;
+                          tmp['name'] = rdata[i]['name'];
+                          post_data.push(tmp);
+                      }
+                  }
+
+                  $.post('/plugins/init_install', 'list='+JSON.stringify(post_data), function(data){
+                      showMsg(data.msg, function(){
+                          if (data.status){
+                              layer.closeAll();
+                              messageBox();
+                              indexSoft();
+                          }
+                      },{ icon: data.status ? 1 : 2 },2000);
+                  },'json');
+              });   
+          },
+          cancel:function(){
+              layer.closeAll();
+              // layer.confirm('是否不再显示推荐安装套件?', {btn : ['确定', '取消'],title: "不再显示推荐?"}, function() {
+              //     $.post('/files/create_dir', 'path=/www/server/php', function(rdata) {
+              //         layer.closeAll();
+              //     },'json');
+              // });
+          }
+      });
+  },'json');
+}
+
+function loadKeyDataCount(){
+  var plist = ['mysql', 'gogs', 'gitea'];
+  for (var i = 0; i < plist.length; i++) {
+      pname = plist[i];
+      function call(pname){
+          $.post('/plugins/run', {name:pname, func:'get_total_statistics'}, function(data) {
+              try {
+                  var rdata = $.parseJSON(data['data']);
+              } catch(e){
+                  return;
+              }
+              if (!rdata['status']){
+                  return;
+              }
+              var html = '<li class="sys-li-box col-xs-3 col-sm-3 col-md-3 col-lg-3">\
+                      <p class="name f15 c9">'+pname+'</p>\
+                      <div class="val"><a class="btlink" onclick="softMain(\''+pname+'\',\''+pname+'\',\''+rdata['data']['ver']+'\')">'+rdata['data']['count']+'</a></div>\
+                  </li>';
+              $('#index_overview').append(html);
+          },'json');
+      }
+      call(pname);
+  }
+}
