@@ -9,11 +9,6 @@ USERNAME="ansible_user"
 SSH_DIR="/home/$USERNAME/.ssh"
 AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
 
-# 确保 target_dir 和 download_Url 被定义
-target_dir="/usr/local/btmonitoragent"
-download_Url="http://example.com"  # 请替换为实际的下载地址
-
-
 prompt()
 {
   tip=$1
