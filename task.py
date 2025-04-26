@@ -338,6 +338,205 @@ def clientTask():
         time.sleep(30)
         clientTask()
 
+
+def hostGrowthAlarmTask():
+    """资源增长预测和告警"""
+    try:
+        sql = db.Sql()
+        last_alarm_times = {}  # 记录最后告警时间，格式为 {host_id}_{resource_type}: timestamp
+        
+        while True:
+            # 读取配置
+            config = jh.getGrowthAlarmConfig()
+            scan_interval = config.get('scan_interval', 60)
+            scan_history_hours = config.get('scan_history_hours', 5)
+            warning_threshold = config.get('warning_threshold', 80)
+            prediction_percentage_critical = config.get('prediction_percentage_critical', 20)
+            prediction_percentage_warning = config.get('prediction_percentage_warning', 10)
+            notify_critical_interval = config.get('notify_critical_interval', 3600)
+            notify_warning_interval = config.get('notify_warning_interval', 7200)
+            
+            current_time = int(time.time())
+            
+            print(f"{Fore.BLUE}★ ========= [resourceGrowthAlarm] STARTED - 开始分析资源增长: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}{Style.RESET_ALL}")
+            
+            # 获取主机列表
+            host_list = jh.M('view01_host').field('host_id,host_name').select()
+            
+            for host in host_list:
+                host_id = host['host_id']
+                host_name = host['host_name']
+                
+                # 获取历史数据进行分析（最近X小时的数据）
+                history_start = current_time - (scan_history_hours * 3600)
+                
+                # 获取最新一条记录和历史记录
+                latest_record = sql.table('host_detail').where('host_id=? AND host_status=?', 
+                                    (host_id, 'Running')).order('id desc').field('id,mem_info,disk_info,addtime').find()
+                
+                # 如果没有最新记录，则跳过
+                if not latest_record:
+                    continue
+                
+                # 获取历史记录
+                old_record = sql.table('host_detail').where('host_id=? AND host_status=? AND addtime<?', 
+                                    (host_id, 'Running', history_start)).order('id desc').field('id,mem_info,disk_info,addtime').find()
+                
+                # 如果没有足够的历史记录，则跳过
+                if not old_record:
+                    continue
+                
+                # 分析内存增长
+                try:
+                    latest_mem_info = json.loads(latest_record['mem_info'])
+                    old_mem_info = json.loads(old_record['mem_info'])
+                    
+                    if 'usedPercent' in latest_mem_info and 'usedPercent' in old_mem_info:
+                        latest_used_percent = float(latest_mem_info['usedPercent'])
+                        old_used_percent = float(old_mem_info['usedPercent'])
+                        
+                        # 计算增长率和预测
+                        growth_percentage = latest_used_percent - old_used_percent
+                        time_diff_hours = (float(latest_record['addtime']) - float(old_record['addtime'])) / 3600
+                        
+                        if time_diff_hours > 0:
+                            growth_rate_per_hour = growth_percentage / time_diff_hours
+                            
+                            # 如果增长率为正，预测何时达到警戒线
+                            if growth_rate_per_hour > 0:
+                                hours_to_threshold = (warning_threshold - latest_used_percent) / growth_rate_per_hour
+                                days_to_threshold = hours_to_threshold / 24
+                                
+                                # 如果增长率超过配置的告警阈值，发送告警
+                                prediction_level = None
+                                if growth_percentage >= prediction_percentage_critical:
+                                    prediction_level = 'critical'
+                                    notify_interval = notify_critical_interval
+                                elif growth_percentage >= prediction_percentage_warning:
+                                    prediction_level = 'warning'
+                                    notify_interval = notify_warning_interval
+                                
+                                if prediction_level:
+                                    # 检查是否需要发送通知
+                                    alarm_key = f"{host_id}_memory"
+                                    last_alarm_time = last_alarm_times.get(alarm_key, 0)
+                                    
+                                    if (current_time - last_alarm_time) >= notify_interval:
+                                        # 生成告警内容
+                                        alarm_level_map = {
+                                            'critical': '紧急',
+                                            'warning': '警告'
+                                        }
+                                        
+                                        alarm_content = f"内存使用率增长过快，已增长 {growth_percentage:.2f}%，当前使用率 {latest_used_percent:.2f}%，每小时增长 {growth_rate_per_hour:.2f}%，预计 {days_to_threshold:.1f} 天后（{hours_to_threshold:.1f} 小时后）将达到 {warning_threshold}% 的警戒线"
+                                        
+                                        # 添加告警记录
+                                        sql.table('host_alarm').add(
+                                            'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
+                                            (host_id, host_name, '资源增长预警', alarm_level_map[prediction_level], alarm_content, time.strftime('%Y-%m-%d %H:%M:%S'))
+                                        )
+                                        
+                                        # 发送通知消息
+                                        notify_msg = jh.generateCommonNotifyMessage(f"主机 [{host_name}] {alarm_content}")
+                                        jh.notifyMessage(
+                                            title=f'资源增长预警-{alarm_level_map[prediction_level]}', 
+                                            msg=notify_msg, 
+                                            stype='资源增长预警', 
+                                            trigger_time=notify_interval
+                                        )
+                                        
+                                        # 更新最后通知时间
+                                        last_alarm_times[alarm_key] = current_time
+                except Exception as e:
+                    print(f"分析内存数据出错: {str(e)}")
+                
+                # 分析磁盘增长
+                try:
+                    latest_disk_info = json.loads(latest_record['disk_info'])
+                    old_disk_info = json.loads(old_record['disk_info'])
+                    
+                    # 按挂载点整理磁盘信息
+                    latest_disk_by_mount = {disk.get('mountpoint'): disk for disk in latest_disk_info if 'mountpoint' in disk and 'usedPercent' in disk}
+                    old_disk_by_mount = {disk.get('mountpoint'): disk for disk in old_disk_info if 'mountpoint' in disk and 'usedPercent' in disk}
+                    
+                    # 对每个挂载点进行分析
+                    for mountpoint in latest_disk_by_mount:
+                        if mountpoint in old_disk_by_mount:
+                            latest_used_percent = float(latest_disk_by_mount[mountpoint]['usedPercent'])
+                            old_used_percent = float(old_disk_by_mount[mountpoint]['usedPercent'])
+                            
+                            # 计算增长率和预测
+                            growth_percentage = latest_used_percent - old_used_percent
+                            time_diff_hours = (float(latest_record['addtime']) - float(old_record['addtime'])) / 3600
+                            
+                            if time_diff_hours > 0:
+                                growth_rate_per_hour = growth_percentage / time_diff_hours
+                                
+                                # 如果增长率为正，预测何时达到警戒线
+                                if growth_rate_per_hour > 0:
+                                    hours_to_threshold = (warning_threshold - latest_used_percent) / growth_rate_per_hour
+                                    days_to_threshold = hours_to_threshold / 24
+                                    
+                                    # 如果增长率超过配置的告警阈值，发送告警
+                                    prediction_level = None
+                                    if growth_percentage >= prediction_percentage_critical:
+                                        prediction_level = 'critical'
+                                        notify_interval = notify_critical_interval
+                                    elif growth_percentage >= prediction_percentage_warning:
+                                        prediction_level = 'warning'
+                                        notify_interval = notify_warning_interval
+                                    
+                                    if prediction_level:
+                                        # 检查是否需要发送通知
+                                        alarm_key = f"{host_id}_disk_{mountpoint}"
+                                        last_alarm_time = last_alarm_times.get(alarm_key, 0)
+                                        
+                                        if (current_time - last_alarm_time) >= notify_interval:
+                                            # 生成告警内容
+                                            alarm_level_map = {
+                                                'critical': '紧急',
+                                                'warning': '警告'
+                                            }
+                                            
+                                            alarm_content = f"磁盘({mountpoint})使用率增长过快，已增长 {growth_percentage:.2f}%，当前使用率 {latest_used_percent:.2f}%，每小时增长 {growth_rate_per_hour:.2f}%，预计 {days_to_threshold:.1f} 天后（{hours_to_threshold:.1f} 小时后）将达到 {warning_threshold}% 的警戒线"
+                                            
+                                            # 添加告警记录
+                                            sql.table('host_alarm').add(
+                                                'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
+                                                (host_id, host_name, '资源增长预警', alarm_level_map[prediction_level], alarm_content, time.strftime('%Y-%m-%d %H:%M:%S'))
+                                            )
+                                            
+                                            # 发送通知消息
+                                            notify_msg = jh.generateCommonNotifyMessage(f"主机 [{host_name}] {alarm_content}")
+                                            jh.notifyMessage(
+                                                title=f'资源增长预警-{alarm_level_map[prediction_level]}', 
+                                                msg=notify_msg, 
+                                                stype='资源增长预警', 
+                                                trigger_time=notify_interval
+                                            )
+                                            
+                                            # 更新最后通知时间
+                                            last_alarm_times[alarm_key] = current_time
+                except Exception as e:
+                    print(f"分析磁盘数据出错: {str(e)}")
+            
+            print(f"{Fore.GREEN}★ ========= [resourceGrowthAlarm] SUCCESS - 完成资源增长分析: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))}{Style.RESET_ALL}")
+            
+            # 休眠至下次执行
+            time.sleep(scan_interval)
+    
+    except Exception as ex:
+        traceback.print_exc()
+        jh.writeFile('logs/resource_growth_interrupt.pl', str(ex))
+        print(f"{Fore.RED}★ ========= [resourceGrowthAlarm] ERROR：{str(ex)} {Style.RESET_ALL}")
+        
+        notify_msg = jh.generateCommonNotifyMessage("资源增长预测异常：" + str(ex))
+        jh.notifyMessage(title='资源增长预测异常通知', msg=notify_msg, stype='资源增长预测', trigger_time=3600)
+        
+        time.sleep(300)  # 出错后等待5分钟再重试
+        resourceGrowthAlarm()  # 递归重启
+  
+
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
 def restartService():
     restartTip = 'data/restart.pl'
@@ -406,14 +605,17 @@ def setDaemon(t):
         t.setDaemon(True)
     return t
 
-
-    
 if __name__ == "__main__":
    
     # client监控
     ct = threading.Thread(target=clientTask)
     ct = setDaemon(ct)
     ct.start()
+
+    # 资源增长告警
+    hga = threading.Thread(target=hostGrowthAlarmTask)
+    hga = setDaemon(hga)
+    hga.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)
@@ -429,7 +631,6 @@ if __name__ == "__main__":
     dcs = threading.Thread(target=debounceCommandsService)
     dcs = setDaemon(dcs)
     dcs.start()
-
 
 
     startTask()

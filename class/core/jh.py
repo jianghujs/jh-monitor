@@ -1847,7 +1847,15 @@ def getAllVms():
     result = subprocess.run(['VBoxManage', 'list', 'vms'], stdout=subprocess.PIPE)
     return result.stdout.decode('utf-8')
 
-
+def getGrowthAlarmConfig():
+    config_file = 'data/growth_alarm.json'
+    if not os.path.exists(config_file):
+        writeFile(config_file, '{}')
+    try:
+        return json.loads(readFile(config_file))
+    except Exception as e:
+        writeFile(config_file, '{}')
+        return {}
     
 ##################### notify  start #########################################
 
