@@ -342,7 +342,6 @@ def hostGrowthAlarmTask():
     """资源增长预测和告警"""
     try:
         sql = db.Sql()
-        last_alarm_times = {}  # 记录最后告警时间，格式为 {host_id}_{resource_type}: timestamp
         
         while True:
             # 读取配置
@@ -368,6 +367,19 @@ def hostGrowthAlarmTask():
 
                 host_id = host['host_id']
                 host_name = host['host_name']
+                
+                # 检查上次告警时间
+                last_alarm = sql.table('host_alarm').where('host_id=? AND alarm_type=?', 
+                    (host_id, '资源增长预警')).order('id desc').field('alarm_level,addtime').find()
+                
+                if last_alarm:
+                    last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
+                    time_diff = current_time - last_alarm_time
+                    
+                    if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
+                        (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
+                        # print(f"{Fore.YELLOW}★ 主机 [{host_name}] 上次告警时间未超过通知间隔，跳过检查{Style.RESET_ALL}")
+                        continue
                 
                 # 获取历史数据进行分析（最近X分钟的数据）
                 history_start = current_time - (scan_history_minutes * 60)

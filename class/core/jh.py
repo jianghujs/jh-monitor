@@ -2130,21 +2130,40 @@ def analyze_resource_growth(host_id, host_name, latest_record, old_record, resou
             'notify_interval': 0
         }
         
+        # 初始化或获取历史增长率字典
+        if not hasattr(analyze_resource_growth, 'last_smoothed_rates'):
+            analyze_resource_growth.last_smoothed_rates = {}
+        print("last_smoothed_rates", analyze_resource_growth.last_smoothed_rates)
+        
         for mount_point, latest, old in data_to_analyze:
             if 'usedPercent' in latest and 'usedPercent' in old:
                 latest_used_percent = float(latest['usedPercent'])
                 old_used_percent = float(old['usedPercent'])
                 
-                # 计算增长率和预测
-                growth_percentage = latest_used_percent - old_used_percent
+                # 计算时间差（小时）
                 time_diff_hours = (float(latest_record['addtime']) - float(old_record['addtime'])) / 3600
                 
                 if time_diff_hours > 0:
-                    growth_rate_per_hour = growth_percentage / time_diff_hours
+                    # 使用指数平滑法计算增长率
+                    # alpha 是平滑因子，值越大对最近数据越敏感
+                    alpha = 0.3  # 可以根据实际情况调整
+                    
+                    # 计算原始增长率
+                    raw_growth_rate = (latest_used_percent - old_used_percent) / time_diff_hours
+                    
+                    # 获取上一次的平滑增长率
+                    history_key = f"{host_id}_{resource_type}_{mount_point}"
+                    last_smoothed_rate = analyze_resource_growth.last_smoothed_rates.get(history_key, raw_growth_rate)
+                    
+                    # 计算新的平滑增长率
+                    smoothed_growth_rate = alpha * raw_growth_rate + (1 - alpha) * last_smoothed_rate
+                    
+                    # 保存新的平滑增长率
+                    analyze_resource_growth.last_smoothed_rates[history_key] = smoothed_growth_rate
                     
                     # 如果增长率为正，预测何时达到警戒线
-                    if growth_rate_per_hour > 0:
-                        hours_to_threshold = (warning_threshold - latest_used_percent) / growth_rate_per_hour
+                    if smoothed_growth_rate > 0:
+                        hours_to_threshold = (warning_threshold - latest_used_percent) / smoothed_growth_rate
                         days_to_threshold = hours_to_threshold / 24
                         
                         # 根据预计到达阈值的时间设置告警级别
@@ -2174,9 +2193,9 @@ def analyze_resource_growth(host_id, host_name, latest_record, old_record, resou
     <h3 style="color: {alarm_color[prediction_level]}; margin-top: 10px;">{resource_name}使用率增长过快</h3>
     <ul style="list-style-type: none; padding-left: 0;">
         <li style="margin-bottom: 8px;"><strong>告警级别:</strong> <span style="color: {alarm_color[prediction_level]};">{'紧急' if prediction_level == 'critical' else '警告'}</span></li>
-        <li style="margin-bottom: 8px;"><strong>过去{scan_history_minutes}分钟已增长:</strong> <span style="color: {alarm_color[prediction_level]};">{growth_percentage:.2f}%</span></li>
+        <li style="margin-bottom: 8px;"><strong>过去{scan_history_minutes}分钟已增长:</strong> <span style="color: {alarm_color[prediction_level]};">{(latest_used_percent - old_used_percent):.2f}%</span></li>
         <li style="margin-bottom: 8px;"><strong>当前使用率:</strong> <span style="color: {alarm_color[prediction_level]};">{latest_used_percent:.2f}%</span></li>
-        <li style="margin-bottom: 8px;"><strong>预计每小时增长:</strong> <span style="color: {alarm_color[prediction_level]};">{growth_rate_per_hour:.2f}%</span></li>
+        <li style="margin-bottom: 8px;"><strong>平滑后每小时增长:</strong> <span style="color: {alarm_color[prediction_level]};">{smoothed_growth_rate:.2f}%</span></li>
         <li style="margin-bottom: 8px;"><strong>预计达到警戒线（{warning_threshold}%）时间:</strong> <span style="color: {alarm_color[prediction_level]};">{days_to_threshold:.1f} 天后（{hours_to_threshold:.1f} 小时后）</span></li>
     </ul>
 </div>
@@ -2186,7 +2205,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, old_record, resou
                             if alarm_info['content']:
                                 alarm_info['content'] += '<hr>'
                             alarm_info['content'] += alarm_content
-                            
+                   
         return alarm_info
     except Exception as e:
         print(f"分析{resource_type}数据出错: {str(e)}")
