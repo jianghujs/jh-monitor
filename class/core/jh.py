@@ -2081,3 +2081,113 @@ def generateCommonNotifyMessage(content):
     return notify_msg
 
 ##################### notify  end #########################################
+
+def analyze_resource_growth(host_id, host_name, latest_record, old_record, resource_type, resource_data_key,
+    warning_threshold, prediction_critical_hours, prediction_warning_hours, 
+    notify_critical_interval, notify_warning_interval, 
+    current_time, scan_history_minutes
+):
+    """分析资源增长情况并生成告警
+    
+    Args:
+        host_id: 主机ID
+        host_name: 主机名称
+        latest_record: 最新记录
+        old_record: 历史记录
+        resource_type: 资源类型（'memory'或'disk'）
+        resource_data_key: 资源数据在记录中的键名
+        warning_threshold: 告警阈值
+        prediction_critical_hours: 预测达到阈值的小时数（紧急）
+        prediction_warning_hours: 预测达到阈值的小时数（警告）
+        notify_critical_interval: 紧急告警通知间隔
+        notify_warning_interval: 警告通知间隔
+        current_time: 当前时间戳
+        scan_history_minutes: 扫描历史分钟数
+    Returns:
+        dict: 包含告警信息的字典，格式为 {
+            'level': 'critical'/'warning'/None,
+            'content': '告警内容',
+            'notify_interval': 通知间隔
+        }
+    """
+    try:
+        latest_data = json.loads(latest_record[resource_data_key])
+        old_data = json.loads(old_record[resource_data_key])
+        
+        # 对于磁盘，需要按挂载点分别分析
+        if resource_type == 'disk':
+            latest_data_by_mount = {disk.get('mountpoint'): disk for disk in latest_data if 'mountpoint' in disk and 'usedPercent' in disk}
+            old_data_by_mount = {disk.get('mountpoint'): disk for disk in old_data if 'mountpoint' in disk and 'usedPercent' in disk}
+            data_to_analyze = [(mount, latest_data_by_mount[mount], old_data_by_mount[mount]) 
+                             for mount in latest_data_by_mount if mount in old_data_by_mount]
+        else:
+            # 对于内存，直接分析
+            data_to_analyze = [('memory', latest_data, old_data)]
+        
+        alarm_info = {
+            'level': None,
+            'content': '',
+            'notify_interval': 0
+        }
+        
+        for mount_point, latest, old in data_to_analyze:
+            if 'usedPercent' in latest and 'usedPercent' in old:
+                latest_used_percent = float(latest['usedPercent'])
+                old_used_percent = float(old['usedPercent'])
+                
+                # 计算增长率和预测
+                growth_percentage = latest_used_percent - old_used_percent
+                time_diff_hours = (float(latest_record['addtime']) - float(old_record['addtime'])) / 3600
+                
+                if time_diff_hours > 0:
+                    growth_rate_per_hour = growth_percentage / time_diff_hours
+                    
+                    # 如果增长率为正，预测何时达到警戒线
+                    if growth_rate_per_hour > 0:
+                        hours_to_threshold = (warning_threshold - latest_used_percent) / growth_rate_per_hour
+                        days_to_threshold = hours_to_threshold / 24
+                        
+                        # 根据预计到达阈值的时间设置告警级别
+                        prediction_level = None
+                        if hours_to_threshold <= prediction_critical_hours:
+                            prediction_level = 'critical'
+                            notify_interval = notify_critical_interval
+                        elif hours_to_threshold <= prediction_warning_hours:
+                            prediction_level = 'warning'
+                            notify_interval = notify_warning_interval
+                        
+                        if prediction_level:
+                            # 更新告警级别（取最高级别）
+                            if alarm_info['level'] is None or (prediction_level == 'critical' and alarm_info['level'] == 'warning'):
+                                alarm_info['level'] = prediction_level
+                                alarm_info['notify_interval'] = notify_interval
+                            
+                            # 生成告警内容
+                            alarm_color = {
+                                'critical': '#d9534f',
+                                'warning': '#f0ad4e'
+                            }
+                            
+                            resource_name = '内存' if resource_type == 'memory' else f'磁盘({mount_point})'
+                            alarm_content = f"""
+<div style="font-family: Arial, sans-serif; padding: 15px; margin-top: 10px;border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">
+    <h3 style="color: {alarm_color[prediction_level]}; margin-top: 10px;">{resource_name}使用率增长过快</h3>
+    <ul style="list-style-type: none; padding-left: 0;">
+        <li style="margin-bottom: 8px;"><strong>告警级别:</strong> <span style="color: {alarm_color[prediction_level]};">{'紧急' if prediction_level == 'critical' else '警告'}</span></li>
+        <li style="margin-bottom: 8px;"><strong>过去{scan_history_minutes}分钟已增长:</strong> <span style="color: {alarm_color[prediction_level]};">{growth_percentage:.2f}%</span></li>
+        <li style="margin-bottom: 8px;"><strong>当前使用率:</strong> <span style="color: {alarm_color[prediction_level]};">{latest_used_percent:.2f}%</span></li>
+        <li style="margin-bottom: 8px;"><strong>预计每小时增长:</strong> <span style="color: {alarm_color[prediction_level]};">{growth_rate_per_hour:.2f}%</span></li>
+        <li style="margin-bottom: 8px;"><strong>预计达到警戒线（{warning_threshold}%）时间:</strong> <span style="color: {alarm_color[prediction_level]};">{days_to_threshold:.1f} 天后（{hours_to_threshold:.1f} 小时后）</span></li>
+    </ul>
+</div>
+                            """
+                            
+                            # 追加告警内容
+                            if alarm_info['content']:
+                                alarm_info['content'] += '<hr>'
+                            alarm_info['content'] += alarm_content
+                            
+        return alarm_info
+    except Exception as e:
+        print(f"分析{resource_type}数据出错: {str(e)}")
+        return None
