@@ -547,9 +547,9 @@ def setDaemon(t):
 if __name__ == "__main__":
    
     # client监控
-    # ct = threading.Thread(target=clientTask)
-    # ct = setDaemon(ct)
-    # ct.start()
+    ct = threading.Thread(target=clientTask)
+    ct = setDaemon(ct)
+    ct.start()
 
     # 资源增长告警
     hga = threading.Thread(target=hostGrowthAlarmTask)
