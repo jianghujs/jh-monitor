@@ -13,15 +13,22 @@ sys.path.append(os.getcwd() + "/class/core")
 import jh
 import db
 
+# 创建测试主机
+# test_host = {
+#     'host_id': 'test_host_001',
+#     'host_name': '测试主机',
+#     'ip': '192.168.1.100',
+#     'status': 'Running'
+# }
+test_host = {
+    'host_id': 'H_debian_GZUI',
+    'host_name': 'BK100-32',
+    'ip': '192.168.3.32',
+    'status': 'Running'
+}
+
 def create_test_host():
     """创建测试主机"""
-    # 创建测试主机
-    test_host = {
-        'host_id': 'test_host_001',
-        'host_name': '测试主机',
-        'ip': '192.168.1.100',
-        'status': 'Running'
-    }
     
     # 检查主机是否已存在
     if not jh.M('host').where('host_id=?', (test_host['host_id'],)).count():
@@ -38,7 +45,7 @@ def create_test_host_detail(duration_seconds=600, interval_seconds=60):
     """
     current_time = int(time.time())
     base_time = current_time - duration_seconds  # 基准时间设为当前时间减去持续时间
-    last_mem_percent = 30.0  # 增加初始内存使用率
+    last_mem_percent = 60.0  # 增加初始内存使用率
     last_disk_percent = 45.0  # 增加初始磁盘使用率
     
     print("开始生成模拟监控数据...")
@@ -53,14 +60,14 @@ def create_test_host_detail(duration_seconds=600, interval_seconds=60):
         # disk_used_percent = min(95, max(2, last_disk_percent + random.uniform(-2, 8)))  # 增加磁盘增长幅度
         # 警告
 
-        mem_used_percent = min(95, max(2, last_mem_percent + random.uniform(-0.001, 0.05)))  # 增加内存增长幅度
+        mem_used_percent = min(95, max(2, last_mem_percent + random.uniform(-0.001, 0.2)))  # 增加内存增长幅度
         disk_used_percent = min(95, max(2, last_disk_percent + random.uniform(-0.001, 0.05)))  # 增加磁盘增长幅度
         
         # 构建主机详情数据
         host_detail = {
-            'host_id': 'test_host_001',
-            'host_name': '测试主机',
-            'host_status': 'Running',
+            'host_id': test_host['host_id'],
+            'host_name': test_host['host_name'],
+            'host_status': test_host['status'],
             'uptime': '',
             'host_info': json.dumps({
                 'hostName': 'debian',
@@ -146,7 +153,7 @@ def create_test_host_detail(duration_seconds=600, interval_seconds=60):
         print(f"生成数据 - 时间: {datetime.datetime.fromtimestamp(simulated_time)} - 内存使用率: {mem_used_percent:.2f}%, 磁盘使用率: {disk_used_percent:.2f}%")
     
     # 打印创建的数据长度
-    print(jh.M('host_detail').where('host_id=?', ('test_host_001',)).count())
+    print(jh.M('host_detail').where('host_id=?', (test_host['host_id'],)).count())
     
     print("监控数据生成完成")
 
@@ -163,7 +170,7 @@ def test_growth_alarm():
         time.sleep(15)
         
         # 检查告警记录
-        alarms = jh.M('host_alarm').where('host_id=?', ('test_host_001',)).select()
+        alarms = jh.M('host_alarm').where('host_id=?', (test_host['host_id'],)).select()
         
         print("\n告警记录:")
         if alarms:
@@ -184,13 +191,13 @@ def test_growth_alarm():
 def cleanup_test_data():
     """清理测试数据"""
     # 删除测试主机
-    jh.M('host').where('host_id=?', ('test_host_001',)).delete()
+    # jh.M('host').where('host_id=?', (test_host['host_id'],)).delete()
     
     # 删除测试主机的监控数据
-    jh.M('host_detail').where('host_id=?', ('test_host_001',)).delete()
+    jh.M('host_detail').where('host_id=?', (test_host['host_id'],)).delete()
     
     # 删除测试主机的告警记录
-    jh.M('host_alarm').where('host_id=?', ('test_host_001',)).delete()
+    jh.M('host_alarm').where('host_id=?', (test_host['host_id'],)).delete()
     
     print("测试数据清理完成")
 

@@ -347,7 +347,7 @@ def hostGrowthAlarmTask():
             # 读取配置
             config = jh.getGrowthAlarmConfig()
             scan_interval = config.get('scan_interval', 5)
-            scan_history_minutes = config.get('scan_history_minutes', 5)
+            scan_history_minutes = config.get('scan_history_minutes', 60)
             warning_threshold = config.get('warning_threshold', 80)
             prediction_critical_hours = config.get('prediction_critical_hours', 72)
             prediction_warning_hours = config.get('prediction_warning_hours', 168)
@@ -362,8 +362,8 @@ def hostGrowthAlarmTask():
             host_list = jh.M('view01_host').field('host_id,host_name').select()
             
             for host in host_list:
-                if host['host_id'] != 'test_host_001':
-                    continue
+                # if host['host_id'] != 'test_host_001':
+                #     continue
 
                 host_id = host['host_id']
                 host_name = host['host_name']
