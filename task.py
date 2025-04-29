@@ -338,6 +338,144 @@ def clientTask():
         time.sleep(30)
         clientTask()
 
+def hostGrowthAlarmTask():
+    """资源增长预测和告警"""
+    try:
+        sql = db.Sql()
+        
+        while True:
+            # 读取配置
+            config = jh.getGrowthAlarmConfig()
+            scan_interval = config.get('scan_interval', 5)
+            scan_history_minutes = config.get('scan_history_minutes', 60)
+            warning_threshold = config.get('warning_threshold', 80)
+            prediction_critical_hours = config.get('prediction_critical_hours', 72)
+            prediction_warning_hours = config.get('prediction_warning_hours', 168)
+            notify_critical_interval = config.get('notify_critical_interval', 3600)
+            notify_warning_interval = config.get('notify_warning_interval', 7200)
+            
+            current_time = int(time.time())
+            
+            print(f"{Fore.BLUE}★ ========= [resourceGrowthAlarm] STARTED - 开始分析资源增长: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}{Style.RESET_ALL}")
+            
+            # 获取主机列表
+            host_list = jh.M('view01_host').field('host_id,host_name').select()
+            
+            for host in host_list:
+                # if host['host_id'] != 'test_host_001':
+                #     continue
+
+                host_id = host['host_id']
+                host_name = host['host_name']
+                
+                # 检查上次告警时间
+                last_alarm = sql.table('host_alarm').where('host_id=? AND alarm_type=?', 
+                    (host_id, '资源增长预警')).order('id desc').field('alarm_level,addtime').find()
+                
+                if last_alarm:
+                    last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
+                    time_diff = current_time - last_alarm_time
+                    
+                    if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
+                        (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
+                        # print(f"{Fore.YELLOW}★ 主机 [{host_name}] 上次告警时间未超过通知间隔，跳过检查{Style.RESET_ALL}")
+                        continue
+                
+                # 获取历史数据进行分析（最近X分钟的数据）
+                history_start = current_time - (scan_history_minutes * 60)
+
+                # 获取最新一条记录和历史记录
+                latest_record = sql.table('host_detail').where('host_id=? AND host_status=?', 
+                                    (host_id, 'Running')).order('id desc').field('id,mem_info,disk_info,addtime').find()
+
+                # 如果没有最新记录，则跳过
+                if not latest_record:
+                    continue
+                
+                # 获取历史记录
+                old_record = sql.table('host_detail').where('host_id=? AND host_status=? AND addtime<?', 
+                                    (host_id, 'Running', history_start)).order('id desc').field('id,mem_info,disk_info,addtime').find()
+                
+                # 如果没有足够的历史记录，则跳过
+                if not old_record:
+                    continue
+                
+                # 分析内存和磁盘
+                memory_alarm = jh.analyze_resource_growth(
+                    host_id, host_name, latest_record, old_record, 
+                    'memory', 'mem_info', warning_threshold, 
+                    prediction_critical_hours, prediction_warning_hours,
+                    notify_critical_interval, notify_warning_interval,
+                    current_time, scan_history_minutes
+                )
+                
+                disk_alarm = jh.analyze_resource_growth(
+                    host_id, host_name, latest_record, old_record, 
+                    'disk', 'disk_info', warning_threshold, 
+                    prediction_critical_hours, prediction_warning_hours,
+                    notify_critical_interval, notify_warning_interval,
+                    current_time, scan_history_minutes
+                )
+                
+                # 合并告警信息
+                final_alarm = {
+                    'level': None,
+                    'content': '',
+                    'notify_interval': 0
+                }
+                
+                for alarm in [memory_alarm, disk_alarm]:
+                    if alarm and alarm['level']:
+                        # 更新告警级别（取最高级别）
+                        if final_alarm['level'] is None or (alarm['level'] == 'critical' and final_alarm['level'] == 'warning'):
+                            final_alarm['level'] = alarm['level']
+                            final_alarm['notify_interval'] = alarm['notify_interval']
+                        
+                        # 追加告警内容
+                        if final_alarm['content'] and alarm['content']:
+                            final_alarm['content'] += '<hr>'
+                        final_alarm['content'] += alarm['content']
+                
+                # 如果有告警，发送通知
+                if final_alarm['level']:
+                    alarm_level_map = {
+                        'critical': '紧急',
+                        'warning': '警告'
+                    }
+                    
+                    # 添加告警记录
+                    sql.table('host_alarm').add(
+                        'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
+                        (host_id, host_name, '资源增长预警', alarm_level_map[final_alarm['level']], final_alarm['content'], time.strftime('%Y-%m-%d %H:%M:%S'))
+                    )
+                    
+                    # 发送通知消息
+                    notify_msg = jh.generateCommonNotifyMessage(f"主机 [{host_name}] {final_alarm['content']}")
+                    jh.notifyMessage(
+                        title=f'资源增长预警-{alarm_level_map[final_alarm["level"]]}', 
+                        msg=notify_msg, 
+                        msgtype='html',
+                        stype='资源增长预警', 
+                        trigger_time=0
+                    )
+            
+            print(f"{Fore.GREEN}★ ========= [resourceGrowthAlarm] SUCCESS - 完成资源增长分析: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))}{Style.RESET_ALL}")
+            
+            # 休眠至下次执行
+            time.sleep(scan_interval)
+    
+    except Exception as ex:
+        traceback.print_exc()
+        jh.writeFile('logs/resource_growth_interrupt.pl', str(ex))
+        print(f"{Fore.RED}★ ========= [resourceGrowthAlarm] ERROR：{str(ex)} {Style.RESET_ALL}")
+        
+        notify_msg = jh.generateCommonNotifyMessage("资源增长预测异常：" + str(ex))
+        jh.notifyMessage(title='资源增长预测异常通知', msg=notify_msg, stype='资源增长预测', trigger_time=3600)
+        
+        time.sleep(300)  # 出错后等待5分钟再重试
+        hostGrowthAlarmTask()  # 递归重启
+  
+
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
 def restartService():
     restartTip = 'data/restart.pl'
@@ -406,14 +544,17 @@ def setDaemon(t):
         t.setDaemon(True)
     return t
 
-
-    
 if __name__ == "__main__":
    
     # client监控
     ct = threading.Thread(target=clientTask)
     ct = setDaemon(ct)
     ct.start()
+
+    # 资源增长告警
+    hga = threading.Thread(target=hostGrowthAlarmTask)
+    hga = setDaemon(hga)
+    hga.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)
@@ -429,7 +570,6 @@ if __name__ == "__main__":
     dcs = threading.Thread(target=debounceCommandsService)
     dcs = setDaemon(dcs)
     dcs.start()
-
 
 
     startTask()
