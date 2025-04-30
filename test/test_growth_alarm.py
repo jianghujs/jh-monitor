@@ -27,6 +27,16 @@ test_host = {
 #     'status': 'Running'
 # }
 
+
+config = jh.getGrowthAlarmConfig()
+scan_interval = config.get('scan_interval', 5)
+scan_history_minutes = config.get('scan_history_minutes', 60)
+warning_threshold = config.get('warning_threshold', 80)
+prediction_critical_hours = config.get('prediction_critical_hours', 72)
+prediction_warning_hours = config.get('prediction_warning_hours', 168)
+notify_critical_interval = config.get('notify_critical_interval', 3600)
+notify_warning_interval = config.get('notify_warning_interval', 7200)
+
 def create_test_host():
     """创建测试主机"""
     
@@ -44,16 +54,16 @@ def test_short_term_fluctuation():
         
         # 模拟短暂波动（持续1分钟，每10秒一次）
         current_time = int(time.time())
-        base_time = current_time - 60  # 1分钟
+        base_time = current_time - (30 * 60)  # 1分钟
         last_mem_percent = 60.0
         last_disk_percent = 45.0
         
         print("开始生成短暂波动测试数据...")
         
-        # 生成6个数据点（每10秒一个）
-        for simulated_time in range(base_time, current_time, 10):
+        # 生成6个数据点（每30秒一个）
+        for simulated_time in range(base_time, current_time, 30):
             # 生成随机波动（范围较小）
-            mem_used_percent = min(95, max(2, last_mem_percent + random.uniform(-0.5, 0.5)))
+            mem_used_percent = min(95, max(2, last_mem_percent + random.uniform(-1, 0.5)))
             disk_used_percent = min(95, max(2, last_disk_percent + random.uniform(-0.2, 0.2)))
             
             # 构建主机详情数据
@@ -154,20 +164,20 @@ def test_short_term_fluctuation():
             memory_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'memory', 'mem_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
             disk_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'disk', 'disk_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
@@ -212,20 +222,20 @@ def test_growth_alarm():
             memory_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'memory', 'mem_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
             disk_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'disk', 'disk_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
@@ -266,8 +276,8 @@ def test_trigger_alarm():
         
         print("开始生成持续增长测试数据...")
         
-        # 生成6个数据点（每5分钟一个）
-        for simulated_time in range(base_time, current_time, 300):
+        # 生成6个数据点（每30秒一个）
+        for simulated_time in range(base_time, current_time, 30):
             # 生成持续增长的数据（内存每5分钟增长1%，磁盘每5分钟增长0.5%）
             mem_used_percent = min(95, last_mem_percent + 1.0)
             disk_used_percent = min(95, last_disk_percent + 0.5)
@@ -374,20 +384,20 @@ def test_trigger_alarm():
             memory_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'memory', 'mem_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
             disk_alarm = jh.analyze_resource_growth(
                 test_host['host_id'], test_host['host_name'], latest_record, history_records, 
                 'disk', 'disk_info', 80,  # warning_threshold
-                72,  # prediction_critical_hours
-                168,  # prediction_warning_hours
-                3600,  # notify_critical_interval
-                7200,  # notify_warning_interval
+                prediction_critical_hours,  # prediction_critical_hours
+                prediction_warning_hours,  # prediction_warning_hours
+                notify_critical_interval,  # notify_critical_interval
+                notify_warning_interval,  # notify_warning_interval
                 current_time, 60  # scan_history_minutes
             )
             
