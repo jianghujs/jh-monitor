@@ -2138,7 +2138,6 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                     'addtime': record['addtime']
                 })
             except Exception as e:
-                print(f"解析历史数据出错: {str(e)}")
                 continue
         
         # 如果没有足够的历史数据，直接返回
@@ -2182,8 +2181,6 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                             
                             # 更新存储的平滑增长率
                             analyze_resource_growth.last_smoothed_rates[f"{host_id}_{resource_type}_{mount_point_path}"] = smoothed_growth_rate
-                            print(f"@@@@@@@@@@@##########time_diff: {time_diff}, usage_diff: {usage_diff}, current_growth_rate: {current_growth_rate}, smoothed_growth_rate: {smoothed_growth_rate}")
-                    print(f"@@@@@@@@@@@##########resource_type: {resource_type}, smoothed_growth_rate: {smoothed_growth_rate}")
             
                     if smoothed_growth_rate is not None:
                         # 计算预测达到阈值的时间
@@ -2191,15 +2188,53 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                             hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
                             
                             # 判断是否需要告警
-                            print(f'平滑增长率：{smoothed_growth_rate:.1f}%，预计达到阈值时间: {hours_to_threshold:.1f} 小时, 预测紧急告警时间: {prediction_critical_hours} 小时, 预测警告告警时间: {prediction_warning_hours} 小时')
-                    
                             if hours_to_threshold <= prediction_critical_hours:
                                 alarm['level'] = 'critical'
                                 alarm['notify_interval'] = notify_critical_interval
+                                
+                                # 记录告警日志
+                                current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                                writeFileLog(
+                                    f"\n{'='*80}\n"
+                                    f"告警时间: {current_time_str}\n"
+                                    f"告警级别: 紧急告警\n"
+                                    f"主机信息: {host_name}(ID: {host_id})\n"
+                                    f"资源类型: 磁盘\n"
+                                    f"挂载点: {mount_point_path}\n"
+                                    f"当前状态:\n"
+                                    f"  - 使用率: {current_usage:.1f}%\n"
+                                    f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+                                    f"预测信息:\n"
+                                    f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
+                                    f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
+                                    f"  - 预测警告告警时间: {prediction_warning_hours}小时\n"
+                                    f"{'='*80}\n",
+                                    path='logs/growth_alarm.log'
+                                )
                             elif hours_to_threshold <= prediction_warning_hours:
                                 if alarm['level'] != 'critical':  # 不覆盖更高级别的告警
                                     alarm['level'] = 'warning'
                                     alarm['notify_interval'] = notify_warning_interval
+                                    
+                                    # 记录告警日志
+                                    current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                                    writeFileLog(
+                                        f"\n{'='*80}\n"
+                                        f"告警时间: {current_time_str}\n"
+                                        f"告警级别: 警告告警\n"
+                                        f"主机信息: {host_name}(ID: {host_id})\n"
+                                        f"资源类型: 磁盘\n"
+                                        f"挂载点: {mount_point_path}\n"
+                                        f"当前状态:\n"
+                                        f"  - 使用率: {current_usage:.1f}%\n"
+                                        f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+                                        f"预测信息:\n"
+                                        f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
+                                        f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
+                                        f"  - 预测警告告警时间: {prediction_warning_hours}小时\n"
+                                        f"{'='*80}\n",
+                                        path='logs/growth_alarm.log'
+                                    )
                             
                             if alarm['level'] is not None:
                                 alarm['content'] = f"磁盘 [{mount_point_path}] 使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
@@ -2223,22 +2258,58 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                     
                     # 更新存储的平滑增长率
                     analyze_resource_growth.last_smoothed_rates[f"{host_id}_{resource_type}"] = smoothed_growth_rate
-                    print(f"@@@@@@@@@@@##########time_diff: {time_diff}, usage_diff: {usage_diff}, current_growth_rate: {current_growth_rate}, smoothed_growth_rate: {smoothed_growth_rate}")
-            print(f"@@@@@@@@@@@##########resource_type: {resource_type}, smoothed_growth_rate: {smoothed_growth_rate}")
+            
             if smoothed_growth_rate is not None:
                 # 计算预测达到阈值的时间
                 if smoothed_growth_rate > 0:
                     hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
                     
                     # 判断是否需要告警
-                    print(f'平滑增长率：{smoothed_growth_rate:.1f}%，预计达到阈值时间: {hours_to_threshold:.1f} 小时, 预测紧急告警时间: {prediction_critical_hours} 小时, 预测警告告警时间: {prediction_warning_hours} 小时')
                     if hours_to_threshold <= prediction_critical_hours:
                         alarm['level'] = 'critical'
                         alarm['notify_interval'] = notify_critical_interval
+                        
+                        # 记录告警日志
+                        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                        writeFileLog(
+                            f"\n{'='*80}\n"
+                            f"告警时间: {current_time_str}\n"
+                            f"告警级别: 紧急告警\n"
+                            f"主机信息: {host_name}(ID: {host_id})\n"
+                            f"资源类型: 内存\n"
+                            f"当前状态:\n"
+                            f"  - 使用率: {current_usage:.1f}%\n"
+                            f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+                            f"预测信息:\n"
+                            f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
+                            f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
+                            f"  - 预测警告告警时间: {prediction_warning_hours}小时\n"
+                            f"{'='*80}\n",
+                            path='logs/growth_alarm.log'
+                        )
                     elif hours_to_threshold <= prediction_warning_hours:
                         if alarm['level'] != 'critical':  # 不覆盖更高级别的告警
                             alarm['level'] = 'warning'
                             alarm['notify_interval'] = notify_warning_interval
+                            
+                            # 记录告警日志
+                            current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                            writeFileLog(
+                                f"\n{'='*80}\n"
+                                f"告警时间: {current_time_str}\n"
+                                f"告警级别: 警告告警\n"
+                                f"主机信息: {host_name}(ID: {host_id})\n"
+                                f"资源类型: 内存\n"
+                                f"当前状态:\n"
+                                f"  - 使用率: {current_usage:.1f}%\n"
+                                f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+                                f"预测信息:\n"
+                                f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
+                                f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
+                                f"  - 预测警告告警时间: {prediction_warning_hours}小时\n"
+                                f"{'='*80}\n",
+                                path='logs/growth_alarm.log'
+                            )
                     
                     if alarm['level'] is not None:
                         alarm['content'] = f"内存使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
@@ -2246,7 +2317,18 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         return alarm
         
     except Exception as e:
-        print(f"分析{resource_type}数据出错: {str(e)}")
+        # 只在发生异常时记录错误日志
+        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        writeFileLog(
+            f"\n{'='*80}\n"
+            f"错误时间: {current_time_str}\n"
+            f"主机信息: {host_name}(ID: {host_id})\n"
+            f"资源类型: {resource_type}\n"
+            f"错误信息: {str(e)}\n"
+            f"堆栈跟踪:\n{traceback.format_exc()}\n"
+            f"{'='*80}\n",
+            path='logs/growth_alarm.log'
+        )
         return {
             'level': None,
             'content': '',
