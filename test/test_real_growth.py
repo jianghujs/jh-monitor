@@ -73,11 +73,11 @@ def simulate_growth(duration_minutes=30, interval_seconds=300, memory_step_mb=10
             disk_used_percent = disk.percent
             
             # 如果内存使用率低于90%，继续分配内存
-            if mem_used_percent < 90:
+            if mem_used_percent < 80:
                 allocate_memory(memory_step_mb)
             
             # 如果磁盘使用率低于90%，继续创建文件
-            if disk_used_percent < 90:
+            if disk_used_percent < 80:
                 file_path = os.path.join(temp_dir, f"test_file_{simulated_time}.dat")
                 create_large_file(disk_step_mb, file_path)
             
