@@ -362,9 +362,6 @@ def hostGrowthAlarmTask():
             host_list = jh.M('view01_host').field('host_id,host_name').select()
             
             for host in host_list:
-                # if host['host_id'] != 'test_host_001':
-                #     continue
-
                 host_id = host['host_id']
                 host_name = host['host_name']
                 
@@ -378,9 +375,10 @@ def hostGrowthAlarmTask():
                     
                     if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
                         (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
-                        # print(f"{Fore.YELLOW}★ 主机 [{host_name}] 上次告警时间未超过通知间隔，跳过检查{Style.RESET_ALL}")
                         continue
-                
+
+                print(f"|- 开始分析主机 [{host_name}] 资源增长...")
+
                 # 获取历史数据进行分析（最近X分钟的数据）
                 history_start = current_time - (scan_history_minutes * 60)
 
@@ -392,17 +390,17 @@ def hostGrowthAlarmTask():
                 if not latest_record:
                     continue
                 
-                # 获取历史记录
-                old_record = sql.table('host_detail').where('host_id=? AND host_status=? AND addtime<?', 
-                                    (host_id, 'Running', history_start)).order('id desc').field('id,mem_info,disk_info,addtime').find()
-                
+                # 获取历史记录列表（每5分钟一条数据）
+                history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
+                                    (host_id, history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
+
                 # 如果没有足够的历史记录，则跳过
-                if not old_record:
+                if not history_records or len(history_records) < 2:
                     continue
                 
                 # 分析内存和磁盘
                 memory_alarm = jh.analyze_resource_growth(
-                    host_id, host_name, latest_record, old_record, 
+                    host_id, host_name, latest_record, history_records, 
                     'memory', 'mem_info', warning_threshold, 
                     prediction_critical_hours, prediction_warning_hours,
                     notify_critical_interval, notify_warning_interval,
@@ -410,7 +408,7 @@ def hostGrowthAlarmTask():
                 )
                 
                 disk_alarm = jh.analyze_resource_growth(
-                    host_id, host_name, latest_record, old_record, 
+                    host_id, host_name, latest_record, history_records, 
                     'disk', 'disk_info', warning_threshold, 
                     prediction_critical_hours, prediction_warning_hours,
                     notify_critical_interval, notify_warning_interval,
@@ -448,12 +446,35 @@ def hostGrowthAlarmTask():
                         'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
                         (host_id, host_name, '资源增长预警', alarm_level_map[final_alarm['level']], final_alarm['content'], time.strftime('%Y-%m-%d %H:%M:%S'))
                     )
+
+                    print(f"|- 添加主机 [{host_name}] 资源增长预警 - {alarm_level_map[final_alarm['level']]}，告警主体")
                     
                     # 发送通知消息
-                    notify_msg = jh.generateCommonNotifyMessage(f"主机 [{host_name}] {final_alarm['content']}")
+                    panel_title = jh.getConfig('title')
+                    ip = jh.getHostAddr()
+                    now_time = jh.getDateFromNow()
+                    
+                    # 根据告警级别设置不同的颜色
+                    level_color = '#FF4500' if final_alarm['level'] == 'critical' else '#FFA500'
+                    
+                    html_msg = f"""
+                    <div style="font-family: Arial, sans-serif; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
+                        <div style="border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px;">
+                            <span style="color: #333; font-size: 14px;">{now_time}</span> 
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <span style="font-weight: bold; color: {level_color};">【{alarm_level_map[final_alarm['level']]}】</span>
+                            <span style="font-weight: bold;">主机 [{host_name}]</span>
+                        </div>
+                        <div style="background-color: #fff; padding: 10px; border-left: 4px solid {level_color}; border-radius: 3px;">
+                            {final_alarm['content']}
+                        </div>
+                    </div>
+                    """
+                    
                     jh.notifyMessage(
                         title=f'资源增长预警-{alarm_level_map[final_alarm["level"]]}', 
-                        msg=notify_msg, 
+                        msg=html_msg, 
                         msgtype='html',
                         stype='资源增长预警', 
                         trigger_time=0

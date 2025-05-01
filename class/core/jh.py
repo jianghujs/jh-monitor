@@ -28,7 +28,7 @@ import db
 from random import Random
 import tempfile
 import pytz
-
+import traceback
 sys.path.append(os.getcwd() + "/class/plugin")
 from retry_tool import retry
 
@@ -2082,131 +2082,252 @@ def generateCommonNotifyMessage(content):
 
 ##################### notify  end #########################################
 
-def analyze_resource_growth(host_id, host_name, latest_record, old_record, resource_type, resource_data_key,
+def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
+    """
+    分析历史记录并计算平滑增长率
+    
+    Args:
+        history_data_list: 历史记录列表，每个元素包含data和addtime
+        alpha: 平滑因子，值越小对历史数据的权重越大
+        usage_key: 如果数据是字典，指定使用率的键名
+    
+    Returns:
+        tuple: (smoothed_growth_rate, current_usage)
+    """
+    if len(history_data_list) < 2:
+        return None, None
+        
+    smoothed_growth_rate = None
+    current_usage = None
+    
+    # 计算相邻数据点之间的增长率并进行平滑处理
+    for i in range(1, len(history_data_list)):
+        time_diff = (int(history_data_list[i-1]['addtime']) - int(history_data_list[i]['addtime'])) / 3600  # 转换为小时
+        
+        # 根据数据结构获取使用率
+        if usage_key:
+            usage_diff = history_data_list[i-1]['data'][usage_key] - history_data_list[i]['data'][usage_key]
+            current_usage = history_data_list[i-1]['data'][usage_key]
+        else:
+            usage_diff = history_data_list[i-1]['data'] - history_data_list[i]['data']
+            current_usage = history_data_list[i-1]['data']
+            
+        if time_diff > 0:
+            current_growth_rate = usage_diff / time_diff / 100  # 当前增长率
+            
+            # 获取上一次的平滑增长率
+            last_smoothed_rate = analyze_history_records.last_smoothed_rate if hasattr(analyze_history_records, 'last_smoothed_rate') else current_growth_rate
+            
+            # 计算新的平滑增长率
+            smoothed_growth_rate = alpha * current_growth_rate + (1 - alpha) * last_smoothed_rate
+            
+            # 更新存储的平滑增长率
+            analyze_history_records.last_smoothed_rate = smoothed_growth_rate
+    
+    return smoothed_growth_rate, current_usage
+
+def check_and_log_alarm(host_id, host_name, resource_type, resource_name, current_usage, 
+                       smoothed_growth_rate, hours_to_threshold, warning_threshold,
+                       prediction_critical_hours, prediction_warning_hours,
+                       notify_critical_interval, notify_warning_interval):
+    """
+    检查是否需要告警并记录日志
+    
+    Args:
+        host_id: 主机ID
+        host_name: 主机名称
+        resource_type: 资源类型（memory/disk）
+        resource_name: 资源名称（内存/挂载点路径）
+        current_usage: 当前使用率
+        smoothed_growth_rate: 平滑增长率
+        hours_to_threshold: 预计达到阈值的小时数
+        warning_threshold: 告警阈值
+        prediction_critical_hours: 预测达到阈值的小时数（紧急）
+        prediction_warning_hours: 预测达到阈值的小时数（警告）
+        notify_critical_interval: 紧急告警通知间隔（秒）
+        notify_warning_interval: 警告通知间隔（秒）
+    
+    Returns:
+        dict: 告警信息
+    """
+    alarm = {
+        'level': None,
+        'content': '',
+        'notify_interval': 0
+    }
+    
+    if hours_to_threshold <= prediction_critical_hours:
+        alarm['level'] = 'critical'
+        alarm['notify_interval'] = notify_critical_interval
+        alarm_level_str = '紧急告警'
+    elif hours_to_threshold <= prediction_warning_hours:
+        alarm['level'] = 'warning'
+        alarm['notify_interval'] = notify_warning_interval
+        alarm_level_str = '警告告警'
+    
+    if alarm['level'] is not None:
+        # 记录告警日志
+        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        writeFileLog(
+            f"\n{'='*80}\n"
+            f"告警时间: {current_time_str}\n"
+            f"告警级别: {alarm_level_str}\n"
+            f"主机信息: {host_name}(ID: {host_id})\n"
+            f"资源类型: {resource_type}\n"
+            f"{'挂载点: ' + resource_name if resource_type == 'disk' else ''}\n"
+            f"当前状态:\n"
+            f"  - 使用率: {current_usage:.1f}%\n"
+            f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+            f"预测信息:\n"
+            f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
+            f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
+            f"  - 预测警告告警时间: {prediction_warning_hours}小时\n"
+            f"{'='*80}\n",
+            path='logs/growth_alarm.log'
+        )
+        
+        # 设置告警内容
+        if resource_type == 'disk':
+            alarm['content'] = f"磁盘 [{resource_name}] 使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
+        else:
+            alarm['content'] = f"内存使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
+    
+    return alarm
+
+def analyze_resource_growth(host_id, host_name, latest_record, history_records, resource_type, resource_data_key,
     warning_threshold, prediction_critical_hours, prediction_warning_hours, 
     notify_critical_interval, notify_warning_interval, 
     current_time, scan_history_minutes
 ):
-    """分析资源增长情况并生成告警
+    """分析资源增长趋势并生成告警
     
     Args:
         host_id: 主机ID
         host_name: 主机名称
         latest_record: 最新记录
-        old_record: 历史记录
-        resource_type: 资源类型（'memory'或'disk'）
-        resource_data_key: 资源数据在记录中的键名
+        history_records: 历史记录列表
+        resource_type: 资源类型（memory/disk）
+        resource_data_key: 资源数据键名（mem_info/disk_info）
         warning_threshold: 告警阈值
         prediction_critical_hours: 预测达到阈值的小时数（紧急）
         prediction_warning_hours: 预测达到阈值的小时数（警告）
-        notify_critical_interval: 紧急告警通知间隔
-        notify_warning_interval: 警告通知间隔
+        notify_critical_interval: 紧急告警通知间隔（秒）
+        notify_warning_interval: 警告通知间隔（秒）
         current_time: 当前时间戳
-        scan_history_minutes: 扫描历史分钟数
+        scan_history_minutes: 扫描历史数据的时间范围（分钟）
+    
     Returns:
-        dict: 包含告警信息的字典，格式为 {
-            'level': 'critical'/'warning'/None,
-            'content': '告警内容',
-            'notify_interval': 通知间隔
-        }
+        dict: 告警信息
     """
     try:
-        latest_data = json.loads(latest_record[resource_data_key])
-        old_data = json.loads(old_record[resource_data_key])
-        
-        # 对于磁盘，需要按挂载点分别分析
-        if resource_type == 'disk':
-            latest_data_by_mount = {disk.get('mountpoint'): disk for disk in latest_data if 'mountpoint' in disk and 'usedPercent' in disk}
-            old_data_by_mount = {disk.get('mountpoint'): disk for disk in old_data if 'mountpoint' in disk and 'usedPercent' in disk}
-            data_to_analyze = [(mount, latest_data_by_mount[mount], old_data_by_mount[mount]) 
-                             for mount in latest_data_by_mount if mount in old_data_by_mount]
-        else:
-            # 对于内存，直接分析
-            data_to_analyze = [('memory', latest_data, old_data)]
-        
-        alarm_info = {
+        # 初始化告警信息
+        alarm = {
             'level': None,
             'content': '',
             'notify_interval': 0
         }
         
-        # 初始化或获取历史增长率字典
-        if not hasattr(analyze_resource_growth, 'last_smoothed_rates'):
-            analyze_resource_growth.last_smoothed_rates = {}
-        print("last_smoothed_rates", analyze_resource_growth.last_smoothed_rates)
+        # 平滑因子，值越小对历史数据的权重越大
+        alpha = 0.3
         
-        for mount_point, latest, old in data_to_analyze:
-            if 'usedPercent' in latest and 'usedPercent' in old:
-                latest_used_percent = float(latest['usedPercent'])
-                old_used_percent = float(old['usedPercent'])
+        # 解析最新数据
+        latest_data = json.loads(latest_record[resource_data_key])
+        
+        # 初始化历史数据列表
+        history_data_list = []
+        
+        # 遍历历史记录
+        for record in history_records:
+            try:
+                # 解析历史数据
+                history_data = json.loads(record[resource_data_key])
+                history_data_list.append({
+                    'data': history_data,
+                    'addtime': record['addtime']
+                })
+            except Exception as e:
+                continue
+        
+        # 如果没有足够的历史数据，直接返回
+        if len(history_data_list) < 2:
+            return alarm
+        
+        # 根据资源类型分析
+        if resource_type == 'disk':
+            # 分析每个挂载点
+            for mount_point in latest_data:
+                mount_point_path = mount_point['mountpoint']
+                current_usage = mount_point['usedPercent']
                 
-                # 计算时间差（小时）
-                time_diff_hours = (float(latest_record['addtime']) - float(old_record['addtime'])) / 3600
+                # 收集该挂载点的历史数据
+                mount_point_history = []
+                for history in history_data_list:
+                    for disk in history['data']:
+                        if disk['mountpoint'] == mount_point_path:
+                            mount_point_history.append({
+                                'data': disk['usedPercent'],
+                                'addtime': history['addtime']
+                            })
+                            break
                 
-                if time_diff_hours > 0:
-                    # 使用指数平滑法计算增长率
-                    # alpha 是平滑因子，值越大对最近数据越敏感
-                    alpha = 0.3  # 可以根据实际情况调整
+                # 计算增长率
+                if len(mount_point_history) >= 2:
+                    smoothed_growth_rate, _ = analyze_history_records(mount_point_history, alpha)
                     
-                    # 计算原始增长率
-                    raw_growth_rate = (latest_used_percent - old_used_percent) / time_diff_hours
-                    
-                    # 获取上一次的平滑增长率
-                    history_key = f"{host_id}_{resource_type}_{mount_point}"
-                    last_smoothed_rate = analyze_resource_growth.last_smoothed_rates.get(history_key, raw_growth_rate)
-                    
-                    # 计算新的平滑增长率
-                    smoothed_growth_rate = alpha * raw_growth_rate + (1 - alpha) * last_smoothed_rate
-                    
-                    # 保存新的平滑增长率
-                    analyze_resource_growth.last_smoothed_rates[history_key] = smoothed_growth_rate
-                    
-                    # 如果增长率为正，预测何时达到警戒线
-                    if smoothed_growth_rate > 0:
-                        hours_to_threshold = (warning_threshold - latest_used_percent) / smoothed_growth_rate
-                        days_to_threshold = hours_to_threshold / 24
+                    if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
+                        hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
                         
-                        # 根据预计到达阈值的时间设置告警级别
-                        prediction_level = None
-                        if hours_to_threshold <= prediction_critical_hours:
-                            prediction_level = 'critical'
-                            notify_interval = notify_critical_interval
-                        elif hours_to_threshold <= prediction_warning_hours:
-                            prediction_level = 'warning'
-                            notify_interval = notify_warning_interval
+                        # 检查是否需要告警
+                        mount_point_alarm = check_and_log_alarm(
+                            host_id, host_name, resource_type, mount_point_path,
+                            current_usage, smoothed_growth_rate, hours_to_threshold,
+                            warning_threshold, prediction_critical_hours,
+                            prediction_warning_hours, notify_critical_interval,
+                            notify_warning_interval
+                        )
                         
-                        if prediction_level:
-                            # 更新告警级别（取最高级别）
-                            if alarm_info['level'] is None or (prediction_level == 'critical' and alarm_info['level'] == 'warning'):
-                                alarm_info['level'] = prediction_level
-                                alarm_info['notify_interval'] = notify_interval
-                            
-                            # 生成告警内容
-                            alarm_color = {
-                                'critical': '#d9534f',
-                                'warning': '#f0ad4e'
-                            }
-                            
-                            resource_name = '内存' if resource_type == 'memory' else f'磁盘({mount_point})'
-                            alarm_content = f"""
-<div style="font-family: Arial, sans-serif; padding: 15px; margin-top: 10px;border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">
-    <h3 style="color: {alarm_color[prediction_level]}; margin-top: 10px;">{resource_name}使用率增长过快</h3>
-    <ul style="list-style-type: none; padding-left: 0;">
-        <li style="margin-bottom: 8px;"><strong>告警级别:</strong> <span style="color: {alarm_color[prediction_level]};">{'紧急' if prediction_level == 'critical' else '警告'}</span></li>
-        <li style="margin-bottom: 8px;"><strong>过去{scan_history_minutes}分钟已增长:</strong> <span style="color: {alarm_color[prediction_level]};">{(latest_used_percent - old_used_percent):.2f}%</span></li>
-        <li style="margin-bottom: 8px;"><strong>当前使用率:</strong> <span style="color: {alarm_color[prediction_level]};">{latest_used_percent:.2f}%</span></li>
-        <li style="margin-bottom: 8px;"><strong>平滑后每小时增长:</strong> <span style="color: {alarm_color[prediction_level]};">{smoothed_growth_rate:.2f}%</span></li>
-        <li style="margin-bottom: 8px;"><strong>预计达到警戒线（{warning_threshold}%）时间:</strong> <span style="color: {alarm_color[prediction_level]};">{days_to_threshold:.1f} 天后（{hours_to_threshold:.1f} 小时后）</span></li>
-    </ul>
-</div>
-                            """
-                            
-                            # 追加告警内容
-                            if alarm_info['content']:
-                                alarm_info['content'] += '<hr>'
-                            alarm_info['content'] += alarm_content
-                   
-        return alarm_info
+                        # 如果当前挂载点的告警级别更高，则更新总告警信息
+                        if mount_point_alarm['level'] is not None:
+                            if alarm['level'] is None or (
+                                alarm['level'] == 'warning' and mount_point_alarm['level'] == 'critical'
+                            ):
+                                alarm = mount_point_alarm
+        
+        elif resource_type == 'memory':
+            current_usage = latest_data['usedPercent']
+            
+            # 计算增长率
+            smoothed_growth_rate, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
+            
+            if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
+                hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
+                
+                # 检查是否需要告警
+                alarm = check_and_log_alarm(
+                    host_id, host_name, resource_type, None,
+                    current_usage, smoothed_growth_rate, hours_to_threshold,
+                    warning_threshold, prediction_critical_hours,
+                    prediction_warning_hours, notify_critical_interval,
+                    notify_warning_interval
+                )
+
+        return alarm
+        
     except Exception as e:
-        print(f"分析{resource_type}数据出错: {str(e)}")
-        return None
+        # 只在发生异常时记录错误日志
+        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        writeFileLog(
+            f"\n{'='*80}\n"
+            f"错误时间: {current_time_str}\n"
+            f"主机信息: {host_name}(ID: {host_id})\n"
+            f"资源类型: {resource_type}\n"
+            f"错误信息: {str(e)}\n"
+            f"堆栈跟踪:\n{traceback.format_exc()}\n"
+            f"{'='*80}\n",
+            path='logs/growth_alarm.log'
+        )
+        return {
+            'level': None,
+            'content': '',
+            'notify_interval': 0
+        }
