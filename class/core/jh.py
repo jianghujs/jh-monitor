@@ -2228,7 +2228,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         }
         
         # 平滑因子，值越小对历史数据的权重越大
-        alpha = 0.3
+        alpha = 0.5
         
         # 解析最新数据
         latest_data = json.loads(latest_record[resource_data_key])
