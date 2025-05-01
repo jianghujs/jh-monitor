@@ -347,7 +347,7 @@ def hostGrowthAlarmTask():
             # 读取配置
             config = jh.getGrowthAlarmConfig()
             scan_interval = config.get('scan_interval', 10)
-            scan_history_minutes = config.get('scan_history_minutes', 30)
+            scan_history_minutes = config.get('scan_history_minutes', 10)
             warning_threshold = config.get('warning_threshold', 80)
             prediction_critical_hours = config.get('prediction_critical_hours', 24)
             prediction_warning_hours = config.get('prediction_warning_hours', 72)
