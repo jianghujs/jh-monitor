@@ -2097,34 +2097,71 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
     if len(history_data_list) < 2:
         return None, None
         
-    smoothed_growth_rate = None
+    # 将历史数据分成3个区间
+    interval_size = len(history_data_list) // 3
+    if interval_size < 2:  # 如果数据太少，只分成2个区间
+        interval_size = len(history_data_list) // 2
+        intervals = [history_data_list[:interval_size], history_data_list[interval_size:]]
+    else:
+        intervals = [
+            history_data_list[:interval_size],
+            history_data_list[interval_size:interval_size*2],
+            history_data_list[interval_size*2:]
+        ]
+    
+    # 计算每个区间的增长率
+    interval_growth_rates = []
     current_usage = None
     
-    # 计算相邻数据点之间的增长率并进行平滑处理
-    for i in range(1, len(history_data_list)):
-        time_diff = (int(history_data_list[i-1]['addtime']) - int(history_data_list[i]['addtime'])) / 3600  # 转换为小时
+    for interval in intervals:
+        if len(interval) < 2:
+            continue
+            
+        smoothed_growth_rate = None
+        for i in range(1, len(interval)):
+            time_diff = (int(interval[i-1]['addtime']) - int(interval[i]['addtime'])) / 3600  # 转换为小时
+            
+            # 根据数据结构获取使用率
+            if usage_key:
+                usage_diff = interval[i-1]['data'][usage_key] - interval[i]['data'][usage_key]
+                current_usage = interval[i-1]['data'][usage_key]
+            else:
+                usage_diff = interval[i-1]['data'] - interval[i]['data']
+                current_usage = interval[i-1]['data']
+                
+            if time_diff > 0:
+                current_growth_rate = usage_diff / time_diff / 100  # 当前增长率
+                
+                # 获取上一次的平滑增长率
+                last_smoothed_rate = analyze_history_records.last_smoothed_rate if hasattr(analyze_history_records, 'last_smoothed_rate') else current_growth_rate
+                
+                # 计算新的平滑增长率
+                smoothed_growth_rate = alpha * current_growth_rate + (1 - alpha) * last_smoothed_rate
+                
+                # 更新存储的平滑增长率
+                analyze_history_records.last_smoothed_rate = smoothed_growth_rate
         
-        # 根据数据结构获取使用率
-        if usage_key:
-            usage_diff = history_data_list[i-1]['data'][usage_key] - history_data_list[i]['data'][usage_key]
-            current_usage = history_data_list[i-1]['data'][usage_key]
-        else:
-            usage_diff = history_data_list[i-1]['data'] - history_data_list[i]['data']
-            current_usage = history_data_list[i-1]['data']
-            
-        if time_diff > 0:
-            current_growth_rate = usage_diff / time_diff / 100  # 当前增长率
-            
-            # 获取上一次的平滑增长率
-            last_smoothed_rate = analyze_history_records.last_smoothed_rate if hasattr(analyze_history_records, 'last_smoothed_rate') else current_growth_rate
-            
-            # 计算新的平滑增长率
-            smoothed_growth_rate = alpha * current_growth_rate + (1 - alpha) * last_smoothed_rate
-            
-            # 更新存储的平滑增长率
-            analyze_history_records.last_smoothed_rate = smoothed_growth_rate
+        if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
+            interval_growth_rates.append(smoothed_growth_rate)
     
-    return smoothed_growth_rate, current_usage
+    if not interval_growth_rates:
+        return None, current_usage
+    
+    # 计算加权平均增长率（最近的区间权重更大）
+    weights = [0.5, 0.3, 0.2] if len(interval_growth_rates) == 3 else [0.6, 0.4]
+    weighted_growth_rate = sum(r * w for r, w in zip(interval_growth_rates, weights))
+    
+    # 计算波动性（标准差）
+    if len(interval_growth_rates) > 1:
+        mean = sum(interval_growth_rates) / len(interval_growth_rates)
+        variance = sum((x - mean) ** 2 for x in interval_growth_rates) / len(interval_growth_rates)
+        std_dev = variance ** 0.5
+        
+        # 如果波动太大，降低增长率
+        if std_dev > mean * 0.5:  # 波动超过均值的50%
+            weighted_growth_rate *= 0.7  # 降低30%
+    
+    return weighted_growth_rate, current_usage
 
 def check_and_log_alarm(host_id, host_name, resource_type, resource_name, current_usage, 
                        smoothed_growth_rate, hours_to_threshold, warning_threshold,
@@ -2270,17 +2307,17 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                             })
                             break
                 
-                # 计算增长率
                 if len(mount_point_history) >= 2:
-                    smoothed_growth_rate, _ = analyze_history_records(mount_point_history, alpha)
+                    # 计算加权平均增长率
+                    weighted_growth_rate, _ = analyze_history_records(mount_point_history, alpha)
                     
-                    if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
-                        hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
+                    if weighted_growth_rate is not None:
+                        hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
                         
                         # 检查是否需要告警
                         mount_point_alarm = check_and_log_alarm(
                             host_id, host_name, resource_type, mount_point_path,
-                            current_usage, smoothed_growth_rate, hours_to_threshold,
+                            current_usage, weighted_growth_rate, hours_to_threshold,
                             warning_threshold, prediction_critical_hours,
                             prediction_warning_hours, notify_critical_interval,
                             notify_warning_interval
@@ -2296,16 +2333,16 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         elif resource_type == 'memory':
             current_usage = latest_data['usedPercent']
             
-            # 计算增长率
-            smoothed_growth_rate, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
+            # 计算加权平均增长率
+            weighted_growth_rate, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
             
-            if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
-                hours_to_threshold = (warning_threshold - current_usage) / smoothed_growth_rate
+            if weighted_growth_rate is not None:
+                hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
                 
                 # 检查是否需要告警
                 alarm = check_and_log_alarm(
                     host_id, host_name, resource_type, None,
-                    current_usage, smoothed_growth_rate, hours_to_threshold,
+                    current_usage, weighted_growth_rate, hours_to_threshold,
                     warning_threshold, prediction_critical_hours,
                     prediction_warning_hours, notify_critical_interval,
                     notify_warning_interval
