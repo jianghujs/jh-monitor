@@ -2095,7 +2095,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         tuple: (smoothed_growth_rate, current_usage)
     """
     if len(history_data_list) < 2:
-        return None, None
+        return None, None, None
         
     # 将历史数据分成3个区间
     interval_size = len(history_data_list) // 3
@@ -2145,7 +2145,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
             interval_growth_rates.append(smoothed_growth_rate)
     
     if not interval_growth_rates:
-        return None, current_usage
+        return None, current_usage, None
     
     # 计算加权平均增长率（最近的区间权重更大）
     weights = [0.5, 0.3, 0.2] if len(interval_growth_rates) == 3 else [0.6, 0.4]
@@ -2161,10 +2161,10 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         if std_dev > mean * 0.5:  # 波动超过均值的50%
             weighted_growth_rate *= 0.7  # 降低30%
     
-    return weighted_growth_rate, current_usage
+    return weighted_growth_rate, current_usage, interval_growth_rates
 
 def check_and_log_alarm(host_id, host_name, resource_type, resource_name, current_usage, 
-                       smoothed_growth_rate, hours_to_threshold, warning_threshold,
+                       smoothed_growth_rate, interval_growth_rates, hours_to_threshold, warning_threshold,
                        prediction_critical_hours, prediction_warning_hours,
                        notify_critical_interval, notify_warning_interval):
     """
@@ -2215,6 +2215,7 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
             f"当前状态:\n"
             f"  - 使用率: {current_usage:.1f}%\n"
             f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
+            f"  - 区间增长率: {interval_growth_rates}\n"
             f"预测信息:\n"
             f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
             f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
@@ -2309,7 +2310,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                 
                 if len(mount_point_history) >= 2:
                     # 计算加权平均增长率
-                    weighted_growth_rate, _ = analyze_history_records(mount_point_history, alpha)
+                    weighted_growth_rate, _, interval_growth_rates = analyze_history_records(mount_point_history, alpha)
                     
                     if weighted_growth_rate is not None:
                         hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
@@ -2317,7 +2318,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                         # 检查是否需要告警
                         mount_point_alarm = check_and_log_alarm(
                             host_id, host_name, resource_type, mount_point_path,
-                            current_usage, weighted_growth_rate, hours_to_threshold,
+                            current_usage, weighted_growth_rate, interval_growth_rates, hours_to_threshold,
                             warning_threshold, prediction_critical_hours,
                             prediction_warning_hours, notify_critical_interval,
                             notify_warning_interval
@@ -2334,7 +2335,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
             current_usage = latest_data['usedPercent']
             
             # 计算加权平均增长率
-            weighted_growth_rate, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
+            weighted_growth_rate, _, interval_growth_rates = analyze_history_records(history_data_list, alpha, 'usedPercent')
             
             if weighted_growth_rate is not None:
                 hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
@@ -2342,7 +2343,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                 # 检查是否需要告警
                 alarm = check_and_log_alarm(
                     host_id, host_name, resource_type, None,
-                    current_usage, weighted_growth_rate, hours_to_threshold,
+                    current_usage, weighted_growth_rate, interval_growth_rates, hours_to_threshold,
                     warning_threshold, prediction_critical_hours,
                     prediction_warning_hours, notify_critical_interval,
                     notify_warning_interval
