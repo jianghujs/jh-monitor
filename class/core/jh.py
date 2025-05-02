@@ -2234,6 +2234,10 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
         'notify_interval': 0
     }
     
+    # 如果增长率为负值，说明使用率在下降，不需要告警
+    if smoothed_growth_rate <= 0:
+        return alarm
+    
     # 检查是否满足滞后告警条件（2/3的区间触发告警）
     if interval_growth_rates and len(interval_growth_rates) >= 2:
         trigger_count = sum(1 for rate in interval_growth_rates if rate > 0)
