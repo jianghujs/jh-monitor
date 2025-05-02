@@ -2082,7 +2082,7 @@ def generateCommonNotifyMessage(content):
 
 ##################### notify  end #########################################
 
-def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
+def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
     """
     分析历史记录并计算平滑增长率
     
@@ -2125,6 +2125,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         interval_current_usage = None
         last_smoothed_rate = None  # 重置上一次的平滑增长率
         growth_rates = []  # 存储当前区间的所有增长率
+        usages = []  # 存储当前区间的所有使用率
         
         for i in range(1, len(interval)):
             # 计算时间差（小时）
@@ -2144,6 +2145,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
             
             # 记录当前使用率
             interval_current_usage = curr_usage
+            usages.append(curr_usage)
             
             if time_diff > 0:
                 # 计算每小时的使用率增长量
@@ -2162,10 +2164,19 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
                 
                 # 更新上一次的平滑增长率
                 last_smoothed_rate = smoothed_growth_rate
-                
-                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {curr_usage}, 上一次使用率: {prev_usage}, 当前增长率: {current_growth_rate}, 平滑增长率: {smoothed_growth_rate}")
         
         if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
+            # 计算使用率的波动性
+            if len(usages) >= 2:
+                mean_usage = sum(usages) / len(usages)
+                variance = sum((x - mean_usage) ** 2 for x in usages) / len(usages)
+                std_dev = variance ** 0.5
+                
+                # 如果波动太大（标准差超过均值的5%），认为这是正常波动，不触发告警
+                if std_dev > mean_usage * 0.05:
+                    interval_alarms.append(False)
+                    continue
+            
             # 计算移动平均增长率
             if growth_rates:
                 moving_avg_rate = sum(growth_rates) / len(growth_rates)
