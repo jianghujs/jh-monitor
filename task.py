@@ -347,7 +347,8 @@ def hostGrowthAlarmTask():
             # 读取配置
             config = jh.getGrowthAlarmConfig()
             scan_interval = config.get('scan_interval', 10)
-            scan_history_minutes = config.get('scan_history_minutes', 10)
+            memory_scan_history_minutes = config.get('memory_scan_history_minutes', 120)
+            disk_scan_history_minutes = config.get('disk_scan_history_minutes', 30)
             warning_threshold = config.get('warning_threshold', 80)
             prediction_critical_hours = config.get('prediction_critical_hours', 24)
             prediction_warning_hours = config.get('prediction_warning_hours', 72)
@@ -381,10 +382,7 @@ def hostGrowthAlarmTask():
 
                 print(f"|- 开始分析主机 [{host_name}] 资源增长...")
 
-                # 获取历史数据进行分析（最近X分钟的数据）
-                history_start = current_time - (scan_history_minutes * 60)
-
-                # 获取最新一条记录和历史记录
+                # 获取最新一条记录
                 latest_record = sql.table('host_detail').where('host_id=? AND host_status=?', 
                                     (host_id, 'Running')).order('id desc').field('id,mem_info,disk_info,addtime').find()
 
@@ -392,35 +390,39 @@ def hostGrowthAlarmTask():
                 if not latest_record:
                     continue
                 
-                # 获取历史记录列表（每5分钟一条数据）
-                history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
-                                    (host_id, history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
-
-                # 如果没有足够的历史记录，则跳过
-                if not history_records or len(history_records) < 2:
-                    continue
-                
                 # 分析内存和磁盘
                 memory_alarm = None
                 disk_alarm = None
                 
                 if enable_memory_monitor:
-                    memory_alarm = jh.analyze_resource_growth(
-                        host_id, host_name, latest_record, history_records, 
-                        'memory', 'mem_info', warning_threshold, 
-                        prediction_critical_hours, prediction_warning_hours,
-                        notify_critical_interval, notify_warning_interval,
-                        current_time, scan_history_minutes
-                    )
+                    # 获取内存历史记录
+                    memory_history_start = current_time - (memory_scan_history_minutes * 60)
+                    memory_history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
+                                        (host_id, memory_history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
+                    
+                    if memory_history_records and len(memory_history_records) >= 2:
+                        memory_alarm = jh.analyze_resource_growth(
+                            host_id, host_name, latest_record, memory_history_records, 
+                            'memory', 'mem_info', warning_threshold, 
+                            prediction_critical_hours, prediction_warning_hours,
+                            notify_critical_interval, notify_warning_interval,
+                            current_time, memory_scan_history_minutes
+                        )
                 
                 if enable_disk_monitor:
-                    disk_alarm = jh.analyze_resource_growth(
-                        host_id, host_name, latest_record, history_records, 
-                        'disk', 'disk_info', warning_threshold, 
-                        prediction_critical_hours, prediction_warning_hours,
-                        notify_critical_interval, notify_warning_interval,
-                        current_time, scan_history_minutes
-                    )
+                    # 获取磁盘历史记录
+                    disk_history_start = current_time - (disk_scan_history_minutes * 60)
+                    disk_history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
+                                        (host_id, disk_history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
+                    
+                    if disk_history_records and len(disk_history_records) >= 2:
+                        disk_alarm = jh.analyze_resource_growth(
+                            host_id, host_name, latest_record, disk_history_records, 
+                            'disk', 'disk_info', warning_threshold, 
+                            prediction_critical_hours, prediction_warning_hours,
+                            notify_critical_interval, notify_warning_interval,
+                            current_time, disk_scan_history_minutes
+                        )
                 
                 # 合并告警信息
                 final_alarm = {
