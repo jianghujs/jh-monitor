@@ -2390,7 +2390,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                     # 计算加权平均增长率
                     weighted_growth_rate, _, interval_growth_rates, _ = analyze_history_records(mount_point_history, alpha, 'usedPercent')
                     
-                    if weighted_growth_rate is not None:
+                    if weighted_growth_rate is not None and weighted_growth_rate > 0:
                         hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
                         
                         # 检查是否需要告警
@@ -2415,7 +2415,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
             # 计算加权平均增长率
             weighted_growth_rate, _, interval_growth_rates, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
             
-            if weighted_growth_rate is not None:
+            if weighted_growth_rate is not None and weighted_growth_rate > 0:
                 hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
                 
                 # 检查是否需要告警
