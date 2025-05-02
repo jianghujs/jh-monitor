@@ -2082,7 +2082,7 @@ def generateCommonNotifyMessage(content):
 
 ##################### notify  end #########################################
 
-def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
+def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
     """
     分析历史记录并计算平滑增长率
     
@@ -2124,6 +2124,7 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
         smoothed_growth_rate = None
         interval_current_usage = None
         last_smoothed_rate = None  # 重置上一次的平滑增长率
+        growth_rates = []  # 存储当前区间的所有增长率
         
         for i in range(1, len(interval)):
             # 计算时间差（小时）
@@ -2149,6 +2150,9 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
                 usage_diff = curr_usage - prev_usage
                 current_growth_rate = usage_diff / time_diff
                 
+                # 存储当前增长率用于移动平均计算
+                growth_rates.append(current_growth_rate)
+                
                 # 如果是第一次计算，直接使用当前增长率
                 if last_smoothed_rate is None:
                     smoothed_growth_rate = current_growth_rate
@@ -2158,13 +2162,23 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
                 
                 # 更新上一次的平滑增长率
                 last_smoothed_rate = smoothed_growth_rate
+                
+                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {curr_usage}, 上一次使用率: {prev_usage}, 当前增长率: {current_growth_rate}, 平滑增长率: {smoothed_growth_rate}")
         
         if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
-            interval_growth_rates.append(smoothed_growth_rate)
-            # 记录当前区间的使用率
-            current_usage = interval_current_usage
-            # 判断当前区间是否触发告警
-            interval_alarms.append(True)
+            # 计算移动平均增长率
+            if growth_rates:
+                moving_avg_rate = sum(growth_rates) / len(growth_rates)
+                # 取平滑增长率和移动平均增长率的最小值
+                final_growth_rate = min(smoothed_growth_rate, moving_avg_rate)
+                interval_growth_rates.append(final_growth_rate)
+                # 记录当前区间的使用率
+                current_usage = interval_current_usage
+                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {current_usage}, 平滑增长率: {smoothed_growth_rate}, 移动平均增长率: {moving_avg_rate}, 最终增长率: {final_growth_rate}")
+                # 判断当前区间是否触发告警
+                interval_alarms.append(True)
+            else:
+                interval_alarms.append(False)
         else:
             interval_alarms.append(False)
     
@@ -2184,6 +2198,8 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
         # 如果波动太大，降低增长率
         if std_dev > mean * 0.5:  # 波动超过均值的50%
             weighted_growth_rate *= 0.7  # 降低30%
+    
+    print(f"### 加权增长率: {weighted_growth_rate}, 当前使用率: {current_usage}, 区间增长率: {interval_growth_rates}, 区间告警: {interval_alarms}")
     
     return weighted_growth_rate, current_usage, interval_growth_rates, interval_alarms
 
@@ -2310,7 +2326,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         }
         
         # 平滑因子，值越小对历史数据的权重越大
-        alpha = 0.5
+        alpha = 0.3
         
         # 解析最新数据
         latest_data = json.loads(latest_record[resource_data_key])
