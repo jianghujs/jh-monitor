@@ -2082,7 +2082,7 @@ def generateCommonNotifyMessage(content):
 
 ##################### notify  end #########################################
 
-def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
+def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
     """
     分析历史记录并计算平滑增长率
     
@@ -2109,6 +2109,9 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
             history_data_list[interval_size*2:]
         ]
     
+    # 保存intervals供后续使用
+    analyze_history_records.intervals = intervals
+    
     # 计算每个区间的增长率
     interval_growth_rates = []
     interval_alarms = []  # 记录每个区间是否触发告警
@@ -2120,35 +2123,41 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
             
         smoothed_growth_rate = None
         interval_current_usage = None
+        last_smoothed_rate = None  # 重置上一次的平滑增长率
         
         for i in range(1, len(interval)):
-            time_diff = (int(interval[i-1]['addtime']) - int(interval[i]['addtime'])) / 3600  # 转换为小时
+            # 计算时间差（小时）
+            time_diff = (int(interval[i]['addtime']) - int(interval[i-1]['addtime'])) / 3600
             
-            # 根据数据结构获取使用率
+            # 获取前后两个时间点的使用率
             if usage_key:
-                # 检查data是否为字典类型
                 if isinstance(interval[i-1]['data'], dict):
-                    usage_diff = interval[i-1]['data'][usage_key] - interval[i]['data'][usage_key]
-                    interval_current_usage = interval[i-1]['data'][usage_key]
+                    prev_usage = interval[i-1]['data'][usage_key]
+                    curr_usage = interval[i]['data'][usage_key]
                 else:
-                    # 如果data不是字典，直接使用data值
-                    usage_diff = interval[i-1]['data'] - interval[i]['data']
-                    interval_current_usage = interval[i-1]['data']
+                    prev_usage = interval[i-1]['data']
+                    curr_usage = interval[i]['data']
             else:
-                usage_diff = interval[i-1]['data'] - interval[i]['data']
-                interval_current_usage = interval[i-1]['data']
-                
+                prev_usage = interval[i-1]['data']
+                curr_usage = interval[i]['data']
+            
+            # 记录当前使用率
+            interval_current_usage = curr_usage
+            
             if time_diff > 0:
-                current_growth_rate = usage_diff / time_diff / 100  # 当前增长率
+                # 计算每小时的使用率增长量
+                usage_diff = curr_usage - prev_usage
+                current_growth_rate = usage_diff / time_diff
                 
-                # 获取上一次的平滑增长率
-                last_smoothed_rate = analyze_history_records.last_smoothed_rate if hasattr(analyze_history_records, 'last_smoothed_rate') else current_growth_rate
+                # 如果是第一次计算，直接使用当前增长率
+                if last_smoothed_rate is None:
+                    smoothed_growth_rate = current_growth_rate
+                else:
+                    # 计算新的平滑增长率
+                    smoothed_growth_rate = alpha * current_growth_rate + (1 - alpha) * last_smoothed_rate
                 
-                # 计算新的平滑增长率
-                smoothed_growth_rate = alpha * current_growth_rate + (1 - alpha) * last_smoothed_rate
-                
-                # 更新存储的平滑增长率
-                analyze_history_records.last_smoothed_rate = smoothed_growth_rate
+                # 更新上一次的平滑增长率
+                last_smoothed_rate = smoothed_growth_rate
         
         if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
             interval_growth_rates.append(smoothed_growth_rate)
@@ -2227,6 +2236,18 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
     if alarm['level'] is not None:
         # 记录告警日志
         current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 获取历史数据点
+        history_points = []
+        for interval in analyze_history_records.intervals:
+            for point in interval:
+                time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(point['addtime'])))
+                if isinstance(point['data'], dict):
+                    usage = point['data'].get('usedPercent', 0)
+                else:
+                    usage = point['data']
+                history_points.append(f"  - {time_str}: {usage:.1f}%")
+        
         writeFileLog(
             f"\n{'='*80}\n"
             f"告警时间: {current_time_str}\n"
@@ -2238,6 +2259,7 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
             f"  - 使用率: {current_usage:.1f}%\n"
             f"  - 平滑增长率: {smoothed_growth_rate:.4f}\n"
             f"  - 区间增长率: {interval_growth_rates}\n"
+            f"历史数据点:\n" + "\n".join(history_points) + "\n"
             f"预测信息:\n"
             f"  - 预计在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%\n"
             f"  - 预测紧急告警时间: {prediction_critical_hours}小时\n"
@@ -2248,9 +2270,9 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
         
         # 设置告警内容
         if resource_type == 'disk':
-            alarm['content'] = f"磁盘 [{resource_name}] 使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
+            alarm['content'] = f"磁盘 [{resource_name}] 使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%/h，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
         else:
-            alarm['content'] = f"内存使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
+            alarm['content'] = f"内存使用率 {current_usage:.1f}%，按照当前的平滑增长率{smoothed_growth_rate:.1f}%/h，可能会在 {hours_to_threshold:.1f} 小时后达到阈值 {warning_threshold}%"
     
     return alarm
 
@@ -2308,6 +2330,9 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
             except Exception as e:
                 continue
         
+        # 按照addtime排序
+        history_data_list.sort(key=lambda x: x['addtime'], reverse=False)
+
         # 如果没有足够的历史数据，直接返回
         if len(history_data_list) < 2:
             return alarm
