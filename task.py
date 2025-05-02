@@ -353,6 +353,8 @@ def hostGrowthAlarmTask():
             prediction_warning_hours = config.get('prediction_warning_hours', 72)
             notify_critical_interval = config.get('notify_critical_interval', 600)
             notify_warning_interval = config.get('notify_warning_interval', 1800)
+            enable_memory_monitor = config.get('enable_memory_monitor', False)  # 默认开启内存监控
+            enable_disk_monitor = config.get('enable_disk_monitor', False)  # 默认开启磁盘监控
             
             current_time = int(time.time())
             
@@ -399,21 +401,26 @@ def hostGrowthAlarmTask():
                     continue
                 
                 # 分析内存和磁盘
-                memory_alarm = jh.analyze_resource_growth(
-                    host_id, host_name, latest_record, history_records, 
-                    'memory', 'mem_info', warning_threshold, 
-                    prediction_critical_hours, prediction_warning_hours,
-                    notify_critical_interval, notify_warning_interval,
-                    current_time, scan_history_minutes
-                )
+                memory_alarm = None
+                disk_alarm = None
                 
-                disk_alarm = jh.analyze_resource_growth(
-                    host_id, host_name, latest_record, history_records, 
-                    'disk', 'disk_info', warning_threshold, 
-                    prediction_critical_hours, prediction_warning_hours,
-                    notify_critical_interval, notify_warning_interval,
-                    current_time, scan_history_minutes
-                )
+                if enable_memory_monitor:
+                    memory_alarm = jh.analyze_resource_growth(
+                        host_id, host_name, latest_record, history_records, 
+                        'memory', 'mem_info', warning_threshold, 
+                        prediction_critical_hours, prediction_warning_hours,
+                        notify_critical_interval, notify_warning_interval,
+                        current_time, scan_history_minutes
+                    )
+                
+                if enable_disk_monitor:
+                    disk_alarm = jh.analyze_resource_growth(
+                        host_id, host_name, latest_record, history_records, 
+                        'disk', 'disk_info', warning_threshold, 
+                        prediction_critical_hours, prediction_warning_hours,
+                        notify_critical_interval, notify_warning_interval,
+                        current_time, scan_history_minutes
+                    )
                 
                 # 合并告警信息
                 final_alarm = {
