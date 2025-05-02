@@ -2092,10 +2092,10 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         usage_key: 如果数据是字典，指定使用率的键名
     
     Returns:
-        tuple: (smoothed_growth_rate, current_usage)
+        tuple: (smoothed_growth_rate, current_usage, interval_growth_rates, interval_alarms)
     """
     if len(history_data_list) < 2:
-        return None, None, None
+        return None, None, None, None
         
     # 将历史数据分成3个区间
     interval_size = len(history_data_list) // 3
@@ -2111,6 +2111,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
     
     # 计算每个区间的增长率
     interval_growth_rates = []
+    interval_alarms = []  # 记录每个区间是否触发告警
     current_usage = None
     
     for interval in intervals:
@@ -2118,16 +2119,24 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
             continue
             
         smoothed_growth_rate = None
+        interval_current_usage = None
+        
         for i in range(1, len(interval)):
             time_diff = (int(interval[i-1]['addtime']) - int(interval[i]['addtime'])) / 3600  # 转换为小时
             
             # 根据数据结构获取使用率
             if usage_key:
-                usage_diff = interval[i-1]['data'][usage_key] - interval[i]['data'][usage_key]
-                current_usage = interval[i-1]['data'][usage_key]
+                # 检查data是否为字典类型
+                if isinstance(interval[i-1]['data'], dict):
+                    usage_diff = interval[i-1]['data'][usage_key] - interval[i]['data'][usage_key]
+                    interval_current_usage = interval[i-1]['data'][usage_key]
+                else:
+                    # 如果data不是字典，直接使用data值
+                    usage_diff = interval[i-1]['data'] - interval[i]['data']
+                    interval_current_usage = interval[i-1]['data']
             else:
                 usage_diff = interval[i-1]['data'] - interval[i]['data']
-                current_usage = interval[i-1]['data']
+                interval_current_usage = interval[i-1]['data']
                 
             if time_diff > 0:
                 current_growth_rate = usage_diff / time_diff / 100  # 当前增长率
@@ -2143,9 +2152,15 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         
         if smoothed_growth_rate is not None and smoothed_growth_rate > 0:
             interval_growth_rates.append(smoothed_growth_rate)
+            # 记录当前区间的使用率
+            current_usage = interval_current_usage
+            # 判断当前区间是否触发告警
+            interval_alarms.append(True)
+        else:
+            interval_alarms.append(False)
     
     if not interval_growth_rates:
-        return None, current_usage, None
+        return None, current_usage, None, None
     
     # 计算加权平均增长率（最近的区间权重更大）
     weights = [0.5, 0.3, 0.2] if len(interval_growth_rates) == 3 else [0.6, 0.4]
@@ -2161,7 +2176,7 @@ def analyze_history_records(history_data_list, alpha=0.3, usage_key=None):
         if std_dev > mean * 0.5:  # 波动超过均值的50%
             weighted_growth_rate *= 0.7  # 降低30%
     
-    return weighted_growth_rate, current_usage, interval_growth_rates
+    return weighted_growth_rate, current_usage, interval_growth_rates, interval_alarms
 
 def check_and_log_alarm(host_id, host_name, resource_type, resource_name, current_usage, 
                        smoothed_growth_rate, interval_growth_rates, hours_to_threshold, warning_threshold,
@@ -2177,6 +2192,7 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
         resource_name: 资源名称（内存/挂载点路径）
         current_usage: 当前使用率
         smoothed_growth_rate: 平滑增长率
+        interval_growth_rates: 各区间增长率列表
         hours_to_threshold: 预计达到阈值的小时数
         warning_threshold: 告警阈值
         prediction_critical_hours: 预测达到阈值的小时数（紧急）
@@ -2192,6 +2208,12 @@ def check_and_log_alarm(host_id, host_name, resource_type, resource_name, curren
         'content': '',
         'notify_interval': 0
     }
+    
+    # 检查是否满足滞后告警条件（2/3的区间触发告警）
+    if interval_growth_rates and len(interval_growth_rates) >= 2:
+        trigger_count = sum(1 for rate in interval_growth_rates if rate > 0)
+        if trigger_count < len(interval_growth_rates) * 2 / 3:
+            return alarm
     
     if hours_to_threshold <= prediction_critical_hours:
         alarm['level'] = 'critical'
@@ -2310,7 +2332,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
                 
                 if len(mount_point_history) >= 2:
                     # 计算加权平均增长率
-                    weighted_growth_rate, _, interval_growth_rates = analyze_history_records(mount_point_history, alpha)
+                    weighted_growth_rate, _, interval_growth_rates, _ = analyze_history_records(mount_point_history, alpha, 'usedPercent')
                     
                     if weighted_growth_rate is not None:
                         hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
@@ -2335,7 +2357,7 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
             current_usage = latest_data['usedPercent']
             
             # 计算加权平均增长率
-            weighted_growth_rate, _, interval_growth_rates = analyze_history_records(history_data_list, alpha, 'usedPercent')
+            weighted_growth_rate, _, interval_growth_rates, _ = analyze_history_records(history_data_list, alpha, 'usedPercent')
             
             if weighted_growth_rate is not None:
                 hours_to_threshold = (warning_threshold - current_usage) / weighted_growth_rate
