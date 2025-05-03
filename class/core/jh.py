@@ -2097,6 +2097,22 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
     if len(history_data_list) < 2:
         return None, None, None, None
         
+    # 计算全段的首尾增长率
+    first_record = history_data_list[0]
+    last_record = history_data_list[-1]
+    if usage_key:
+        if isinstance(first_record['data'], dict):
+            first_usage = first_record['data'][usage_key]
+            last_usage = last_record['data'][usage_key]
+        else:
+            first_usage = first_record['data']
+            last_usage = last_record['data']
+    else:
+        first_usage = first_record['data']
+        last_usage = last_record['data']
+    time_span = (int(last_record['addtime']) - int(first_record['addtime'])) / 3600
+    full_segment_rate = (last_usage - first_usage) / time_span if time_span > 0 else 0
+        
     # 将历史数据分成3个区间
     interval_size = len(history_data_list) // 3
     if interval_size < 2:  # 如果数据太少，只分成2个区间
@@ -2193,7 +2209,7 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
                 interval_growth_rates.append(final_growth_rate)
                 # 记录当前区间的使用率
                 current_usage = interval_current_usage
-                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {current_usage}, 平滑增长率: {smoothed_growth_rate}, 移动平均增长率: {moving_avg_rate}, 首位增长率: {first_last_rate}, 最终增长率: {final_growth_rate}")
+                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {current_usage}, 平滑增长率: {smoothed_growth_rate}, 移动平均增长率: {moving_avg_rate}, 首尾增长率: {first_last_rate}, 最终增长率: {final_growth_rate}")
                 # 判断当前区间是否触发告警
                 interval_alarms.append(True)
             else:
@@ -2218,9 +2234,12 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
         if std_dev > mean * 0.5:  # 波动超过均值的50%
             weighted_growth_rate *= 0.7  # 降低30%
     
-    print(f"### 加权增长率: {weighted_growth_rate}, 当前使用率: {current_usage}, 区间增长率: {interval_growth_rates}, 区间告警: {interval_alarms}")
+    # 取全段首尾增长率和加权增长率的较小值
+    final_weighted_growth_rate = min(weighted_growth_rate, full_segment_rate)
     
-    return weighted_growth_rate, current_usage, interval_growth_rates, interval_alarms
+    print(f"### 全段首尾增长率: {full_segment_rate}, 加权增长率: {weighted_growth_rate}, 最终增长率: {final_weighted_growth_rate}, 当前使用率: {current_usage}, 区间增长率: {interval_growth_rates}, 区间告警: {interval_alarms}")
+    
+    return final_weighted_growth_rate, current_usage, interval_growth_rates, interval_alarms
 
 def check_and_log_alarm(host_id, host_name, resource_type, resource_name, current_usage, 
                        smoothed_growth_rate, interval_growth_rates, hours_to_threshold, warning_threshold,
