@@ -2180,12 +2180,20 @@ def analyze_history_records(history_data_list, alpha=0.5, usage_key=None):
             # 计算移动平均增长率
             if growth_rates:
                 moving_avg_rate = sum(growth_rates) / len(growth_rates)
-                # 取平滑增长率和移动平均增长率的最小值
-                final_growth_rate = min(smoothed_growth_rate, moving_avg_rate)
+                
+                # 计算首尾增长率（第一个和最后一个数据点的增长率）
+                first_usage = usages[0]
+                last_usage = usages[-1]
+                time_span = (int(interval[-1]['addtime']) - int(interval[0]['addtime'])) / 3600
+                first_last_rate = (last_usage - first_usage) / time_span if time_span > 0 else 0
+                
+                # 取三个增长率中的最小值
+                final_growth_rate = min(smoothed_growth_rate, moving_avg_rate, first_last_rate)
+                
                 interval_growth_rates.append(final_growth_rate)
                 # 记录当前区间的使用率
                 current_usage = interval_current_usage
-                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {current_usage}, 平滑增长率: {smoothed_growth_rate}, 移动平均增长率: {moving_avg_rate}, 最终增长率: {final_growth_rate}")
+                # print(f"### 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(interval[i]['addtime'])))}, 当前使用率: {current_usage}, 平滑增长率: {smoothed_growth_rate}, 移动平均增长率: {moving_avg_rate}, 首位增长率: {first_last_rate}, 最终增长率: {final_growth_rate}")
                 # 判断当前区间是否触发告警
                 interval_alarms.append(True)
             else:
