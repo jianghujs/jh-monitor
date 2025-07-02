@@ -18,6 +18,8 @@ fi
 sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
 
 filebeat setup -e > /tmp/filebeat_setup.log 2>&1
+echo "filebeat正在安装..."
+
 service filebeat start
 systemctl enable filebeat
 
