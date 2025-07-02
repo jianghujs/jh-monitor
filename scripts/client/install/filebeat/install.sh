@@ -17,7 +17,7 @@ fi
 # 替换文件中的IP为当前服务器的IP
 sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
 
-filebeat setup -e
+filebeat setup -e > /tmp/filebeat_setup.log 2>&1
 service filebeat start
 systemctl enable filebeat
 
