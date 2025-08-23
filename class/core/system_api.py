@@ -570,10 +570,11 @@ class system_api:
             he = 15
         if he == 1:
             for i in range(length):
-                data[i]['addtime'] = time.strftime(
-                    '%m/%d %H:%M', time.localtime(float(data[i]['addtime'])))
-                if tomem and data[i]['mem'] > 100:
-                    data[i]['mem'] = data[i]['mem'] / mPre
+                if isinstance(data[i], dict):
+                    data[i]['addtime'] = time.strftime(
+                        '%m/%d %H:%M', time.localtime(float(data[i]['addtime'])))
+                    if tomem and data[i]['mem'] > 100:
+                        data[i]['mem'] = data[i]['mem'] / mPre
 
             return data
         else:
