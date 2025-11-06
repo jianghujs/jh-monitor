@@ -482,7 +482,7 @@ def hostGrowthAlarmTask():
                     """
                     
                     jh.notifyMessage(
-                        title=f'资源增长预警-{alarm_level_map[final_alarm["level"]]}', 
+                        title=f'资源增长预警-{alarm_level_map[final_alarm["level"]]}：{host_name} {now_time}',
                         msg=html_msg, 
                         msgtype='html',
                         stype='资源增长预警', 
@@ -500,7 +500,7 @@ def hostGrowthAlarmTask():
         print(f"{Fore.RED}★ ========= [resourceGrowthAlarm] ERROR：{str(ex)} {Style.RESET_ALL}")
         
         notify_msg = jh.generateCommonNotifyMessage("资源增长预测异常：" + str(ex))
-        jh.notifyMessage(title='资源增长预测异常通知', msg=notify_msg, stype='资源增长预测', trigger_time=3600)
+        jh.notifyMessage(title='资源增长预测异常通知：{} {}'.format(jh.getConfig('title'), jh.getDateFromNow()), msg=notify_msg, stype='资源增长预测', trigger_time=3600)
         
         time.sleep(300)  # 出错后等待5分钟再重试
         hostGrowthAlarmTask()  # 递归重启
