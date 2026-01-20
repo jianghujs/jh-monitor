@@ -9,21 +9,26 @@ $(document).ready(function() {
 });
 
 function toSize(a) {
-  if (a === '' || a === null) {
+  var num = toNumber(a, null);
+  if (num === null) {
     return '';
   }
 	var d = [" B", " KB", " MB", " GB", " TB", " PB"];
 	var e = 1024;
 	for(var b = 0; b < d.length; b++) {
-		if(a < e) {
-			return(b == 0 ? a : a.toFixed(2)) + d[b]
+		if(num < e) {
+			return(b == 0 ? num : num.toFixed(2)) + d[b]
 		}
-		a /= e
+		num /= e
 	}
 }
 
 function toTime(ts) {
-  var d = new Date(ts * 1000);
+  var num = toNumber(ts, null);
+  if (num === null) {
+    return '';
+  }
+  var d = new Date(num * 1000);
   var year = d.getFullYear();
   var month = d.getMonth() + 1;
   var day = d.getDate();
@@ -111,16 +116,81 @@ day=d.getDate();
 function toSizeMWithUnit(bytes){
   var c = 1024 * 1024;
   var b = '';
-  if(bytes != '' && bytes != null && bytes > 0){
-    b = (bytes/c).toFixed(2) + 'MB';
+  var num = toNumber(bytes, null);
+  if(num !== null && num > 0){
+    b = (num/c).toFixed(2) + 'MB';
   }
   return b;
+}
+
+function normalizeText(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'number' && isNaN(value)) {
+    return '';
+  }
+  var text = String(value);
+  var trimmed = text.trim();
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined' || trimmed === 'NaN') {
+    return '';
+  }
+  return text;
+}
+
+function displayText(value, fallback) {
+  var text = normalizeText(value);
+  if (text === '') {
+    return fallback || '--';
+  }
+  return text;
+}
+
+function isValidNumber(value) {
+  var text = normalizeText(value);
+  if (text === '') {
+    return false;
+  }
+  var num = Number(text);
+  return !isNaN(num) && isFinite(num);
+}
+
+function toNumber(value, fallback) {
+  var text = normalizeText(value);
+  if (text === '') {
+    return fallback;
+  }
+  var num = Number(text);
+  if (!isNaN(num) && isFinite(num)) {
+    return num;
+  }
+  return fallback;
+}
+
+function formatSizeValue(value, fallback) {
+  var size = toSize(value);
+  if (size === '' || size === undefined) {
+    return fallback || '--';
+  }
+  return size;
+}
+
+function formatRateValue(value, fallback) {
+  var size = toSize(value);
+  if (size === '' || size === undefined) {
+    return fallback || '--';
+  }
+  return size + '/S';
 }
 
 //格式化值
 function formatValue(v, unit = '') {
   // console.log(v, unit, typeof v)
-  return (v === null || v === undefined || v === '' || typeof v === 'undefined')? '': (v + unit);
+  var text = normalizeText(v);
+  if (text === '') {
+    return '';
+  }
+  return text + unit;
 }
 
 

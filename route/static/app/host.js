@@ -35,16 +35,23 @@ function getWeb(page, search, host_group_id) {
 		for (var i = 0; i < data.data.length; i++) {
 
       const { net_info, load_avg } = data.data[i];
+      const hostName = normalizeText(data.data[i].host_name);
+      const hostNameDisplay = displayText(hostName);
+      const hostIp = normalizeText(data.data[i].ip);
+      const hostIpDisplay = displayText(hostIp);
+      const hostGroupName = displayText(data.data[i].host_group_name);
+      const hostEdate = normalizeText(data.data[i].edate);
+      const hostAddtime = normalizeText(data.data[i].addtime);
       // 主机名称
       let name = '';
       name += `
       <div class="flex align-center">
-          <span>${data.data[i].host_name}</span>
-          <span style='margin-left: 5px;' onclick="openEditHostName('${data.data[i].host_id}','${data.data[i].host_name}')\" title='修改名称' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit'></span>
+          <span>${hostNameDisplay}</span>
+          <span style='margin-left: 5px;' onclick="openEditHostName('${data.data[i].host_id}','${hostName}')\" title='修改名称' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit'></span>
       </div>
       <div>
-          <span>${data.data[i].ip}</span>
-          <span style='margin-left: 5px;' onclick="copyText('${data.data[i].ip}')\" title='复制IP' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-copy'></span>
+          <span>${hostIpDisplay}</span>
+          <span style='margin-left: 5px;' onclick="copyText('${hostIp}')\" title='复制IP' class='text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-copy'></span>
       </div>
       `
 
@@ -57,21 +64,25 @@ function getWeb(page, search, host_group_id) {
 
       let host_group = `
         <div class="flex align-center">
-          <span>${(formatValue(data.data[i]['host_group_name']) || '--')}</span>
-          <span  onclick="openChangeHostGroup('${data.data[i].host_id}','${data.data[i].host_name}','${data.data[i].host_group_id}')\" style='color:rgb(92, 184, 92)' class='ml-2 text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit' title='修改分组'></span>
+          <span>${hostGroupName}</span>
+          <span  onclick="openChangeHostGroup('${data.data[i].host_id}','${hostName}','${data.data[i].host_group_id}')\" style='color:rgb(92, 184, 92)' class='ml-2 text-2xl btlink opacity-60 hover:opacity-100 cursor-pointer glyphicon glyphicon-edit' title='修改分组'></span>
         </div>
       `;
 
       // 负载状态 
       var loadColor, occupy, averageText = '';
-      let avg = load_avg['1min']
-      let max = load_avg['max'] || 1
-      occupy = Math.round((avg / max) * 100);
-      if (occupy > 100) Occupy = 100;
+      let avg = toNumber(load_avg && load_avg['1min'], null);
+      let max = toNumber(load_avg && load_avg['max'], 1);
+      if (max === null || max <= 0) {
+        max = 1;
+      }
 
       // 负载
       let load_status = '';
-      if (occupy != undefined) {
+      if (avg !== null) {
+        occupy = Math.round((avg / max) * 100);
+        if (occupy > 100) occupy = 100;
+        if (occupy < 0) occupy = 0;
         let load_percent = occupy;
         load_status = `<div class="load-usage" title="${load_percent}%">
           <div class="d-flex flex-column relative">
@@ -92,8 +103,8 @@ function getWeb(page, search, host_group_id) {
 
       // CPU使用率
       let cpu_status = '';
-      if (data.data[i]['cpu_info']['percent'] !== undefined) {
-        let cpu_percent = data.data[i]['cpu_info']['percent'];
+      let cpu_percent = toNumber(data.data[i].cpu_info && data.data[i].cpu_info.percent, null);
+      if (cpu_percent !== null) {
         cpu_status = `<div class="cpu-usage" title="${cpu_percent}%">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
@@ -113,8 +124,8 @@ function getWeb(page, search, host_group_id) {
 
       // 内存使用率
       let mem_status = '';
-      if (data.data[i].mem_info) {
-        let mem_percent = data.data[i]['mem_info']['usedPercent']
+      let mem_percent = toNumber(data.data[i].mem_info && data.data[i].mem_info.usedPercent, null);
+      if (mem_percent !== null) {
         mem_status = `<div class="mem-usage" title="${mem_percent}%">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
@@ -136,25 +147,37 @@ function getWeb(page, search, host_group_id) {
       let net_speed = '';
       let net_total = '';
       if (net_info) {
-        net_speed += "<div>" + toSize(net_info.up) + "/S</div>";
-        net_speed += "<div>" + toSize(net_info.down) + "/S</div>";
-        net_total += "<div>" + toSize(net_info.upTotal) + "</div>";
-        net_total += "<div>" + toSize(net_info.downTotal) + "</div>";
+        net_speed += "<div>" + formatRateValue(net_info.up) + "</div>";
+        net_speed += "<div>" + formatRateValue(net_info.down) + "</div>";
+        net_total += "<div>" + formatSizeValue(net_info.upTotal) + "</div>";
+        net_total += "<div>" + formatSizeValue(net_info.downTotal) + "</div>";
+      } else {
+        net_speed += "<div>--</div>";
+        net_speed += "<div>--</div>";
+        net_total += "<div>--</div>";
+        net_total += "<div>--</div>";
       }
 
       // 磁盘;
       let disk_total = 0;
       let disk_used = 0;
-      let disk_percent = 100;
+      let disk_percent = null;
       let disk_speed = ''
       let disk_status = '';
 			if (data.data[i].disk_info && data.data[i].disk_info.length > 0) {
-        disk_total = (data.data[i].disk_info[0]['total'] || 0)
-        disk_used = (data.data[i].disk_info[0]['used'] || 0)
-        disk_percent = data.data[i].disk_info[0]['usedPercent'] || 0;
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['readSpeed'] || 0) + "/S</div>";
-        disk_speed += "<div>" + toSize(data.data[i].disk_info[0]['writeSpeed'] || 0) + "/S</div>";
-        disk_status = `<div class="disk-usage" title="${disk_percent}%（${toSize(disk_used)}/${toSize(disk_total)}）">
+        let disk_info = data.data[i].disk_info[0];
+        disk_total = toNumber(disk_info['total'], 0);
+        disk_used = toNumber(disk_info['used'], 0);
+        disk_percent = toNumber(disk_info['usedPercent'], null);
+        if (disk_percent === null && disk_total > 0) {
+          disk_percent = Math.round((disk_used / disk_total) * 100);
+        }
+        disk_speed += "<div>" + formatRateValue(disk_info['readSpeed']) + "</div>";
+        disk_speed += "<div>" + formatRateValue(disk_info['writeSpeed']) + "</div>";
+        if (disk_percent === null) {
+          disk_status = "<span>--</span>";
+        } else {
+          disk_status = `<div class="disk-usage" title="${disk_percent}%（${formatSizeValue(disk_used, '0 B')}/${formatSizeValue(disk_total, '0 B')}）">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
               <div class="progress-bar ${disk_percent >= 80 ? 'progress-bar-danger': (disk_percent >= 60? 'progress-bar-warning': 'progress-bar-success')}" role="progressbar" 
@@ -167,6 +190,7 @@ function getWeb(page, search, host_group_id) {
             </div>
           </div>
         </div>`;
+        }
       } else {
         disk_status = "<span>--</span>";
       }
@@ -199,12 +223,12 @@ function getWeb(page, search, host_group_id) {
         opt += `<a href='${data.data[i].host_info.pvePanelUrl}' class='btlink' target='_blank'>打开PVE面板 | </a>`;
       }
       opt += `
-        <a href='javascript:;' class='btlink' onclick="openHostDetail('${data.data[i].host_id}','${data.data[i].host_name}','${data.data[i].edate}','${data.data[i].addtime}')">详情</a>
-        | <a href='javascript:;' class='btlink' onclick="hostDelete('${data.data[i].host_id}','${data.data[i].host_name}')" title='删除主机'>删除</a>
+        <a href='javascript:;' class='btlink' onclick="openHostDetail('${data.data[i].host_id}','${hostName}','${hostEdate}','${hostAddtime}')">详情</a>
+        | <a href='javascript:;' class='btlink' onclick="hostDelete('${data.data[i].host_id}','${hostName}')" title='删除主机'>删除</a>
       `;
       
 
-			body = "<tr><td><input type='checkbox' name='id' title='"+data.data[i].host_name+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
+			body = "<tr><td><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
 					<td>" + host_group + "</td>\
