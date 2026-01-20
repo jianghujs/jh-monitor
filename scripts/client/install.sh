@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 安装脚本：bash /www/server/jh-monitor/scripts/client/install.sh  install  http://192.168.7.73:10844
+# 安装脚本：bash /www/server/jh-monitor/scripts/client/install.sh install http://192.168.7.73:10844 [cn]
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -8,6 +8,8 @@ export PATH
 USERNAME="ansible_user"
 SSH_DIR="/home/$USERNAME/.ssh"
 AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
+DEFAULT_RAW_BASE="https://raw.githubusercontent.com/jianghujs/jh-monitor/master"
+CN_RAW_BASE="https://gitee.com/jianghujs/jh-monitor/raw/master"
 
 prompt()
 {
@@ -84,7 +86,7 @@ add_server_ssh_cert(){
 
 config_filebeat() {
     # 安装filebeat
-    wget -O /tmp/install_filebeat.sh https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install/filebeat/install.sh && bash /tmp/install_filebeat.sh
+    wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh" && bash /tmp/install_filebeat.sh "$net_env_cn"
 }
 
 notify_server_add_host(){
@@ -129,6 +131,11 @@ notify_server_add_host(){
 
 action="${1}"
 monitor_url="${2}"
+net_env_cn="${3}"
+RAW_BASE="$DEFAULT_RAW_BASE"
+if [ "$net_env_cn" == "cn" ]; then
+  RAW_BASE="$CN_RAW_BASE"
+fi
 
 if [ "$action" == "uninstall" ]; then
     echo "卸载逻辑待实现"

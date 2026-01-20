@@ -1,8 +1,15 @@
 # 安装filebeat
-wget -O /tmp/filebeat.deb https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install/filebeat/filebeat.deb && dpkg -i /tmp/filebeat.deb
+DEFAULT_RAW_BASE="https://raw.githubusercontent.com/jianghujs/jh-monitor/master"
+CN_RAW_BASE="https://gitee.com/jianghujs/jh-monitor/raw/master"
+RAW_BASE="$DEFAULT_RAW_BASE"
+if [ "$1" == "cn" ]; then
+  RAW_BASE="$CN_RAW_BASE"
+fi
+
+wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
 
 # 配置filebeat
-wget -O /tmp/filebeat.yml https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install/filebeat/filebeat.yml 
+wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/filebeat.yml"
 mv /tmp/filebeat.yml /etc/filebeat/filebeat.yml
 chmod 644 /etc/filebeat/filebeat.yml
 
