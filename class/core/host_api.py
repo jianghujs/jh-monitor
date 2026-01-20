@@ -182,9 +182,10 @@ class host_api:
         github_script_url = "https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh"
         gitee_script_url = "https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/client/install.sh"
         command_template = "wget -O /tmp/install.sh %s && bash /tmp/install.sh install http://%s:10844"
+        command_template_cn = "wget -O /tmp/install.sh %s && bash /tmp/install.sh install http://%s:10844 cn"
         return jh.returnJson(True, 'ok', {
             'github': command_template % (github_script_url, server_ip),
-            'gitee': command_template % (gitee_script_url, server_ip)
+            'gitee': command_template_cn % (gitee_script_url, server_ip)
         })
 
     def alarmApi(self):
