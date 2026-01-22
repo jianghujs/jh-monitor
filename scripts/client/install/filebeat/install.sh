@@ -9,7 +9,16 @@ fi
 wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
 
 # 配置filebeat
-wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/filebeat.yml"
+config_type="debian"
+if [ -d /etc/pve ]; then
+  config_type="pve"
+fi
+
+wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/config/filebeat.${config_type}.yml"
+if [ ! -s /tmp/filebeat.yml ]; then
+  echo "错误: 下载 filebeat 配置失败 (${config_type})"
+  exit 1
+fi
 mv /tmp/filebeat.yml /etc/filebeat/filebeat.yml
 chmod 644 /etc/filebeat/filebeat.yml
 
