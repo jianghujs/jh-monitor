@@ -53,6 +53,28 @@ config_ansible_user() {
     
 }
 
+config_run_env() {
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local local_script="${script_dir}/install/ensure_run_env.sh"
+    if [ -f "$local_script" ]; then
+        if ! bash "$local_script" "$net_env_cn"; then
+            show_error "Python 环境初始化失败"
+            exit 1
+        fi
+        return
+    fi
+
+    if ! wget -O /tmp/install_ensure_run_env.sh "${RAW_BASE}/scripts/client/install/ensure_run_env.sh"; then
+        show_error "下载 Python 环境初始化脚本失败"
+        exit 1
+    fi
+    if ! bash /tmp/install_ensure_run_env.sh "$net_env_cn"; then
+        show_error "Python 环境初始化失败"
+        exit 1
+    fi
+}
+
 add_server_ssh_cert(){
     if [ ! -d "$SSH_DIR" ]; then
         mkdir -p "$SSH_DIR"
@@ -155,6 +177,9 @@ elif [ "$action" == "install" ]; then
 
     # 配置ansible用户权限
     config_ansible_user
+
+    # 配置客户端python环境
+    config_run_env
 
     # 配置服务端访问权限
     add_server_ssh_cert
