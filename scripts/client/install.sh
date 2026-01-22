@@ -85,6 +85,10 @@ add_server_ssh_cert(){
 }
 
 config_filebeat() {
+    if check_command_exist filebeat && [ -f /etc/filebeat/filebeat.yml ]; then
+        echo "已安装 filebeat 且存在配置文件，跳过安装。"
+        return 0
+    fi
     # 安装filebeat
     wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh" && bash /tmp/install_filebeat.sh "$net_env_cn"
 }
