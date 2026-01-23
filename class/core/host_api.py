@@ -367,51 +367,90 @@ class host_api:
     def getPanelReportFromES(self):
       try:
         es = jh.getES()
-        query = {
-            "size": 0,
-            "query": {
-                "bool": {
-                    "filter": [
-                        {
-                            "term": {
-                                "log.file.path": "/www/server/jh-panel/logs/report.log"
-                            }
-                        }
-                    ]
-                }
-            },
-            "aggs": {
-                "by_host_ip": {
-                    "terms": {
-                        "field": "host.ip",
-                        "size": 1000
-                    },
-                    "aggs": {
-                        "top_host_hits": {
-                            "top_hits": {
-                                "size": 1,
-                                "sort": [
-                                  {
-                                    "@timestamp": {
-                                      "order": "desc"
-                                    }
-                                  }
-                                ],
-                                "_source": ["message", "@timestamp"] 
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        host_rows = jh.M('host').field('ip').select()
+        if isinstance(host_rows, str):
+          return None
 
-        response = es.search(index="filebeat-*", body=query)
-        panel_report = {} 
+        panel_report = {}
+        host_ips = []
+        for row in host_rows:
+          host_ip = row.get('ip')
+          if host_ip:
+            host_ips.append(host_ip)
 
-        for bucket in response["aggregations"]["by_host_ip"]["buckets"]:
-            ip = bucket["key"]
-            top_hit = bucket["top_host_hits"]["hits"]["hits"][0]
-            panel_report[ip] = top_hit["_source"]["message"]
+        if not host_ips:
+          return panel_report
+
+        msearch_body = []
+        for host_ip in host_ips:
+          msearch_body.append({"index": "filebeat-*"})
+          msearch_body.append({
+              "size": 1,
+              "query": {
+                  "bool": {
+                      "filter": [
+                          {
+                              "bool": {
+                                  "should": [
+                                      {
+                                          "term": {
+                                              "log.file.path.keyword": "/www/server/jh-panel/logs/report.log"
+                                          }
+                                      },
+                                      {
+                                          "term": {
+                                              "log.file.path": "/www/server/jh-panel/logs/report.log"
+                                          }
+                                      }
+                                  ],
+                                  "minimum_should_match": 1
+                              }
+                          },
+                          {
+                              "bool": {
+                                  "should": [
+                                      {
+                                          "term": {
+                                              "host.ip.keyword": host_ip
+                                          }
+                                      },
+                                      {
+                                          "term": {
+                                              "host.ip": host_ip
+                                          }
+                                      }
+                                  ],
+                                  "minimum_should_match": 1
+                              }
+                          }
+                      ]
+                  }
+              },
+              "sort": [
+                  {
+                      "@timestamp": {
+                          "order": "desc"
+                      }
+                  }
+              ],
+              "_source": ["message", "@timestamp", "host.ip"]
+          })
+
+        conn = es.getConn()
+        response = conn.msearch(body=msearch_body)
+        if hasattr(response, "body"):
+          response = response.body
+        elif hasattr(response, "to_dict"):
+          response = response.to_dict()
+
+        responses = response.get("responses", [])
+        for idx, item in enumerate(responses):
+          if idx >= len(host_ips):
+            break
+          host_ip = host_ips[idx]
+          hits = item.get("hits", {}).get("hits", [])
+          if hits:
+            panel_report[host_ip] = hits[0].get("_source", {}).get("message")
         
         return panel_report
       except Exception as e:
