@@ -7,7 +7,14 @@ if [ "$1" == "cn" ]; then
 fi
 
 # wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
-wget -O /tmp/filebeat.deb "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.11.3-amd64.deb" && dpkg -i /tmp/filebeat.deb
+FILEBEAT_VERSION="8.11.3"
+FILEBEAT_DEB="filebeat-${FILEBEAT_VERSION}-amd64.deb"
+FILEBEAT_URL="https://artifacts.elastic.co/downloads/beats/filebeat/${FILEBEAT_DEB}"
+if [ "$1" == "cn" ]; then
+  FILEBEAT_URL="https://mirrors.huaweicloud.com/filebeat/${FILEBEAT_VERSION}/${FILEBEAT_DEB}"
+fi
+
+wget -O /tmp/filebeat.deb "${FILEBEAT_URL}" && dpkg -i /tmp/filebeat.deb
 
 # 配置filebeat
 config_type="debian"
