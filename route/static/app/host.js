@@ -1242,9 +1242,70 @@ function detailPanelReport(host_id) {
   let host = hostList.find(item => item.host_id == host_id);
   let is_pve = host && host.host_info && host.host_info.isPVE;
   let report_data = is_pve ? host.pve_report : host.panel_report;
-  let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = report_data || {};
   let bodyHtml = '';
   if (report_data && report_data.title) {
+    if (is_pve) {
+      let { title, ip, report_time, start_date, end_date } = report_data;
+      let summary_tips = report_data.summary_tips || [];
+      let error_tips = report_data.error_tips || [];
+      let sysinfo_tips = report_data.sysinfo_tips || [];
+      let network_tips = report_data.network_tips || [];
+      let smart_tips = report_data.smart_tips || [];
+      let io_tips = report_data.io_tips || [];
+      let sensor_tips = report_data.sensor_tips || [];
+      let power_tips = report_data.power_tips || [];
+      let render_rows = (items) => items.length ? items.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('') : `<tr><td colspan="2">暂无</td></tr>`;
+
+      bodyHtml = `
+        <div class="panel_report bgw p-5">
+          <div class="title c6 f16 plr15">
+            <h3 class="c6 f16 pull-left">${title}(${ip})-PVE硬件健康报告</h3>
+          </div>
+          <div class="mx-auto leading-10 plr15">
+            <h3 class="pt-5" style="color: #cecece">日期：${start_date}至${end_date}（报告时间：${report_time}）</h3>
+            <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
+                <h3 class="text-2xl mb-2">概要信息：</h3>
+                <ul>
+                ${summary_tips.map(item => `<li>${item}</li>`).join('')}
+                </ul>
+                ${error_tips.length ? `<div class="mt-4" style="color: red;">${error_tips.join('<br/>')}</div>` : ''}
+            </div>
+            <div class="m-auto" style="width: 700px;">
+              <h3 class="font-bold my-5">系统状态：</h3>
+              <table border class="system-table w-full">
+              ${render_rows(sysinfo_tips)}
+              </table>
+
+              <h3 class="font-bold my-5">网络：</h3>
+              <table border class="w-full">
+              ${render_rows(network_tips)}
+              </table>
+
+              <h3 class="font-bold my-5">磁盘SMART：</h3>
+              <table border class="w-full">
+              ${render_rows(smart_tips)}
+              </table>
+
+              <h3 class="font-bold my-5">磁盘IO：</h3>
+              <table border class="w-full">
+              ${render_rows(io_tips)}
+              </table>
+
+              <h3 class="font-bold my-5">传感器：</h3>
+              <table border class="w-full">
+              ${render_rows(sensor_tips)}
+              </table>
+
+              <h3 class="font-bold my-5">电源：</h3>
+              <table border class="w-full">
+              ${render_rows(power_tips)}
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = report_data;
     bodyHtml = `
       <div class="panel_report bgw p-5">
         <div class="title c6 f16 plr15">
@@ -1293,6 +1354,7 @@ function detailPanelReport(host_id) {
         </div>
       </div>
     `;
+    }
   } else {
     bodyHtml = `
       <div class="panel_report bgw p-5">
