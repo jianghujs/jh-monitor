@@ -55,12 +55,24 @@ class host_api:
             if type(_list) == str:
                 return jh.returnJson(False, '获取失败!' + _list)
 
-            panel_report = self.getPanelReportFromES()
+            panel_report = self.getPanelReportFromES(_list)
+            pve_report = self.getPVEReportFromES(_list)
 
             # 循环转换详情数据
             for i in range(len(_list)):
-                if panel_report:
-                  _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
+                is_jhpanel = _list[i].get('is_jhpanel')
+                is_jhpanel = is_jhpanel in (1, True, "1", "true", "True", "yes", "YES")
+                if True or is_jhpanel:
+                  if panel_report:
+                    _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
+                
+                is_pve = _list[i].get('is_pve')
+                is_pve = is_pve in (1, True, "1", "true", "True", "yes", "YES")
+                if is_pve:
+                  if pve_report:
+                    _list[i]['pve_panel'] = pve_report.get(_list[i]['ip'], '{}')
+                
+                
                 _list[i] = self.parseDetailJSONValue(_list[i])
 
             _ret = {}
@@ -364,25 +376,48 @@ class host_api:
         return data
 
     # 从ES获取面板报告
-    def getPanelReportFromES(self):
+    def getPanelReportFromES(self, host_rows):
+      if not host_rows:
+        return {}
+
+      rows = []
+      for row in host_rows:
+        is_jhpanel = row.get('is_jhpanel')
+        is_jhpanel = is_jhpanel in (1, True, "1", "true", "True", "yes", "YES")
+        if True or is_jhpanel:
+          rows.append(row)
+
+      return self._getReportFromES(rows, "/www/server/jh-panel/logs/report.log")
+
+    # 从ES获取PVE面板报告
+    def getPVEReportFromES(self, host_rows):
+      if not host_rows:
+        return {}
+
+      rows = []
+      for row in host_rows:
+        is_pve = row.get('is_pve')
+        is_pve = is_pve in (1, True, "1", "true", "True", "yes", "YES")
+        if is_pve:
+          rows.append(row)
+
+      return self._getReportFromES(rows, "/www/server/os_tool/pve/logs/report.log")
+
+    def _getReportFromES(self, host_rows, log_path):
       try:
         es = jh.getES()
-        host_rows = jh.M('host').field('ip').select()
-        if isinstance(host_rows, str):
-          return None
-
         panel_report = {}
-        host_ips = []
-        for row in host_rows:
-          host_ip = row.get('ip')
-          if host_ip:
-            host_ips.append(host_ip)
-
-        if not host_ips:
+        if not host_rows:
           return panel_report
 
         msearch_body = []
-        for host_ip in host_ips:
+        for row in host_rows:
+          host_ip = row.get('ip')
+          if not host_ip:
+            msearch_body.append({"index": "filebeat-*"})
+            msearch_body.append({"size": 0, "query": {"match_none": {}}})
+            continue
+
           msearch_body.append({"index": "filebeat-*"})
           msearch_body.append({
               "size": 1,
@@ -394,12 +429,12 @@ class host_api:
                                   "should": [
                                       {
                                           "term": {
-                                              "log.file.path.keyword": "/www/server/jh-panel/logs/report.log"
+                                              "log.file.path.keyword": log_path
                                           }
                                       },
                                       {
                                           "term": {
-                                              "log.file.path": "/www/server/jh-panel/logs/report.log"
+                                              "log.file.path": log_path
                                           }
                                       }
                                   ],
@@ -445,9 +480,11 @@ class host_api:
 
         responses = response.get("responses", [])
         for idx, item in enumerate(responses):
-          if idx >= len(host_ips):
+          if idx >= len(host_rows):
             break
-          host_ip = host_ips[idx]
+          host_ip = host_rows[idx].get('ip')
+          if not host_ip:
+            continue
           hits = item.get("hits", {}).get("hits", [])
           if hits:
             panel_report[host_ip] = hits[0].get("_source", {}).get("message")

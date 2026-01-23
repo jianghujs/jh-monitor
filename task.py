@@ -296,6 +296,15 @@ def clientTask():
                             load_avg = host_usage.get('load_avg', {})
                             firewall_info = host_usage.get('firewall_info', {})
                             # backup_info = data.get('get_panel_backup_report.py', [])
+
+                            is_jhpanel_raw = host_info.get('isJHPanel')
+                            is_pve_raw = host_info.get('isPVE')
+                            if is_jhpanel_raw is not None or is_pve_raw is not None:
+                                is_jhpanel = is_jhpanel_raw in (1, True, "1", "true", "True", "yes", "YES")
+                                is_pve = is_pve_raw in (1, True, "1", "true", "True", "yes", "YES")
+                                sql.table('host').where('host_id=?', (host['host_id'],)).save(
+                                    'is_jhpanel,is_pve', (is_jhpanel, is_pve)
+                                )
                             
                             host_detail.update({
                                 'host_status': 'Running',

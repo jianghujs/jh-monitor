@@ -51,24 +51,8 @@ def get_last_boot_time():
     return ' '.join(last_boot_time)
 
 def is_jh_panel_installed():
-    try:
-        # 执行命令并获取输出
-        result = subprocess.run(
-            "ps -ef | grep -v grep | grep jh-panel",
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # 检查输出是否包含 jh-panel
-        if result.stdout:
-            return True
-        else:
-            return False
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return False
+    # 检查 /www/server/jh-panel 目录是否存在
+    return os.path.exists('/www/server/jh-panel')
 
 def get_jh_panel_url():
     panel_path = "/www/server/jh-panel"
