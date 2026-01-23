@@ -6,7 +6,8 @@ if [ "$1" == "cn" ]; then
   RAW_BASE="$CN_RAW_BASE"
 fi
 
-wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
+# wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
+wget -O /tmp/filebeat.deb "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.11.3-amd64.deb" && dpkg -i /tmp/filebeat.deb
 
 # 配置filebeat
 config_type="debian"
