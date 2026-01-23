@@ -70,7 +70,7 @@ class host_api:
                 is_pve = is_pve in (1, True, "1", "true", "True", "yes", "YES")
                 if is_pve:
                   if pve_report:
-                    _list[i]['pve_panel'] = pve_report.get(_list[i]['ip'], '{}')
+                    _list[i]['pve_report'] = pve_report.get(_list[i]['ip'], '{}')
                 
                 
                 _list[i] = self.parseDetailJSONValue(_list[i])
@@ -221,6 +221,7 @@ class host_api:
             host_detail['backup_info'] = json.loads(host_detail['backup_info']) if host_detail.get('backup_info') is not None else {}
             host_detail['temperature_info'] = json.loads(host_detail['temperature_info']) if host_detail.get('temperature_info') is not None else {}    
             host_detail['panel_report'] = json.loads(host_detail['panel_report']) if host_detail.get('panel_report') is not None else {}
+            host_detail['pve_report'] = json.loads(host_detail['pve_report']) if host_detail.get('pve_report') is not None else {}
         except Exception as e:
             traceback.print_exc()
         return host_detail

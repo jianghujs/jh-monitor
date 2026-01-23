@@ -197,8 +197,10 @@ function getWeb(page, search, host_group_id) {
 
       // 报告概览
       let report_summary = '';
-      if (data.data[i].panel_report && data.data[i].panel_report.error_tips) {
-        let error_tips = data.data[i].panel_report.error_tips;
+      let is_pve = data.data[i].host_info && data.data[i].host_info.isPVE;
+      let report_data = is_pve ? data.data[i].pve_report : data.data[i].panel_report;
+      if (report_data && report_data.error_tips) {
+        let error_tips = report_data.error_tips;
         if (error_tips.length > 0) {
           report_summary += `<div style='color: red;'>${error_tips.join('<br/>')}</div>`;
         } else {
@@ -758,7 +760,7 @@ function openHostDetail(host_id,host_name,endTime,addtime,event){
     { title: '基础监控', fun: `detailBaseMonitor('${host_id}')` },
     { title: '日志监控', fun: `detailLogMonitor('${host_id}')` },
     { title: '系统监控', fun: `detailSysMonitor('${host_name}')` },
-    { title: '面板报告', fun: `detailPanelReport('${host_id}')`, hidden: !(host && host.host_info && host.host_info.isJHPanel && host.panel_report) },
+    { title: '面板报告', fun: `detailPanelReport('${host_id}')`, hidden: !(host && host.host_info && ((host.host_info.isJHPanel && host.panel_report) || (host.host_info.isPVE && host.pve_report))) },
   ]
 
 	layer.open({
@@ -1238,10 +1240,11 @@ function detailSysMonitor(host_id, name, msg, status) {
  */
 function detailPanelReport(host_id) {
   let host = hostList.find(item => item.host_id == host_id);
-  let { panel_report } = host;
-  let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = panel_report;
+  let is_pve = host && host.host_info && host.host_info.isPVE;
+  let report_data = is_pve ? host.pve_report : host.panel_report;
+  let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = report_data || {};
   let bodyHtml = '';
-  if ( panel_report && panel_report.title) {
+  if (report_data && report_data.title) {
     bodyHtml = `
       <div class="panel_report bgw p-5">
         <div class="title c6 f16 plr15">
