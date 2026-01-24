@@ -3,6 +3,27 @@ var refreshInterval = 5000; // 默认5秒
 var loadT = layer.load();
 var hostList = [];
 
+function getReportItemColor(item, fallbackColor) {
+  if (item.indexOf('color: red') !== -1 || item.indexOf('color:red') !== -1) {
+    return 'red';
+  }
+  if (item.indexOf('color: orange') !== -1 || item.indexOf('color:orange') !== -1) {
+    return '#faad14';
+  }
+  if (item.indexOf('color: green') !== -1 || item.indexOf('color:green') !== -1) {
+    return 'rgb(92, 184, 92)';
+  }
+  return fallbackColor || '';
+}
+
+function buildReportItemsHtml(items, fallbackColor) {
+  return items.map(item => {
+    let itemColor = getReportItemColor(item, fallbackColor);
+    let styleAttr = itemColor ? ` style="color: ${itemColor};"` : '';
+    return `<div${styleAttr}>${item}</div>`;
+  }).join('');
+}
+
 /**
  * 主机数据列表
  * @param {Number} page   当前页
@@ -199,15 +220,40 @@ function getWeb(page, search, host_group_id) {
       let report_summary = '';
       let is_pve = data.data[i].host_info && data.data[i].host_info.isPVE;
       let report_data = is_pve ? data.data[i].pve_report : data.data[i].panel_report;
-      if (report_data && report_data.error_tips) {
-        let error_tips = report_data.error_tips;
-        if (error_tips.length > 0) {
-          report_summary += `<div style='color: red;'>${error_tips.join('<br/>')}</div>`;
-        } else {
-          report_summary += `<div style='color: rgb(92, 184, 92);'>正常</div>`;
+      let report_items = [];
+      let has_report = report_data && typeof report_data === 'object' && Object.keys(report_data).length > 0;
+      let severity = 'normal';
+      let summary_html = '';
+      let report_items_html = '';
+      if (report_data) {
+        if (report_data.summary_tips && report_data.summary_tips.length > 0) {
+          summary_html = report_data.summary_tips.join(' ');
         }
+        if (report_data.error_tips && report_data.error_tips.length > 0) {
+          report_items = report_data.error_tips;
+          severity = 'error';
+        } else if (report_data.summary_tips && report_data.summary_tips.length > 0) {
+          report_items = report_data.summary_tips;
+          if (summary_html.indexOf('color: red') !== -1 || summary_html.indexOf('color:red') !== -1) {
+            severity = 'error';
+          } else if (summary_html.indexOf('color: orange') !== -1 || summary_html.indexOf('color:orange') !== -1) {
+            severity = 'warning';
+          }
+        }
+      }
+
+      if (has_report) {
+        let is_abnormal = severity !== 'normal';
+        let status_text = is_abnormal ? '异常' : '正常';
+        let status_color = is_abnormal ? (severity === 'warning' ? '#faad14' : 'red') : 'rgb(92, 184, 92)';
+        if (report_items.length > 0) {
+          let itemFallback = severity === 'warning' ? '#faad14' : (severity === 'error' ? 'red' : '');
+          report_items_html = buildReportItemsHtml(report_items, itemFallback);
+        }
+        let data_attr = report_items_html ? ` data-report-full="${encodeURIComponent(report_items_html)}" data-report-severity="${severity}"` : '';
+        report_summary = `<div class="report-summary"${data_attr} style="color: ${status_color};">${status_text}</div>`;
       } else {
-        report_summary += `<div style='color: #cecece;'>暂无</div>`;
+        report_summary = `<div class="report-summary" style="color: #cecece;">暂无</div>`;
       }
 
 
@@ -297,6 +343,8 @@ function getWeb(page, search, host_group_id) {
 		},function(){
 			$(this).removeClass("open");
 		});
+
+    bindReportSummaryTips();
 		//输出分页
 		// $("#webPage").html(data.page);
 		// $("#webPage").html('<div class="site_type"><span>主机分组:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分组</option><option value="0">默认分组</option></select></div>');
@@ -2711,6 +2759,60 @@ function setImg() {
       layer.tips(conterError, that, { time: 0, tips: [1, '#999'] });
   }, function() {
       layer.closeAll('tips');
+  });
+}
+
+var reportTipIndex = null;
+var reportTipCloseTimer = null;
+
+function bindReportSummaryTips() {
+  $('.report-summary').off('mouseenter.reportSummary mouseleave.reportSummary');
+  $('.report-summary').on('mouseenter.reportSummary', function() {
+    if (reportTipCloseTimer) {
+      clearTimeout(reportTipCloseTimer);
+      reportTipCloseTimer = null;
+    }
+    layer.closeAll('tips');
+    var that = this;
+    var fullHtml = $(this).attr("data-report-full");
+    if (!fullHtml) {
+      return;
+    }
+    try {
+      fullHtml = decodeURIComponent(fullHtml);
+    } catch (e) {
+      fullHtml = '';
+    }
+    if (!fullHtml) {
+      return;
+    }
+    reportTipIndex = layer.tips(fullHtml, that, { time: 0, tips: [1, '#999'], maxWidth: 420 });
+
+    var tipElem = $('#layui-layer' + reportTipIndex);
+    tipElem.off('mouseenter.reportSummaryTip mouseleave.reportSummaryTip');
+    tipElem.on('mouseenter.reportSummaryTip', function() {
+      if (reportTipCloseTimer) {
+        clearTimeout(reportTipCloseTimer);
+        reportTipCloseTimer = null;
+      }
+    });
+    tipElem.on('mouseleave.reportSummaryTip', function() {
+      reportTipCloseTimer = setTimeout(function() {
+        if (!$(that).is(':hover')) {
+          layer.closeAll('tips');
+        }
+      }, 120);
+    });
+  }).on('mouseleave.reportSummary', function() {
+    var that = this;
+    reportTipCloseTimer = setTimeout(function() {
+      if ($('#layui-layer' + reportTipIndex).is(':hover')) {
+        return;
+      }
+      if (!$(that).is(':hover')) {
+        layer.closeAll('tips');
+      }
+    }, 120);
   });
 }
 
