@@ -1,0 +1,92 @@
+<style>
+  h3 { font-size: bold; }
+  table {
+      border-top: 1px solid #999;
+      border-left: 1px solid #999;
+      border-spacing: 0;
+      width: 100%;
+  }
+  table tr td {
+      padding: 5px;
+      line-height: 20px;
+  }
+  table tr td:first-child {
+      width: 30%;
+  }
+  table tr td:nth-child(2) {
+      width: 70%;
+  }
+  .project-table tr td:first-child {
+      width: 70%;
+  }
+  .project-table tr td:nth-child(2) {
+      width: 30%;
+  }
+  .system-table tr td:first-child {
+      width: 40%;
+  }
+  .system-table tr td:nth-child(2) {
+      width: 60%;
+  }
+  
+  </style>
+<div class="panel_report bgw p-5">
+  <div class="title c6 f16 plr15">
+    <h3 class="c6 f16 pull-left">{{title}}({{ip}})-服务器运行报告</h3>
+  </div>
+  <div class="mx-auto leading-10 plr15">
+    <h3 class="pt-5" style="color: #cecece">日期：{{ start_date }}至{{ end_date }}（报告时间：{{ report_time }}）</h3>
+    <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
+      <h3 class="text-2xl mb-2">概要信息：</h3>
+      <ul>
+      {% for item in summary_tips %}
+        <li>{{ item }}</li>
+      {% endfor %}
+      </ul>
+    </div>
+    <div class="m-auto" style="width: 600px;">
+      <h3 class="font-bold my-5">系统状态：</h3>
+      <table border class="system-table w-full">
+      {% for item in sysinfo_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+
+      <h3 class="font-bold my-5">备份：</h3>
+      <table border class="w-full">
+      {% for item in backup_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+
+      <h3 class="font-bold my-5">网站：</h3>
+      <table border class="w-full">
+      {% for item in siteinfo_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+
+      <h3 class="font-bold my-5">JianghuJS项目：</h3>
+      <table border class="project-table">
+      {% for item in jianghujsinfo_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+
+      <h3 class="font-bold my-5">Docker项目：</h3>
+      <table border class="project-table w-full">
+      {% for item in dockerinfo_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+
+      <h3 class="font-bold my-5">数据库：</h3>
+      <p style="color: #efefef; font-size: 14px;">提示：由于数据库存储的单位是页，MySQL的InnoDB引擎默认页大小是16KB。如果你添加的数据小于这个数值，可能不会立即反映在数据库大小上。</p>
+      <table border class="w-full">
+      {% for item in mysqlinfo_tips %}
+        <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>

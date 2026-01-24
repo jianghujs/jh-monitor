@@ -4,6 +4,46 @@ var loadT = layer.load();
 var hostList = [];
 var hostReportCronDefault = { type: 'day', where1: '', hour: 0, minute: 0, week: '' };
 var hostReportCron = Object.assign({}, hostReportCronDefault);
+var hostReportTemplates = { panel: null, pve: null };
+var hostReportTemplateQueue = { panel: [], pve: [] };
+
+function fetchHostReportTemplate(reportType, callback) {
+  var type = reportType === 'pve' ? 'pve' : 'panel';
+  if (hostReportTemplates[type] !== null) {
+    callback(hostReportTemplates[type]);
+    return;
+  }
+  if (hostReportTemplateQueue[type].length > 0) {
+    hostReportTemplateQueue[type].push(callback);
+    return;
+  }
+  hostReportTemplateQueue[type].push(callback);
+  $.post('/host/get_host_report_template', { report_type: type }, function(rdata) {
+    var template = '';
+    if (rdata && rdata.status && rdata.data && rdata.data.template) {
+      template = rdata.data.template;
+    }
+    hostReportTemplates[type] = template;
+    var callbacks = hostReportTemplateQueue[type];
+    hostReportTemplateQueue[type] = [];
+    callbacks.forEach(function(fn) {
+      fn(template);
+    });
+  }, 'json').fail(function() {
+    var callbacks = hostReportTemplateQueue[type];
+    hostReportTemplateQueue[type] = [];
+    callbacks.forEach(function(fn) {
+      fn('');
+    });
+  });
+}
+
+function renderHostReportTemplate(template, data) {
+  if (typeof JHNunjucks === 'undefined' || !JHNunjucks.renderString) {
+    return '';
+  }
+  return JHNunjucks.renderString(template, data);
+}
 
 function getReportItemColor(item, fallbackColor) {
   if (item.indexOf('color: red') !== -1 || item.indexOf('color:red') !== -1) {
@@ -1350,6 +1390,68 @@ function detailSysMonitor(host_id, name, msg, status) {
 
 }
 
+function buildEmptyHostReportHtml() {
+  return `
+    <div class="panel_report bgw p-5">
+      <div class="title c6 f16 plr15">
+        <h3 class="c6 f16 pull-left">服务器运行报告</h3>
+      </div>
+      <div class="mx-auto leading-10 plr15">
+        <div class="text-center mt-5">暂无报告内容</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderHostReportHtml(reportData, callback) {
+  fetchHostReportTemplate('panel', function(template) {
+    if (!template) {
+      callback('');
+      return;
+    }
+    var html = renderHostReportTemplate(template, {
+      title: reportData.title || '',
+      ip: reportData.ip || '',
+      report_time: reportData.report_time || '',
+      start_date: reportData.start_date || '',
+      end_date: reportData.end_date || '',
+      summary_tips: reportData.summary_tips || [],
+      sysinfo_tips: reportData.sysinfo_tips || [],
+      backup_tips: reportData.backup_tips || [],
+      siteinfo_tips: reportData.siteinfo_tips || [],
+      jianghujsinfo_tips: reportData.jianghujsinfo_tips || [],
+      dockerinfo_tips: reportData.dockerinfo_tips || [],
+      mysqlinfo_tips: reportData.mysqlinfo_tips || []
+    });
+    callback(html);
+  });
+}
+
+function renderPVEReportHtml(reportData, callback) {
+  fetchHostReportTemplate('pve', function(template) {
+    if (!template) {
+      callback('');
+      return;
+    }
+    var html = renderHostReportTemplate(template, {
+      title: reportData.title || '',
+      ip: reportData.ip || '',
+      report_time: reportData.report_time || '',
+      start_date: reportData.start_date || '',
+      end_date: reportData.end_date || '',
+      summary_tips: reportData.summary_tips || [],
+      error_tips: reportData.error_tips || [],
+      sysinfo_tips: reportData.sysinfo_tips || [],
+      network_tips: reportData.network_tips || [],
+      smart_tips: reportData.smart_tips || [],
+      io_tips: reportData.io_tips || [],
+      sensor_tips: reportData.sensor_tips || [],
+      power_tips: reportData.power_tips || []
+    });
+    callback(html);
+  });
+}
+
 /**
  * 面板报告
  * @param {*} host_id 
@@ -1360,128 +1462,15 @@ function detailPanelReport(host_id) {
   let report_data = is_pve ? host.pve_report : host.panel_report;
   let bodyHtml = '';
   if (report_data && report_data.title) {
-    if (is_pve) {
-      let { title, ip, report_time, start_date, end_date } = report_data;
-      let summary_tips = report_data.summary_tips || [];
-      let error_tips = report_data.error_tips || [];
-      let sysinfo_tips = report_data.sysinfo_tips || [];
-      let network_tips = report_data.network_tips || [];
-      let smart_tips = report_data.smart_tips || [];
-      let io_tips = report_data.io_tips || [];
-      let sensor_tips = report_data.sensor_tips || [];
-      let power_tips = report_data.power_tips || [];
-      let render_rows = (items) => items.length ? items.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('') : `<tr><td colspan="2">暂无</td></tr>`;
-
-      bodyHtml = `
-        <div class="panel_report bgw p-5">
-          <div class="title c6 f16 plr15">
-            <h3 class="c6 f16 pull-left">${title}(${ip})-PVE硬件健康报告</h3>
-          </div>
-          <div class="mx-auto leading-10 plr15">
-            <h3 class="pt-5" style="color: #cecece">日期：${start_date}至${end_date}（报告时间：${report_time}）</h3>
-            <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
-                <h3 class="text-2xl mb-2">概要信息：</h3>
-                <ul>
-                ${summary_tips.map(item => `<li>${item}</li>`).join('')}
-                </ul>
-                ${error_tips.length ? `<div class="mt-4" style="color: red;">${error_tips.join('<br/>')}</div>` : ''}
-            </div>
-            <div class="m-auto" style="width: 700px;">
-              <h3 class="font-bold my-5">系统状态：</h3>
-              <table border class="system-table w-full">
-              ${render_rows(sysinfo_tips)}
-              </table>
-
-              <h3 class="font-bold my-5">网络：</h3>
-              <table border class="w-full">
-              ${render_rows(network_tips)}
-              </table>
-
-              <h3 class="font-bold my-5">磁盘SMART：</h3>
-              <table border class="w-full">
-              ${render_rows(smart_tips)}
-              </table>
-
-              <h3 class="font-bold my-5">磁盘IO：</h3>
-              <table border class="w-full">
-              ${render_rows(io_tips)}
-              </table>
-
-              <h3 class="font-bold my-5">传感器：</h3>
-              <table border class="w-full">
-              ${render_rows(sensor_tips)}
-              </table>
-
-              <h3 class="font-bold my-5">电源：</h3>
-              <table border class="w-full">
-              ${render_rows(power_tips)}
-              </table>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      let { title, ip, report_time, start_date, end_date, summary_tips, sysinfo_tips, backup_tips, siteinfo_tips, jianghujsinfo_tips, dockerinfo_tips, mysqlinfo_tips } = report_data;
-    bodyHtml = `
-      <div class="panel_report bgw p-5">
-        <div class="title c6 f16 plr15">
-          <h3 class="c6 f16 pull-left">${title}(${ip})-服务器运行报告</h3>
-        </div>
-        <div class="mx-auto leading-10 plr15">
-          <h3 class="pt-5" style="color: #cecece">日期：${start_date}至${end_date}（报告时间：${report_time}）</h3>
-          <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
-              <h3 class="text-2xl mb-2">概要信息：</h3>
-              <ul>
-              ${summary_tips.map(item => `<li>${item}</li>`).join('')}
-              </ul>
-          </div>
-          <div class="m-auto" style="width: 600px;">
-            <h3 class="font-bold my-5">系统状态：</h3>
-            <table border class="system-table w-full">
-            ${sysinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-
-            <h3 class="font-bold my-5">备份：</h3>
-            <table border class="w-full">
-            ${backup_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-
-            <h3 class="font-bold my-5">网站：</h3>
-            <table border class="w-full">
-            ${siteinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-
-            <h3 class="font-bold my-5">JianghuJS项目：</h3>
-            <table border class="project-table">
-            ${jianghujsinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-
-            <h3 class="font-bold my-5">Docker项目：</h3>
-            <table border class="project-table w-full">
-            ${dockerinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-
-            <h3 class="font-bold my-5">数据库：</h3>
-            <p style="color: #efefef; font-size: 14px;">提示：由于数据库存储的单位是页，MySQL的InnoDB引擎默认页大小是16KB。如果你添加的数据小于这个数值，可能不会立即反映在数据库大小上。</p>
-            <table border class="w-full">
-            ${mysqlinfo_tips.map(item => `<tr><td>${item.name}</td><td>${item.desc}</td></tr>`).join('')}
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-    }
+    $("#hostdetail-con").html(buildEmptyHostReportHtml());
+    var renderer = is_pve ? renderPVEReportHtml : renderHostReportHtml;
+    renderer(report_data, function(html) {
+      bodyHtml = html || buildEmptyHostReportHtml();
+      $("#hostdetail-con").html(bodyHtml);
+    });
+    return;
   } else {
-    bodyHtml = `
-      <div class="panel_report bgw p-5">
-        <div class="title c6 f16 plr15">
-          <h3 class="c6 f16 pull-left">服务器运行报告</h3>
-        </div>
-        <div class="mx-auto leading-10 plr15">
-          <div class="text-center mt-5">暂无报告内容</div>
-        </div>
-      </div>
-    `;
+    bodyHtml = buildEmptyHostReportHtml();
   }
   
   $("#hostdetail-con").html(bodyHtml);

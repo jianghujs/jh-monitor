@@ -8,7 +8,8 @@
 - 持久化每台主机的报告发送设置（是否开启 + 频率参数），并在主机列表/详情接口中返回。
 - 主机列表“报告概览”旁显示邮件图标，表示该主机已开启报告通知。
 - 按主机配置的频率定时发送主机报告内容到邮箱（复用现有邮件通知配置，调用 `jh.notifyMessage` 发送）。
+- 报告内容以 HTML 模板渲染，模板从独立文件加载，前端展示与邮件发送共用同一套模板。
 
 ## 影响范围
 - 受影响规格：`specs/deliver-host-report/spec.md`
-- 受影响代码：`route/static/app/host.js`、`route/templates/default/host.html`、`class/core/host_api.py`、`task.py`、`data/`（新增配置文件）
+- 受影响代码：`route/static/app/host.js`、`route/templates/default/host.html`、`route/templates/default/host_report_panel.html`、`route/templates/default/host_report_pve.html`、`class/core/host_api.py`、`task.py`、`data/`（新增配置文件）

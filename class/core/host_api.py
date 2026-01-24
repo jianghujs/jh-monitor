@@ -22,6 +22,7 @@ import json
 import shutil
 import psutil
 import traceback
+from jinja2 import Environment, FileSystemLoader
 
 from flask import request
 
@@ -91,20 +92,103 @@ class host_api:
                 return report_raw
         return report_raw
 
-    def buildHostReportMessage(self, host_row, report_data):
+    def _buildHostReportEmptyHtml(self, host_row):
         host_name = host_row.get('host_name', '')
         host_ip = host_row.get('ip', '')
-        header = "主机: {0} ({1})\n".format(host_name, host_ip)
-        if not report_data:
-            return header + "暂无报告内容"
-        if isinstance(report_data, dict):
-            try:
-                report_text = json.dumps(report_data, ensure_ascii=False, indent=2)
-            except Exception:
-                report_text = str(report_data)
-        else:
-            report_text = str(report_data)
-        return header + report_text
+        title = "主机报告通知 - {0}({1})".format(host_name, host_ip)
+        return (
+            '<div class="panel_report bgw p-5">'
+            '<div class="title c6 f16 plr15">'
+            '<h3 class="c6 f16 pull-left">{0}</h3>'
+            '</div>'
+            '<div class="mx-auto leading-10 plr15">'
+            '<div class="text-center mt-5">暂无报告内容</div>'
+            '</div>'
+            '</div>'
+        ).format(title)
+
+    def renderHostReportHtml(self, host_row, report_data):
+        if not isinstance(report_data, dict):
+            return self._buildHostReportEmptyHtml(host_row)
+        if not report_data.get('title'):
+            return self._buildHostReportEmptyHtml(host_row)
+
+        if not hasattr(self, '_host_report_env'):
+            template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'route', 'templates', 'report'))
+            self._host_report_env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=False
+            )
+        env = self._host_report_env
+        template_name = 'host_panel_report.html'
+        template_data = {
+            'title': report_data.get('title', ''),
+            'ip': report_data.get('ip', ''),
+            'report_time': report_data.get('report_time', ''),
+            'start_date': report_data.get('start_date', ''),
+            'end_date': report_data.get('end_date', ''),
+            'summary_tips': report_data.get('summary_tips') or [],
+            'sysinfo_tips': report_data.get('sysinfo_tips') or [],
+            'backup_tips': report_data.get('backup_tips') or [],
+            'siteinfo_tips': report_data.get('siteinfo_tips') or [],
+            'jianghujsinfo_tips': report_data.get('jianghujsinfo_tips') or [],
+            'dockerinfo_tips': report_data.get('dockerinfo_tips') or [],
+            'mysqlinfo_tips': report_data.get('mysqlinfo_tips') or []
+        }
+
+        try:
+            template = env.get_template(template_name)
+            html = template.render(**template_data)
+        except Exception:
+            html = ''
+        if not html:
+            return self._buildHostReportEmptyHtml(host_row)
+        return html
+
+    def renderPVEReportHtml(self, host_row, report_data):
+        if not isinstance(report_data, dict):
+            return self._buildHostReportEmptyHtml(host_row)
+        if not report_data.get('title'):
+            return self._buildHostReportEmptyHtml(host_row)
+
+        if not hasattr(self, '_host_report_env'):
+            template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'route', 'templates', 'report'))
+            self._host_report_env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=False
+            )
+        env = self._host_report_env
+        template_name = 'host_pve_report.html'
+        template_data = {
+            'title': report_data.get('title', ''),
+            'ip': report_data.get('ip', ''),
+            'report_time': report_data.get('report_time', ''),
+            'start_date': report_data.get('start_date', ''),
+            'end_date': report_data.get('end_date', ''),
+            'summary_tips': report_data.get('summary_tips') or [],
+            'error_tips': report_data.get('error_tips') or [],
+            'sysinfo_tips': report_data.get('sysinfo_tips') or [],
+            'network_tips': report_data.get('network_tips') or [],
+            'smart_tips': report_data.get('smart_tips') or [],
+            'io_tips': report_data.get('io_tips') or [],
+            'sensor_tips': report_data.get('sensor_tips') or [],
+            'power_tips': report_data.get('power_tips') or []
+        }
+
+        try:
+            template = env.get_template(template_name)
+            html = template.render(**template_data)
+        except Exception:
+            html = ''
+        if not html:
+            return self._buildHostReportEmptyHtml(host_row)
+        return html
+
+    def buildHostReportMessage(self, host_row, report_data):
+        is_pve = host_row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
+        if is_pve:
+            return self.renderPVEReportHtml(host_row, report_data)
+        return self.renderHostReportHtml(host_row, report_data)
 
     def listApi(self):
         limit = request.form.get('limit', '100')
@@ -310,6 +394,26 @@ class host_api:
         }
         self._writeHostReportConfig(report_config)
         return jh.returnJson(True, '设置成功', report_config[host_id])
+
+    def getHostReportTemplateApi(self):
+        report_type = request.form.get('report_type', '').strip().lower()
+        if not report_type:
+            report_type = request.args.get('report_type', '').strip().lower()
+        if report_type not in ('panel', 'pve'):
+            report_type = 'panel'
+        if not hasattr(self, '_host_report_env'):
+            template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'route', 'templates', 'report'))
+            self._host_report_env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=False
+            )
+        env = self._host_report_env
+        template_name = 'host_pve_report.html' if report_type == 'pve' else 'host_panel_report.html'
+        try:
+            template_source = env.loader.get_source(env, template_name)[0]
+        except Exception:
+            return jh.returnJson(False, '模板不存在', {'template': ''})
+        return jh.returnJson(True, 'ok', {'template': template_source})
     
     def getLogPathListApi(self):
         host_ip = request.form.get('host_ip', '')

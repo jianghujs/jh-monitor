@@ -1,0 +1,118 @@
+<style>
+  h3 { font-size: bold; }
+  table {
+      border-top: 1px solid #999;
+      border-left: 1px solid #999;
+      border-spacing: 0;
+      width: 100%;
+  }
+  table tr td {
+      padding: 5px;
+      line-height: 20px;
+      border-right: 1px solid #999;
+      border-bottom: 1px solid #999;
+  }
+  table tr td:first-child {
+      width: 30%;
+  }
+  table tr td:nth-child(2) {
+      width: 70%;
+  }
+  .system-table tr td:first-child {
+      width: 40%;
+  }
+  .system-table tr td:nth-child(2) {
+      width: 60%;
+  }
+  </style>
+  <div class="panel_report bgw p-5">
+    <div class="title c6 f16 plr15">
+      <h3 class="c6 f16 pull-left">{{title}}({{ip}})-PVE硬件健康报告</h3>
+    </div>
+    <div class="mx-auto leading-10 plr15">
+      <h3 class="pt-5" style="color: #cecece">日期：{{ start_date }}至{{ end_date }}（报告时间：{{ report_time }}）</h3>
+      <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
+        <h3 class="text-2xl mb-2">概要信息：</h3>
+        <ul>
+        {% for item in summary_tips %}
+          <li>{{ item }}</li>
+        {% endfor %}
+        </ul>
+        {% if error_tips and (error_tips | length) > 0 %}
+          <div class="mt-4" style="color: red;">
+          {% for item in error_tips %}
+            {{ item }}{% if not loop.last %}<br/>{% endif %}
+          {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="m-auto" style="width: 700px;">
+        <h3 class="font-bold my-5">系统状态：</h3>
+        <table border class="system-table w-full">
+        {% if sysinfo_tips and (sysinfo_tips | length) > 0 %}
+          {% for item in sysinfo_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+  
+        <h3 class="font-bold my-5">网络：</h3>
+        <table border class="w-full">
+        {% if network_tips and (network_tips | length) > 0 %}
+          {% for item in network_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+  
+        <h3 class="font-bold my-5">磁盘SMART：</h3>
+        <table border class="w-full">
+        {% if smart_tips and (smart_tips | length) > 0 %}
+          {% for item in smart_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+  
+        <h3 class="font-bold my-5">磁盘IO：</h3>
+        <table border class="w-full">
+        {% if io_tips and (io_tips | length) > 0 %}
+          {% for item in io_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+  
+        <h3 class="font-bold my-5">传感器：</h3>
+        <table border class="w-full">
+        {% if sensor_tips and (sensor_tips | length) > 0 %}
+          {% for item in sensor_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+  
+        <h3 class="font-bold my-5">电源：</h3>
+        <table border class="w-full">
+        {% if power_tips and (power_tips | length) > 0 %}
+          {% for item in power_tips %}
+            <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2">暂无</td></tr>
+        {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+  

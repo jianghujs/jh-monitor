@@ -1,6 +1,7 @@
 ## 背景
 - 主机详情 UI 在 `route/static/app/host.js` 中渲染，基础监控区域位于详情弹框内容里。
 - 主机列表中的报告概览由前端根据 `panel_report`/`pve_report` 计算。
+- 报告详情的 HTML 目前由 `route/static/app/host.js` 内联模板拼接。
 - 频率选择控件与开关组件已存在：`route/static/js/jquery-cron-selector.js` 与 `route/static/js/jquery-radio-switch.js`。
 - 邮件通知配置存储在 `data/notify.json`，通过 `jh.getNotifyData(True)` 获取。
 
@@ -17,6 +18,8 @@
   - 理由：复用 UI 组件与参数格式，避免引入新配置格式。
 - 决策：发送邮件时直接调用 `jh.notifyMessage`，并复用现有邮件通知配置（`data/notify.json`）作为发送与收件人来源。
   - 理由：保持与现有通知体系一致，减少重复配置。
+- 决策：将面板报告与 PVE 报告的 HTML 模板拆分为独立文件（如 `route/templates/default/host_report_panel.html`、`route/templates/default/host_report_pve.html`），前端与邮件发送共享同一模板。
+  - 理由：避免前后端模板分裂，确保展示与邮件内容一致。
 
 ## 风险 / 权衡
 - 文件型配置需要注意并发写入，建议采用读-改-写与临时文件方式保证原子性。

@@ -568,6 +568,9 @@ def hostReportNotifyTask():
                     time.sleep(30)
                     continue
 
+                due_ids = [row.get('host_id') for row in due_hosts if row.get('host_id')]
+                print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 待发送主机数: {len(due_hosts)} {due_ids}{Style.RESET_ALL}")
+
                 panel_reports = h_api.getPanelReportFromES(due_hosts) or {}
                 pve_reports = h_api.getPVEReportFromES(due_hosts) or {}
 
@@ -577,13 +580,17 @@ def hostReportNotifyTask():
                     is_pve = row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
                     report_raw = pve_reports.get(host_ip) if is_pve else panel_reports.get(host_ip)
                     report_data = h_api.normalizeHostReportData(report_raw)
+                    report_title = report_data.get('title') if isinstance(report_data, dict) else ''
+                    report_type = 'pve' if is_pve else 'panel'
+                    print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type={report_type} title={report_title}{Style.RESET_ALL}")
                     msg = h_api.buildHostReportMessage(row, report_data)
-                    title = "主机报告通知 - {0}({1})".format(row.get('host_name', ''), host_ip or '')
-                    send_ok = jh.notifyMessage(msg=msg, msgtype='text', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
+                    title = "{0}({1})服务器报告".format(row.get('host_name', ''), host_ip or '')
+                    send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
                     if send_ok:
                         if host_id not in report_config:
                             report_config[host_id] = {}
                         report_config[host_id]['last_sent_at'] = now_ts
+                        print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 发送成功: {host_id}{Style.RESET_ALL}")
                     else:
                         print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 发送失败: {host_id}{Style.RESET_ALL}")
 
