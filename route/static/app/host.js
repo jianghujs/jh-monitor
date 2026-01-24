@@ -225,9 +225,11 @@ function getWeb(page, search, host_group_id) {
       let severity = 'normal';
       let summary_html = '';
       let report_items_html = '';
+      let summary_tips = [];
       if (report_data) {
         if (report_data.summary_tips && report_data.summary_tips.length > 0) {
-          summary_html = report_data.summary_tips.join(' ');
+          summary_tips = report_data.summary_tips;
+          summary_html = summary_tips.join(' ');
         }
         if (report_data.error_tips && report_data.error_tips.length > 0) {
           report_items = report_data.error_tips;
@@ -246,7 +248,9 @@ function getWeb(page, search, host_group_id) {
         let is_abnormal = severity !== 'normal';
         let status_text = is_abnormal ? '异常' : '正常';
         let status_color = is_abnormal ? (severity === 'warning' ? '#faad14' : 'red') : 'rgb(92, 184, 92)';
-        if (report_items.length > 0) {
+        if (summary_tips.length > 0) {
+          report_items_html = summary_tips.map(item => `<div>${item}</div>`).join('');
+        } else if (report_items.length > 0) {
           let itemFallback = severity === 'warning' ? '#faad14' : (severity === 'error' ? 'red' : '');
           report_items_html = buildReportItemsHtml(report_items, itemFallback);
         }
@@ -2789,6 +2793,9 @@ function bindReportSummaryTips() {
     reportTipIndex = layer.tips(fullHtml, that, { time: 0, tips: [1, '#999'], maxWidth: 420 });
 
     var tipElem = $('#layui-layer' + reportTipIndex);
+    tipElem.find('.layui-layer-content').css({
+      'background-color': 'rgba(255,255,255,0.8)',
+    });
     tipElem.off('mouseenter.reportSummaryTip mouseleave.reportSummaryTip');
     tipElem.on('mouseenter.reportSummaryTip', function() {
       if (reportTipCloseTimer) {
