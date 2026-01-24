@@ -2,6 +2,8 @@ var refreshTimer = null;
 var refreshInterval = 5000; // 默认5秒
 var loadT = layer.load();
 var hostList = [];
+var hostReportCronDefault = { type: 'day', where1: '', hour: 0, minute: 0, week: '' };
+var hostReportCron = Object.assign({}, hostReportCronDefault);
 
 function getReportItemColor(item, fallbackColor) {
   if (item.indexOf('color: red') !== -1 || item.indexOf('color:red') !== -1) {
@@ -221,6 +223,8 @@ function getWeb(page, search, host_group_id) {
       let is_pve = data.data[i].host_info && data.data[i].host_info.isPVE;
       let report_data = is_pve ? data.data[i].pve_report : data.data[i].panel_report;
       let report_items = [];
+      let report_notify = !!data.data[i].report_notify;
+      let report_notify_icon = report_notify ? `<span class="report-mail-icon glyphicon glyphicon-envelope" title="已开启报告通知" style="margin-left: 6px; color: #20a53a;"></span>` : '';
       let has_report = report_data && typeof report_data === 'object' && Object.keys(report_data).length > 0;
       let severity = 'normal';
       let summary_html = '';
@@ -255,9 +259,9 @@ function getWeb(page, search, host_group_id) {
           report_items_html = buildReportItemsHtml(report_items, itemFallback);
         }
         let data_attr = report_items_html ? ` data-report-full="${encodeURIComponent(report_items_html)}" data-report-severity="${severity}"` : '';
-        report_summary = `<div class="report-summary"${data_attr} style="color: ${status_color};">${status_text}</div>`;
+        report_summary = `<div class="report-summary"${data_attr} style="color: ${status_color};">${status_text}${report_notify_icon}</div>`;
       } else {
-        report_summary = `<div class="report-summary" style="color: #cecece;">暂无</div>`;
+        report_summary = `<div class="report-summary" style="color: #cecece;">暂无${report_notify_icon}</div>`;
       }
 
 
@@ -1054,6 +1058,19 @@ function detailBaseMonitor(host_id, name, msg, status) {
     clearInterval(updateDetailHostBaseMonitorTask);
   }
   var bodyHtml = `
+    <div class="bgw mb15 pd15">
+      <div class="flex align-center">
+        <div class="mr50 pull-left">
+          <div class="ss-text pull-left">
+            <em>开启服务器报告</em>
+            <div class='ssh-item' id="openHostReportSwitch"></div>
+          </div>
+        </div>
+        <div class="mr50 pull-left flex align-center" id="hostReportCronDetail">
+          <button class="open-host-report-cron btn btn-default btn-sm mr20" type="button">配置报告频率</button>
+        </div>
+      </div>
+    </div>
     <div class="control">
       <div class="col-xs-12 col-sm-12 col-md-12 pull-left pd0 view0">
         <div class="mb15">
@@ -1169,6 +1186,53 @@ function detailBaseMonitor(host_id, name, msg, status) {
   setTimeout(() => {
     updateDetailHostBaseMonitorChartData();
   }, 0);
+
+  initHostReportConfig(host_id);
+}
+
+function initHostReportConfig(host_id) {
+  $("#openHostReportSwitch").html('');
+  $("#hostReportCronDetail .open-host-report-cron").off('click');
+  getHostReportConfig(host_id);
+}
+
+function getHostReportConfig(host_id) {
+  $.post('/host/get_host_report_config', { host_id: host_id }, function(rdata) {
+    let enabled = false;
+    hostReportCron = Object.assign({}, hostReportCronDefault);
+    if (rdata && rdata.status && rdata.data) {
+      enabled = !!rdata.data.enabled;
+      if (rdata.data.cron) {
+        hostReportCron = Object.assign({}, hostReportCronDefault, rdata.data.cron);
+      }
+    }
+
+    $("#openHostReportSwitch").createRadioSwitch(enabled, (checked) => {
+      visibleDom('#hostReportCronDetail', checked);
+      saveHostReportConfig(host_id, checked, hostReportCron);
+    });
+
+    visibleDom('#hostReportCronDetail', enabled);
+
+    $("#hostReportCronDetail .open-host-report-cron").off('click').on('click', () => {
+      openCronSelectorLayer(hostReportCron, { yes: (cronData) => {
+        saveHostReportConfig(host_id, true, cronData);
+      }});
+    });
+  }, 'json');
+}
+
+function saveHostReportConfig(host_id, enabled, cronData) {
+  let payload = { host_id: host_id, enabled: enabled ? 1 : 0 };
+  if (cronData) {
+    payload = Object.assign(payload, cronData);
+  }
+  $.post('/host/set_host_report_config', payload, function(rdata) {
+    if (rdata && rdata.status && rdata.data) {
+      hostReportCron = Object.assign({}, hostReportCronDefault, rdata.data.cron || {});
+    }
+    layer.msg(rdata.msg, {icon: rdata.status ? 1 : 2});
+  }, 'json');
 }
 
 /**

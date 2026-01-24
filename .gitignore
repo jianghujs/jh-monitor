@@ -130,6 +130,7 @@ data/control_report_notify.pl
 data/net_env_cn.pl
 data/debounce_commands_pool.json
 data/growth_alarm.json
+data/host_report_cycle.conf
 
 ssl/input.pl
 

@@ -38,6 +38,74 @@ class host_api:
     host_detail_field = 'id,host_id,host_name,host_status,uptime,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,last_update,addtime'
     host_alarm_field = "id,host_id,host_name,alarm_type,alarm_level,alarm_content,addtime"
 
+    def _getHostReportConfigFile(self):
+        return 'data/host_report_cycle.conf'
+
+    def _getDefaultHostReportCron(self):
+        return {
+            'type': 'day',
+            'where1': '',
+            'hour': 0,
+            'minute': 0,
+            'week': ''
+        }
+
+    def _readHostReportConfig(self):
+        config_file = self._getHostReportConfigFile()
+        if not os.path.exists(config_file):
+            jh.writeFile(config_file, '{}')
+        try:
+            return json.loads(jh.readFile(config_file))
+        except Exception:
+            return {}
+
+    def _writeHostReportConfig(self, config_data):
+        config_file = self._getHostReportConfigFile()
+        tmp_file = config_file + '.tmp'
+        try:
+            with open(tmp_file, 'w') as fp:
+                fp.write(json.dumps(config_data))
+            os.replace(tmp_file, config_file)
+        except Exception:
+            jh.writeFile(config_file, json.dumps(config_data))
+
+    def getHostReportConfigData(self):
+        return self._readHostReportConfig()
+
+    def saveHostReportConfigData(self, config_data):
+        self._writeHostReportConfig(config_data)
+        return True
+
+    def getDefaultHostReportCronData(self):
+        return dict(self._getDefaultHostReportCron())
+
+    def normalizeHostReportData(self, report_raw):
+        if report_raw is None:
+            return None
+        if isinstance(report_raw, dict):
+            return report_raw
+        if isinstance(report_raw, str):
+            try:
+                return json.loads(report_raw)
+            except Exception:
+                return report_raw
+        return report_raw
+
+    def buildHostReportMessage(self, host_row, report_data):
+        host_name = host_row.get('host_name', '')
+        host_ip = host_row.get('ip', '')
+        header = "主机: {0} ({1})\n".format(host_name, host_ip)
+        if not report_data:
+            return header + "暂无报告内容"
+        if isinstance(report_data, dict):
+            try:
+                report_text = json.dumps(report_data, ensure_ascii=False, indent=2)
+            except Exception:
+                report_text = str(report_data)
+        else:
+            report_text = str(report_data)
+        return header + report_text
+
     def listApi(self):
         limit = request.form.get('limit', '100')
         p = request.form.get('p', '1')
@@ -58,6 +126,9 @@ class host_api:
             panel_report = self.getPanelReportFromES(_list)
             pve_report = self.getPVEReportFromES(_list)
 
+            report_config = self._readHostReportConfig()
+            default_report_cron = self._getDefaultHostReportCron()
+
             # 循环转换详情数据
             for i in range(len(_list)):
                 is_jhpanel = _list[i].get('is_jhpanel')
@@ -72,7 +143,15 @@ class host_api:
                   if pve_report:
                     _list[i]['pve_report'] = pve_report.get(_list[i]['ip'], '{}')
                 
-                
+                host_id = _list[i].get('host_id')
+                host_report = report_config.get(host_id, {}) if host_id else {}
+                host_report_enabled = bool(host_report.get('enabled'))
+                host_report_cron = host_report.get('cron') or default_report_cron
+                if host_report_cron is default_report_cron:
+                    host_report_cron = dict(default_report_cron)
+                _list[i]['report_notify'] = host_report_enabled
+                _list[i]['report_cron'] = host_report_cron
+
                 _list[i] = self.parseDetailJSONValue(_list[i])
 
             _ret = {}
@@ -174,8 +253,63 @@ class host_api:
         host_detail = jh.M('view01_host').where('host_id=?', (host_id,)).field(self.host_field).find()
         if host_detail:
             host_detail = self.parseDetailJSONValue(host_detail)
+            report_config = self._readHostReportConfig()
+            default_report_cron = self._getDefaultHostReportCron()
+            host_report = report_config.get(host_id, {})
+            host_detail['report_notify'] = bool(host_report.get('enabled'))
+            host_report_cron = host_report.get('cron') or default_report_cron
+            if host_report_cron is default_report_cron:
+                host_report_cron = dict(default_report_cron)
+            host_detail['report_cron'] = host_report_cron
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
+
+    def getHostReportConfigApi(self):
+        host_id = request.form.get('host_id', '').strip()
+        if not host_id:
+            return jh.returnJson(False, '主机ID不能为空')
+        report_config = self._readHostReportConfig()
+        default_report_cron = self._getDefaultHostReportCron()
+        host_report = report_config.get(host_id, {})
+        cron_config = host_report.get('cron') or default_report_cron
+        if cron_config is default_report_cron:
+            cron_config = dict(default_report_cron)
+        data = {
+            'host_id': host_id,
+            'enabled': bool(host_report.get('enabled')),
+            'cron': cron_config,
+            'last_sent_at': host_report.get('last_sent_at', 0)
+        }
+        return jh.returnJson(True, 'ok', data)
+
+    def setHostReportConfigApi(self):
+        host_id = request.form.get('host_id', '').strip()
+        if not host_id:
+            return jh.returnJson(False, '主机ID不能为空')
+        enabled = request.form.get('enabled', '0')
+        enabled = enabled in ('1', 'true', 'True', 'yes', 'YES')
+
+        default_report_cron = self._getDefaultHostReportCron()
+        cron_config = {
+            'type': request.form.get('type', default_report_cron['type']),
+            'where1': request.form.get('where1', default_report_cron['where1']),
+            'hour': request.form.get('hour', default_report_cron['hour']),
+            'minute': request.form.get('minute', default_report_cron['minute']),
+            'week': request.form.get('week', default_report_cron['week'])
+        }
+
+        report_config = self._readHostReportConfig()
+        last_sent_at = 0
+        if host_id in report_config:
+            last_sent_at = report_config.get(host_id, {}).get('last_sent_at', 0)
+
+        report_config[host_id] = {
+            'enabled': enabled,
+            'cron': cron_config,
+            'last_sent_at': last_sent_at
+        }
+        self._writeHostReportConfig(report_config)
+        return jh.returnJson(True, '设置成功', report_config[host_id])
     
     def getLogPathListApi(self):
         host_ip = request.form.get('host_ip', '')

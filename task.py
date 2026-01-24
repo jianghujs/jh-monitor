@@ -30,6 +30,7 @@ if sys.version_info[0] == 2:
 
 
 sys.path.append(os.getcwd() + "/class/core")
+sys.path.append(os.getcwd() + "/class/plugin")
 import jh
 import db
 sys.path.append(os.getcwd() + "/scripts/client")
@@ -513,6 +514,87 @@ def hostGrowthAlarmTask():
         
         time.sleep(300)  # 出错后等待5分钟再重试
         hostGrowthAlarmTask()  # 递归重启
+
+
+# --------------------------------------Host Report Notify Start   --------------------------------------------- #
+def hostReportNotifyTask():
+    try:
+        import host_api
+        h_api = host_api.host_api()
+        while True:
+            try:
+                default_cron = h_api.getDefaultHostReportCronData()
+                report_config = h_api.getHostReportConfigData()
+                enabled_host_ids = [hid for hid, cfg in report_config.items() if cfg.get('enabled')]
+                if not enabled_host_ids:
+                    time.sleep(30)
+                    continue
+
+                notify_data = jh.getNotifyData(True)
+                email_enabled = False
+                if 'email' in notify_data and notify_data['email'].get('enable'):
+                    email_enabled = True
+                if not email_enabled:
+                    print(f"{Fore.YELLOW}★ ========= [hostReportNotifyTask] 邮件通知未配置，已跳过发送{Style.RESET_ALL}")
+                    time.sleep(60)
+                    continue
+
+                placeholders = ','.join(['?'] * len(enabled_host_ids))
+                host_rows = jh.M('view01_host').where(
+                    'host_id in ({0})'.format(placeholders), tuple(enabled_host_ids)
+                ).field(h_api.host_field).select()
+
+                if not host_rows:
+                    time.sleep(30)
+                    continue
+
+                now_ts = int(time.time())
+                due_hosts = []
+                for row in host_rows:
+                    host_id = row.get('host_id')
+                    if not host_id:
+                        continue
+                    cfg = report_config.get(host_id, {})
+                    cron = cfg.get('cron') or {}
+                    cron = dict(default_cron, **cron)
+                    try:
+                        last_sent_at = int(cfg.get('last_sent_at', 0))
+                    except Exception:
+                        last_sent_at = 0
+                    if jh.cronShouldRun(cron, last_sent_at, now_ts):
+                        due_hosts.append(row)
+
+                if not due_hosts:
+                    time.sleep(30)
+                    continue
+
+                panel_reports = h_api.getPanelReportFromES(due_hosts) or {}
+                pve_reports = h_api.getPVEReportFromES(due_hosts) or {}
+
+                for row in due_hosts:
+                    host_id = row.get('host_id')
+                    host_ip = row.get('ip')
+                    is_pve = row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
+                    report_raw = pve_reports.get(host_ip) if is_pve else panel_reports.get(host_ip)
+                    report_data = h_api.normalizeHostReportData(report_raw)
+                    msg = h_api.buildHostReportMessage(row, report_data)
+                    title = "主机报告通知 - {0}({1})".format(row.get('host_name', ''), host_ip or '')
+                    send_ok = jh.notifyMessage(msg=msg, msgtype='text', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
+                    if send_ok:
+                        if host_id not in report_config:
+                            report_config[host_id] = {}
+                        report_config[host_id]['last_sent_at'] = now_ts
+                    else:
+                        print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 发送失败: {host_id}{Style.RESET_ALL}")
+
+                h_api.saveHostReportConfigData(report_config)
+            except Exception:
+                traceback.print_exc()
+            time.sleep(30)
+    except Exception:
+        traceback.print_exc()
+
+# --------------------------------------Host Report Notify End   --------------------------------------------- #
   
 
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
@@ -594,6 +676,11 @@ if __name__ == "__main__":
     hga = threading.Thread(target=hostGrowthAlarmTask)
     hga = setDaemon(hga)
     hga.start()
+
+    # 主机报告通知
+    hrn = threading.Thread(target=hostReportNotifyTask)
+    hrn = setDaemon(hrn)
+    hrn.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)

@@ -1965,6 +1965,73 @@ def emailNotifyTest(data):
     data['content'] = data['mail_test']
     return emailNotifyMessage(data)
 
+# 通用：判断 cron 配置是否应在当前时间触发
+def cronShouldRun(cron, last_sent_at=0, now_ts=None):
+    if now_ts is None:
+        now_ts = int(time.time())
+
+    now = time.localtime(now_ts)
+    cron_type = cron.get('type', 'day')
+    try:
+        hour = int(cron.get('hour', 0))
+    except Exception:
+        hour = 0
+    try:
+        minute = int(cron.get('minute', 0))
+    except Exception:
+        minute = 0
+    try:
+        where1 = int(cron.get('where1', 0))
+    except Exception:
+        where1 = 0
+    week = cron.get('week', '')
+    try:
+        week = int(week)
+    except Exception:
+        week = where1
+
+    if cron_type == 'minute-n':
+        if where1 <= 0:
+            return False
+        if now.tm_min % where1 != 0:
+            return False
+        interval = where1 * 60
+    elif cron_type == 'hour':
+        if now.tm_min != minute:
+            return False
+        interval = 60 * 60
+    elif cron_type == 'hour-n':
+        if where1 <= 0 or now.tm_min != minute:
+            return False
+        interval = where1 * 60 * 60
+    elif cron_type == 'day':
+        if now.tm_hour != hour or now.tm_min != minute:
+            return False
+        interval = 24 * 60 * 60
+    elif cron_type == 'day-n':
+        if where1 <= 0 or now.tm_hour != hour or now.tm_min != minute:
+            return False
+        interval = where1 * 24 * 60 * 60
+    elif cron_type == 'week':
+        if now.tm_hour != hour or now.tm_min != minute:
+            return False
+        target_weekday = 6 if week == 0 else week - 1
+        if now.tm_wday != target_weekday:
+            return False
+        interval = 7 * 24 * 60 * 60
+    elif cron_type == 'month':
+        if where1 <= 0 or now.tm_hour != hour or now.tm_min != minute:
+            return False
+        if now.tm_mday != where1:
+            return False
+        interval = 28 * 24 * 60 * 60
+    else:
+        return False
+
+    if not last_sent_at:
+        return True
+    return (now_ts - last_sent_at) >= interval
+
 def getLockData(lock_type):
     lock_file = getPanelTmp() + '/lock.json'
     try:
