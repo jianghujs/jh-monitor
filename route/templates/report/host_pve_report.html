@@ -38,15 +38,8 @@
           <li>{{ item }}</li>
         {% endfor %}
         </ul>
-        {% if error_tips and (error_tips | length) > 0 %}
-          <div class="mt-4" style="color: red;">
-          {% for item in error_tips %}
-            {{ item }}{% if not loop.last %}<br/>{% endif %}
-          {% endfor %}
-          </div>
-        {% endif %}
       </div>
-      <div class="m-auto" style="width: 700px;">
+      <div class="m-auto">
         <h3 class="font-bold my-5">系统状态：</h3>
         <table border class="system-table w-full">
         {% if sysinfo_tips and (sysinfo_tips | length) > 0 %}

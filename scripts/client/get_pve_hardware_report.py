@@ -1610,7 +1610,7 @@ class HardwareReporter:
             self.log(f"  {item}")
         self.log("")
     
-    def save_reports(self, log_dir: str = '/var/log/pve') -> str:
+    def save_reports(self, log_dir: str = '/www/server/log/') -> str:
         """
         保存报告到文件
         
