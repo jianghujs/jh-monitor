@@ -88,6 +88,15 @@ config_ansible_user() {
     echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user
     chmod 0440 /etc/sudoers.d/ansible_user
     echo "已写入 /etc/sudoers.d/ansible_user 防火墙读取权限"
+
+    # SMART 读取权限
+    SMARTCTL_BIN=$(command -v smartctl 2>/dev/null)
+    if [ -n "$SMARTCTL_BIN" ]; then
+        echo "ansible_user ALL=(ALL) NOPASSWD: ${SMARTCTL_BIN}" >> /etc/sudoers.d/ansible_user
+        echo "已写入 SMART 权限: ${SMARTCTL_BIN}"
+    else
+        echo "未找到 smartctl，跳过 SMART 权限配置"
+    fi
     
 }
 

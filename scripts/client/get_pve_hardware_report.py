@@ -381,9 +381,13 @@ class DiskCollector:
             'devices': [],
             'error': None
         }
+
+        smartctl_cmd = "smartctl"
+        if os.geteuid() != 0:
+            smartctl_cmd = "sudo smartctl"
         
         # 扫描设备
-        stdout, stderr, code = run_command("smartctl --scan")
+        stdout, stderr, code = run_command(f"{smartctl_cmd} --scan")
         devices = []
         if code == 0 and stdout:
             for line in stdout.strip().split('\n'):
@@ -404,7 +408,7 @@ class DiskCollector:
         
         # 检查每个设备
         for device in devices:
-            stdout, stderr, code = run_command(f"smartctl -a {device}")
+            stdout, stderr, code = run_command(f"{smartctl_cmd} -a {device}")
             is_nvme = 'nvme' in device
             device_info = {
                 'device': device,
