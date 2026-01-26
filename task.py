@@ -260,8 +260,7 @@ def clientTask():
             # 执行脚本
             script_list = [
                 'get_host_info.py', 
-                'get_host_usage.py', 
-                # 'get_panel_backup_report.py'
+                'get_host_usage.py'
             ]
             batch_result = run_script_batch(script_list)
 
@@ -296,7 +295,6 @@ def clientTask():
                             net_info = host_usage.get('net_info', [])
                             load_avg = host_usage.get('load_avg', {})
                             firewall_info = host_usage.get('firewall_info', {})
-                            # backup_info = data.get('get_panel_backup_report.py', [])
 
                             is_jhpanel_raw = host_info.get('isJHPanel')
                             is_pve_raw = host_info.get('isPVE')
