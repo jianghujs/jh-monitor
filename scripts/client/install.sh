@@ -215,4 +215,8 @@ elif [ "$action" == "install" ]; then
 
     # 通知服务端添加主机
     notify_server_add_host
+elif [ "$action" == "set_user_permission" ]; then
+    # 仅初始化ansible_user权限相关设置
+    add_ansible_user
+    config_ansible_user
 fi
