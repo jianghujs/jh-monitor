@@ -98,15 +98,13 @@ config_ansible_user() {
     chmod 0440 /etc/sudoers.d/ansible_user
     echo "已写入 /etc/sudoers.d/ansible_user 防火墙读取权限"
 
-    # 报告相关命令权限
+    # 配置命令权限
     SUDO_CMDS="/usr/sbin/smartctl, /usr/bin/ipmitool, /usr/bin/sensors, /usr/bin/apt-get, /usr/bin/yum"
     SUDO_RULE="${USERNAME} ALL=(ALL) NOPASSWD: ${SUDO_CMDS}"
-    if ! grep -Fxq "$SUDO_RULE" /etc/sudoers.d/ansible_user; then
-        echo "$SUDO_RULE" >> /etc/sudoers.d/ansible_user
-        echo "已写入报告命令权限: ${SUDO_CMDS}"
-    else
-        echo "报告命令权限已存在"
-    fi
+    rm -f /etc/sudoers.d/ansible_user
+    echo "$SUDO_RULE" >> /etc/sudoers.d/ansible_user
+    chmod 0440 /etc/sudoers.d/ansible_user
+    echo "已配置命令权限: ${SUDO_CMDS}"
     
 }
 
