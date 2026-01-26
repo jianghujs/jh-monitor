@@ -1920,10 +1920,9 @@ class HardwareReporter:
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(report_payload, ensure_ascii=False) + '\n')
-            return True
         except Exception as e:
             print(color_text(f"写入报告日志失败: {e}", Colors.RED))
-            return False
+        return report_payload
     
     def _cleanup_old_logs(self, log_dir: str, pattern: str, keep: int):
         """清理旧日志，保留最近N份"""
@@ -2436,17 +2435,6 @@ blockquote{margin-right:0px}
 
 def main():
     """主函数"""
-    
-    type = sys.argv[1]
-    if type == 'get_report_data':
-        thresholds = dict(DEFAULT_THRESHOLDS)
-        reporter = HardwareReporter(thresholds, None, False, enable_log=False)
-        reporter.collect_all()
-        reporter.analyze_and_report()
-        report_payload = reporter.write_report_log(return_payload_only=True)
-        print(json.dumps(report_payload, ensure_ascii=False))
-        return
-
     parser = argparse.ArgumentParser(description='PVE 硬件全面健康报告')
     parser.add_argument('--cpu-warn', type=float, default=DEFAULT_THRESHOLDS['cpu_warn'], help='CPU警告阈值(百分比)')
     parser.add_argument('--cpu-crit', type=float, default=DEFAULT_THRESHOLDS['cpu_crit'], help='CPU危险阈值(百分比)')
@@ -2525,4 +2513,14 @@ def main():
         sys.exit(0)
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ('send', 'get_report_data'):
+        action = sys.argv[1]
+        enable_log = (action == 'send')
+        reporter = HardwareReporter(DEFAULT_THRESHOLDS, None, False, enable_log=enable_log)
+        reporter.collect_all()
+        reporter.analyze_and_report()
+        report_payload = reporter.write_report_log()
+        if action == 'get_report_data':
+            print(json.dumps(report_payload, ensure_ascii=False))
+        sys.exit(0)
     main()
