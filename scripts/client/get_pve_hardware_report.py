@@ -42,15 +42,6 @@ import argparse
 from datetime import datetime
 from typing import Dict, List, Any, Tuple, Optional
 
-# 需要 sudo 运行以获取硬件信息
-if os.geteuid() != 0 and os.environ.get("JH_PVE_REPORT_SUDO") != "1":
-    os.environ["JH_PVE_REPORT_SUDO"] = "1"
-    script_path = os.path.abspath(__file__)
-    try:
-        os.execvp("sudo", ["sudo", sys.executable, script_path] + sys.argv[1:])
-    except Exception:
-        pass
-
 # ========================= 配置区域 =========================
 # 默认阈值配置
 DEFAULT_THRESHOLDS = {
@@ -119,6 +110,11 @@ def run_command(cmd: str, timeout: int = 30) -> Tuple[str, str, int]:
         return "", f"命令超时: {cmd}", 1
     except Exception as e:
         return "", str(e), 1
+
+def with_sudo(cmd: str) -> str:
+    if os.geteuid() != 0:
+        return f"sudo -n {cmd}"
+    return cmd
 
 def to_int(value: Any, default: int = 0) -> int:
     """尝试转换为整数"""
@@ -391,9 +387,7 @@ class DiskCollector:
             'error': None
         }
 
-        smartctl_cmd = "smartctl"
-        if os.geteuid() != 0:
-            smartctl_cmd = "sudo smartctl"
+        smartctl_cmd = with_sudo("smartctl")
         
         # 扫描设备
         stdout, stderr, code = run_command(f"{smartctl_cmd} --scan")
@@ -741,13 +735,13 @@ class SensorCollector:
         
         # 尝试使用 sensors
         if sensors_available:
-            stdout, stderr, code = run_command("sensors 2>/dev/null")
+            stdout, stderr, code = run_command(with_sudo("sensors 2>/dev/null"))
             if code == 0 and stdout:
                 SensorCollector._parse_sensors(stdout, result)
         
         # 尝试使用 ipmitool
         if ipmitool_available:
-            stdout, stderr, code = run_command("ipmitool sensor 2>/dev/null")
+            stdout, stderr, code = run_command(with_sudo("ipmitool sensor 2>/dev/null"))
             if code == 0 and stdout:
                 SensorCollector._parse_ipmitool(stdout, result)
         
@@ -772,23 +766,23 @@ class SensorCollector:
         
         # 检测包管理器并安装
         if SensorCollector._check_tool('apt-get'):
-            stdout, stderr, code = run_command("apt-get update -qq && apt-get install -y lm-sensors", timeout=120)
+            stdout, stderr, code = run_command("sudo -n apt-get update -qq && sudo -n apt-get install -y lm-sensors" if os.geteuid() != 0 else "apt-get update -qq && apt-get install -y lm-sensors", timeout=120)
             if code == 0:
                 print("  ✓ lm-sensors 安装成功")
                 # 尝试检测传感器
-                run_command("sensors-detect --auto", timeout=60)
+                run_command(with_sudo("sensors-detect --auto"), timeout=60)
                 return True
         elif SensorCollector._check_tool('yum'):
-            stdout, stderr, code = run_command("yum install -y lm_sensors", timeout=120)
+            stdout, stderr, code = run_command(with_sudo("yum install -y lm_sensors"), timeout=120)
             if code == 0:
                 print("  ✓ lm-sensors 安装成功")
-                run_command("sensors-detect --auto", timeout=60)
+                run_command(with_sudo("sensors-detect --auto"), timeout=60)
                 return True
         elif SensorCollector._check_tool('dnf'):
-            stdout, stderr, code = run_command("dnf install -y lm_sensors", timeout=120)
+            stdout, stderr, code = run_command(with_sudo("dnf install -y lm_sensors"), timeout=120)
             if code == 0:
                 print("  ✓ lm-sensors 安装成功")
-                run_command("sensors-detect --auto", timeout=60)
+                run_command(with_sudo("sensors-detect --auto"), timeout=60)
                 return True
         
         print("  ✗ lm-sensors 安装失败")
@@ -801,7 +795,7 @@ class SensorCollector:
         
         # 检测包管理器并安装
         if SensorCollector._check_tool('apt-get'):
-            stdout, stderr, code = run_command("apt-get install -y ipmitool", timeout=120)
+            stdout, stderr, code = run_command(with_sudo("apt-get install -y ipmitool"), timeout=120)
             if code == 0:
                 print("  ✓ ipmitool 安装成功")
                 # 加载 IPMI 内核模块
@@ -809,14 +803,14 @@ class SensorCollector:
                 run_command("modprobe ipmi_si 2>/dev/null")
                 return True
         elif SensorCollector._check_tool('yum'):
-            stdout, stderr, code = run_command("yum install -y ipmitool", timeout=120)
+            stdout, stderr, code = run_command(with_sudo("yum install -y ipmitool"), timeout=120)
             if code == 0:
                 print("  ✓ ipmitool 安装成功")
                 run_command("modprobe ipmi_devintf 2>/dev/null")
                 run_command("modprobe ipmi_si 2>/dev/null")
                 return True
         elif SensorCollector._check_tool('dnf'):
-            stdout, stderr, code = run_command("dnf install -y ipmitool", timeout=120)
+            stdout, stderr, code = run_command(with_sudo("dnf install -y ipmitool"), timeout=120)
             if code == 0:
                 print("  ✓ ipmitool 安装成功")
                 run_command("modprobe ipmi_devintf 2>/dev/null")
@@ -921,7 +915,7 @@ class PowerCollector:
         }
         
         # 尝试使用 ipmitool
-        stdout, stderr, code = run_command("ipmitool chassis status 2>/dev/null")
+        stdout, stderr, code = run_command(with_sudo("ipmitool chassis status 2>/dev/null"))
         if code == 0 and stdout:
             for line in stdout.split('\n'):
                 if 'Power' in line:
