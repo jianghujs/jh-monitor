@@ -55,6 +55,23 @@ config_ansible_user() {
         chown -R ${USERNAME}:${USERNAME} /www/server/log
     fi
 
+    # 面板目录读取权限
+    if [ -d /www/server/jh-panel ]; then
+        if command -v setfacl >/dev/null 2>&1; then
+            setfacl -m u:${USERNAME}:rx /www/server/jh-panel
+            setfacl -R -m u:${USERNAME}:rX /www/server/jh-panel/class /www/server/jh-panel/data /www/server/jh-panel/logs 2>/dev/null
+            setfacl -d -m u:${USERNAME}:rX /www/server/jh-panel/data /www/server/jh-panel/logs 2>/dev/null
+        fi
+    fi
+
+    # 报告日志写入权限
+    touch /var/log/jhpanel_report.log
+    if command -v setfacl >/dev/null 2>&1; then
+        setfacl -m u:${USERNAME}:rw /var/log/jhpanel_report.log
+    else
+        chown ${USERNAME}:${USERNAME} /var/log/jhpanel_report.log
+    fi
+
     # 防火墙读取权限
     mkdir -p /etc/sudoers.d/
     echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user
