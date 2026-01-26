@@ -1,26 +1,31 @@
 ---
 - name: Copy and execute multiple Python scripts on target machines
-  hosts: all  # 替换为您的目标机器组名称
+  hosts: "{{ target_hosts | default('all') }}"  # 替换为您的目标机器组名称
   vars:
     local_script_base_path: "/www/server/jh-monitor/scripts/client"
     remote_script_base_path: "/home/ansible_user/jh-monitor-scripts"
 
   tasks:
     - name: Copy Python scripts to target machine
+      vars:
+        script_name: "{{ item.name | default(item) }}"
       copy:
-        src: "{{ local_script_base_path }}/{{ item }}"
-        dest: "{{ remote_script_base_path }}/{{ item }}"
+        src: "{{ local_script_base_path }}/{{ script_name }}"
+        dest: "{{ remote_script_base_path }}/{{ script_name }}"
         mode: '0755'
       loop: "{{ script_names }}"
 
     - name: Execute Python scripts
-      command: python3 "{{ remote_script_base_path }}/{{ item }}"
+      vars:
+        script_name: "{{ item.name | default(item) }}"
+        script_args: "{{ item.args | default('') }}"
+      command: python3 "{{ remote_script_base_path }}/{{ script_name }}" {{ script_args }}
       register: result
       loop: "{{ script_names }}"
 
     - name: Return Results
       debug:
         msg:
-          - "{{ item.item }}"
+          - "{{ item.item.name | default(item.item) }}"
           - "{{ item.stdout }}"
       loop: "{{ result.results }}"

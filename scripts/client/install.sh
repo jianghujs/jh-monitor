@@ -46,6 +46,15 @@ config_ansible_user() {
     mkdir -p /home/ansible_user/jh-monitor-scripts/
     chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
     
+    # 日志目录读写权限
+    mkdir -p /www/server/log
+    if command -v setfacl >/dev/null 2>&1; then
+        setfacl -m u:${USERNAME}:rwX /www/server/log
+        setfacl -d -m u:${USERNAME}:rwX /www/server/log
+    else
+        chown -R ${USERNAME}:${USERNAME} /www/server/log
+    fi
+
     # 防火墙读取权限
     mkdir -p /etc/sudoers.d/
     echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user

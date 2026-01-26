@@ -1263,7 +1263,7 @@ function getHostReportConfig(host_id) {
 }
 
 function saveHostReportConfig(host_id, enabled, cronData) {
-  let payload = { host_id: host_id, enabled: enabled ? 1 : 0 };
+  let payload = { host_id: host_id, enabled: enabled ? 1 : 0, last_sent_at: null };
   if (cronData) {
     payload = Object.assign(payload, cronData);
   }

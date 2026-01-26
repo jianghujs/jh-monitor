@@ -51,8 +51,10 @@ def get_last_boot_time():
     return ' '.join(last_boot_time)
 
 def is_jh_panel_installed():
-    # 检查 /www/server/jh-panel 目录是否存在
-    return os.path.exists('/www/server/jh-panel')
+    # 检查 /www/server/jh-panel 目录和 jh 命令是否存在
+    if not os.path.exists('/www/server/jh-panel'):
+        return False
+    return os.path.exists('/www/server/jh-panel/jh') and os.path.exists('/usr/bin/jh')
 
 def get_jh_panel_url():
     panel_path = "/www/server/jh-panel"

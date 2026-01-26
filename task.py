@@ -33,8 +33,10 @@ sys.path.append(os.getcwd() + "/class/core")
 sys.path.append(os.getcwd() + "/class/plugin")
 import jh
 import db
+sys.path.append(os.getcwd() + "/scripts")
 sys.path.append(os.getcwd() + "/scripts/client")
 from run_script_batch import run_script_batch
+from report_fetcher import fetch_reports, send_report_error
 
 # print sys.path
 
@@ -559,38 +561,79 @@ def hostReportNotifyTask():
                         last_sent_at = int(cfg.get('last_sent_at', 0))
                     except Exception:
                         last_sent_at = 0
-                    if jh.cronShouldRun(cron, last_sent_at, now_ts):
-                        due_hosts.append(row)
+                    if jh.cronShouldRun(cron, last_sent_at, now_ts):  
+                        due_hosts.append(row) 
 
                 if not due_hosts:
-                    time.sleep(30)
+                    time.sleep(10)
                     continue
 
                 due_ids = [row.get('host_id') for row in due_hosts if row.get('host_id')]
                 print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 待发送主机数: {len(due_hosts)} {due_ids}{Style.RESET_ALL}")
 
-                panel_reports = h_api.getPanelReportFromES(due_hosts) or {}
-                pve_reports = h_api.getPVEReportFromES(due_hosts) or {}
+                panel_hosts = [row for row in due_hosts if row.get('is_jhpanel') in (1, True, "1", "true", "True", "yes", "YES")]
+                pve_hosts = [row for row in due_hosts if row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")]
+
+                panel_reports, panel_errors = fetch_reports(panel_hosts, 'get_panel_report.py', run_script_batch)
+                pve_reports, pve_errors = fetch_reports(pve_hosts, 'get_pve_hardware_report.py', run_script_batch)
 
                 for row in due_hosts:
                     host_id = row.get('host_id')
                     host_ip = row.get('ip')
+                    is_jhpanel = row.get('is_jhpanel') in (1, True, "1", "true", "True", "yes", "YES")
                     is_pve = row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
-                    report_raw = pve_reports.get(host_ip) if is_pve else panel_reports.get(host_ip)
-                    report_data = h_api.normalizeHostReportData(report_raw)
-                    report_title = report_data.get('title') if isinstance(report_data, dict) else ''
-                    report_type = 'pve' if is_pve else 'panel'
-                    print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type={report_type} title={report_title}{Style.RESET_ALL}")
-                    msg = h_api.buildHostReportMessage(row, report_data)
-                    title = "{0}({1})服务器报告".format(row.get('host_name', ''), host_ip or '')
-                    send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
-                    if send_ok:
+                    sent_any = False
+
+                    if is_jhpanel:
+                        report_data = panel_reports.get(host_ip)
+                        report_err = panel_errors.get(host_ip)
+                        if report_data:
+                            report_title = report_data.get('title') if isinstance(report_data, dict) else ''
+                            print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type=panel title={report_title}{Style.RESET_ALL}")
+                            msg = h_api.renderHostReportHtml(row, report_data)
+                            title = "{0}({1})服务器报告".format(row.get('host_name', ''), host_ip or '')
+                            send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
+                            if send_ok:
+                                sent_any = True
+                                print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 发送成功: {host_id} panel{Style.RESET_ALL}")
+                            else:
+                                print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 发送失败: {host_id} panel{Style.RESET_ALL}")
+                        else:
+                            err_msg = report_err or 'report_empty'
+                            send_ok = send_report_error(row, 'panel', err_msg, jh)
+                            if send_ok:
+                                sent_any = True
+                                print(f"{Fore.YELLOW}★ ========= [hostReportNotifyTask] 异常通知已发送: {host_id} panel{Style.RESET_ALL}")
+                            else:
+                                print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 异常通知发送失败: {host_id} panel{Style.RESET_ALL}")
+
+                    if is_pve:
+                        report_data = pve_reports.get(host_ip)
+                        report_err = pve_errors.get(host_ip)
+                        if report_data:
+                            report_title = report_data.get('title') if isinstance(report_data, dict) else ''
+                            print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type=pve title={report_title}{Style.RESET_ALL}")
+                            msg = h_api.renderPVEReportHtml(row, report_data)
+                            title = "{0}({1})PVE硬件报告".format(row.get('host_name', ''), host_ip or '')
+                            send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
+                            if send_ok:
+                                sent_any = True
+                                print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 发送成功: {host_id} pve{Style.RESET_ALL}")
+                            else:
+                                print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 发送失败: {host_id} pve{Style.RESET_ALL}")
+                        else:
+                            err_msg = report_err or 'report_empty'
+                            send_ok = send_report_error(row, 'pve', err_msg, jh)
+                            if send_ok:
+                                sent_any = True
+                                print(f"{Fore.YELLOW}★ ========= [hostReportNotifyTask] 异常通知已发送: {host_id} pve{Style.RESET_ALL}")
+                            else:
+                                print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 异常通知发送失败: {host_id} pve{Style.RESET_ALL}")
+
+                    if sent_any:
                         if host_id not in report_config:
                             report_config[host_id] = {}
                         report_config[host_id]['last_sent_at'] = now_ts
-                        print(f"{Fore.GREEN}★ ========= [hostReportNotifyTask] 发送成功: {host_id}{Style.RESET_ALL}")
-                    else:
-                        print(f"{Fore.RED}★ ========= [hostReportNotifyTask] 发送失败: {host_id}{Style.RESET_ALL}")
 
                 h_api.saveHostReportConfigData(report_config)
             except Exception:

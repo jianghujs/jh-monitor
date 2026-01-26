@@ -20,10 +20,8 @@ import mw
 import db
 import time
 import system_api
-import site_api
 import crontab_api
 systemApi = system_api.system_api()
-siteApi = site_api.site_api()
 crontabApi = crontab_api.crontab_api()
 
 def json_serializer(obj):
@@ -84,7 +82,7 @@ class reportTools:
 
     def writeReportLog(self, report_data):
         json_data = json.dumps(report_data, default=json_serializer)
-        mw.writeFileLog(json_data, 'logs/report.log')
+        mw.writeFileLog(json_data, '/www/server/log/jhpanel_report.log')
 
     # 获取报告数据
     def getReportData(self):
@@ -868,6 +866,10 @@ VIP地址：%s<br/>
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python3 get_panel_report.py [send|get_report_data]")
+        sys.exit(1)
+
     type = sys.argv[1]
 
     # get_report_data 时禁用日志，send 时启用日志
@@ -883,4 +885,4 @@ if __name__ == "__main__":
         mw.notifyMessage(title='服务器异常通知：{} {}'.format(mw.getConfig('title'), mw.getDateFromNow()), msg=notify_msg, stype='服务器报告', trigger_time=600)
     elif type == 'get_report_data':
       report_data = report.getReportData()
-      print(report_data)
+      print(json.dumps(report_data, ensure_ascii=False, default=json_serializer))

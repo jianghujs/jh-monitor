@@ -383,9 +383,19 @@ class host_api:
         }
 
         report_config = self._readHostReportConfig()
-        last_sent_at = 0
-        if host_id in report_config:
-            last_sent_at = report_config.get(host_id, {}).get('last_sent_at', 0)
+        last_sent_at_param = request.form.get('last_sent_at', None)
+        if last_sent_at_param in ('', 'null', 'None'):
+            last_sent_at = None
+        elif last_sent_at_param is None:
+            if host_id in report_config:
+                last_sent_at = report_config.get(host_id, {}).get('last_sent_at', 0)
+            else:
+                last_sent_at = 0
+        else:
+            try:
+                last_sent_at = int(last_sent_at_param)
+            except Exception:
+                last_sent_at = None
 
         report_config[host_id] = {
             'enabled': enabled,
