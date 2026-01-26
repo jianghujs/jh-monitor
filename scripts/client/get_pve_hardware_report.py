@@ -42,6 +42,15 @@ import argparse
 from datetime import datetime
 from typing import Dict, List, Any, Tuple, Optional
 
+# 需要 sudo 运行以获取硬件信息
+if os.geteuid() != 0 and os.environ.get("JH_PVE_REPORT_SUDO") != "1":
+    os.environ["JH_PVE_REPORT_SUDO"] = "1"
+    script_path = os.path.abspath(__file__)
+    try:
+        os.execvp("sudo", ["sudo", sys.executable, script_path] + sys.argv[1:])
+    except Exception:
+        pass
+
 # ========================= 配置区域 =========================
 # 默认阈值配置
 DEFAULT_THRESHOLDS = {
@@ -1607,7 +1616,7 @@ class HardwareReporter:
             self.log(f"  {item}")
         self.log("")
     
-    def save_reports(self, log_dir: str = '/tmp/logs/pve') -> str:
+    def save_reports(self, log_dir: str = '/var/log/pve') -> str:
         """
         保存报告到文件
         
@@ -2455,7 +2464,7 @@ def main():
     parser.add_argument('--send-email', action='store_true', help='发送HTML报告到邮箱')
     parser.add_argument('--email', type=str, default=None, help='收件人邮箱地址（默认使用PVE配置的邮箱）')
     parser.add_argument('--email-subject', type=str, default=None, help='邮件主题（默认自动生成）')
-    parser.add_argument('--log-dir', type=str, default='/tmp/logs/pve', help='日志保存目录')
+    parser.add_argument('--log-dir', type=str, default='/var/log/pve', help='日志保存目录')
     
     args = parser.parse_args()
     

@@ -42,6 +42,15 @@ add_ansible_user(){
 }
 
 config_ansible_user() {
+    if ! command -v sudo >/dev/null 2>&1; then
+        if command -v apt >/dev/null 2>&1; then
+            echo "未检测到 sudo，开始安装..."
+            apt update && apt install sudo -y
+            echo "已安装 sudo"
+        else
+            echo "未检测到 sudo，且无 apt，跳过安装"
+        fi
+    fi
     echo "开始配置 $USERNAME 权限..."
     # 创建脚本执行目录
     mkdir -p /home/ansible_user/jh-monitor-scripts/
