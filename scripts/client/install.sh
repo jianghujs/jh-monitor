@@ -42,17 +42,21 @@ add_ansible_user(){
 }
 
 config_ansible_user() {
+    echo "开始配置 $USERNAME 权限..."
     # 创建脚本执行目录
     mkdir -p /home/ansible_user/jh-monitor-scripts/
     chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
+    echo "已配置脚本目录权限: /home/ansible_user/jh-monitor-scripts/"
     
     # 日志目录读写权限
     mkdir -p /www/server/log
     if command -v setfacl >/dev/null 2>&1; then
         setfacl -m u:${USERNAME}:rwX /www/server/log
         setfacl -d -m u:${USERNAME}:rwX /www/server/log
+        echo "已设置 /www/server/log ACL 读写权限"
     else
         chown -R ${USERNAME}:${USERNAME} /www/server/log
+        echo "已设置 /www/server/log 目录归属为 $USERNAME"
     fi
 
     # 面板目录读取权限
@@ -61,21 +65,29 @@ config_ansible_user() {
             setfacl -m u:${USERNAME}:rx /www/server/jh-panel
             setfacl -R -m u:${USERNAME}:rX /www/server/jh-panel/class /www/server/jh-panel/data /www/server/jh-panel/logs 2>/dev/null
             setfacl -d -m u:${USERNAME}:rX /www/server/jh-panel/data /www/server/jh-panel/logs 2>/dev/null
+            echo "已设置 /www/server/jh-panel 相关目录 ACL 读取权限"
+        else
+            echo "未找到 setfacl，跳过 /www/server/jh-panel ACL 配置"
         fi
+    else
+        echo "未找到 /www/server/jh-panel，跳过面板目录权限配置"
     fi
 
     # 报告日志写入权限
     touch /var/log/jhpanel_report.log
     if command -v setfacl >/dev/null 2>&1; then
         setfacl -m u:${USERNAME}:rw /var/log/jhpanel_report.log
+        echo "已设置 /var/log/jhpanel_report.log ACL 读写权限"
     else
         chown ${USERNAME}:${USERNAME} /var/log/jhpanel_report.log
+        echo "已设置 /var/log/jhpanel_report.log 归属为 $USERNAME"
     fi
 
     # 防火墙读取权限
     mkdir -p /etc/sudoers.d/
     echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user
     chmod 0440 /etc/sudoers.d/ansible_user
+    echo "已写入 /etc/sudoers.d/ansible_user 防火墙读取权限"
     
 }
 
