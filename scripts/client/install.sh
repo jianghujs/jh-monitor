@@ -91,9 +91,17 @@ config_ansible_user() {
 
     # SMART 读取权限
     SMARTCTL_BIN=$(command -v smartctl 2>/dev/null)
+    if [ -z "$SMARTCTL_BIN" ] && [ -x /usr/sbin/smartctl ]; then
+        SMARTCTL_BIN="/usr/sbin/smartctl"
+    fi
     if [ -n "$SMARTCTL_BIN" ]; then
-        echo "ansible_user ALL=(ALL) NOPASSWD: ${SMARTCTL_BIN}" >> /etc/sudoers.d/ansible_user
-        echo "已写入 SMART 权限: ${SMARTCTL_BIN}"
+        SMARTCTL_RULE="${USERNAME} ALL=(ALL) NOPASSWD: ${SMARTCTL_BIN}"
+        if ! grep -Fxq "$SMARTCTL_RULE" /etc/sudoers.d/ansible_user; then
+            echo "$SMARTCTL_RULE" >> /etc/sudoers.d/ansible_user
+            echo "已写入 SMART 权限: ${SMARTCTL_BIN}"
+        else
+            echo "SMART 权限已存在: ${SMARTCTL_BIN}"
+        fi
     else
         echo "未找到 smartctl，跳过 SMART 权限配置"
     fi
