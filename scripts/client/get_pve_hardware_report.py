@@ -220,6 +220,11 @@ def determine_status(value: float, warn_threshold: float, crit_threshold: float,
         else:
             return 'normal'
 
+def all_fans_stopped(fans: List[Dict[str, Any]]) -> bool:
+    if not fans:
+        return False
+    return all(to_int(fan.get('value', 0)) == 0 for fan in fans)
+
 # ========================= 数据采集模块 =========================
 
 class CPUCollector:
@@ -1244,22 +1249,14 @@ class HardwareReporter:
                         'detail': f'传感器 {temp["name"]} 温度过高'
                     })
             
-            for fan in sensors.get('fans', []):
-                value = fan['value']
-                if value == 0:
-                    self.issues.append({
-                        'category': '风扇',
-                        'severity': 'critical',
-                        'message': f'{fan["name"]} 停转',
-                        'detail': f'风扇 {fan["name"]} 转速为 0'
-                    })
-                elif value < 500:
-                    self.issues.append({
-                        'category': '风扇',
-                        'severity': 'warning',
-                        'message': f'{fan["name"]} 转速低 ({value} RPM)',
-                        'detail': f'风扇 {fan["name"]} 转速异常'
-                    })
+            fans = sensors.get('fans', [])
+            if all_fans_stopped(fans):
+                self.issues.append({
+                    'category': '风扇',
+                    'severity': 'critical',
+                    'message': '所有风扇停转',
+                    'detail': f'检测到 {len(fans)} 个风扇转速为 0'
+                })
     
     def _analyze_cpu(self):
         """分析CPU"""
@@ -1532,11 +1529,17 @@ class HardwareReporter:
         fans = sensors.get('fans', [])
         if fans:
             self.log("  风扇传感器:")
+            all_stopped = all_fans_stopped(fans)
             for fan in fans:
                 value = fan['value']
                 unit = fan['unit']
                 # 风扇转速为0或过低可能有问题
-                fan_color = Colors.RED if value == 0 else Colors.ORANGE if value < 500 else Colors.GREEN
+                if value == 0:
+                    fan_color = Colors.RED if all_stopped else Colors.ORANGE
+                elif value < 500:
+                    fan_color = Colors.ORANGE
+                else:
+                    fan_color = Colors.GREEN
                 self.log(f"    {fan['name']}: {color_text(f'{value} {unit}', fan_color)}")
         
         # 电压
@@ -1841,10 +1844,16 @@ class HardwareReporter:
             fans = sensors.get('fans', [])
             if fans:
                 fan_lines = []
+                all_stopped = all_fans_stopped(fans)
                 for fan in fans:
                     value = fan.get('value', 0)
                     unit = fan.get('unit', '')
-                    color = 'red' if value == 0 else 'orange' if value < 500 else 'auto'
+                    if value == 0:
+                        color = 'red' if all_stopped else 'orange'
+                    elif value < 500:
+                        color = 'orange'
+                    else:
+                        color = 'auto'
                     fan_lines.append(f"{fan.get('name', '-')}: <span style='color: {color}'>{value} {unit}</span>")
                 sensor_tips.append({
                     "name": "风扇传感器",
@@ -2163,9 +2172,15 @@ class HardwareReporter:
             # 风扇传感器
             fans = sensors.get('fans', [])
             if fans:
+                all_stopped = all_fans_stopped(fans)
                 for fan in fans:
                     value = fan['value']
-                    color = 'red' if value == 0 else 'orange' if value < 500 else 'auto'
+                    if value == 0:
+                        color = 'red' if all_stopped else 'orange'
+                    elif value < 500:
+                        color = 'orange'
+                    else:
+                        color = 'auto'
                     sensor_rows.append(f"<tr><td>风扇 ({fan['name']})</td><td><span style='color: {color}'>{value} {fan['unit']}</span></td></tr>")
             
             # 电压传感器
