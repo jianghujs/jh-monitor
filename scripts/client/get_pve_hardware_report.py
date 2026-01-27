@@ -909,24 +909,35 @@ class SensorCollector:
 
 class PowerCollector:
     """电源信息采集器"""
-    
+
     @staticmethod
     def collect() -> Dict[str, Any]:
         """采集电源信息"""
         result = {
             'status': 'unknown',
             'supplies': [],
-            'error': None
+            'error': None,
+            'warning': None
         }
+        tool_errors = []
+        tool_warnings = []
+
+        ipmitool_available = PowerCollector._check_tool('ipmitool')
         
         # 尝试使用 ipmitool
-        stdout, stderr, code = run_command(with_sudo("ipmitool chassis status 2>/dev/null"))
-        if code == 0 and stdout:
-            for line in stdout.split('\n'):
-                if 'Power' in line:
-                    result['supplies'].append({
-                        'info': line.strip()
-                    })
+        if ipmitool_available:
+            stdout, stderr, code = run_command(with_sudo("ipmitool chassis status"))
+            if code == 0 and stdout:
+                for line in stdout.split('\n'):
+                    if 'Power' in line:
+                        result['supplies'].append({
+                            'info': line.strip()
+                        })
+            else:
+                if PowerCollector._ipmi_device_missing(stdout, stderr):
+                    tool_warnings.append("未检测到电源信息（IPMI 设备不存在）")
+                else:
+                    tool_errors.append("ipmitool 读取电源信息失败")
         
         # 尝试从 /sys 读取
         stdout, stderr, code = run_command("find /sys/class/hwmon -name 'power*_input' 2>/dev/null")
@@ -941,11 +952,35 @@ class PowerCollector:
                             'power': value,
                             'unit': 'W'
                         })
+        elif code != 0:
+            tool_errors.append("读取 /sys/class/hwmon 电源信息失败")
         
         if not result['supplies']:
-            result['error'] = "未检测到电源信息（可能需要 IPMI 支持）"
+            if tool_errors:
+                result['error'] = "；".join(tool_errors)
+                result['status'] = 'error'
+            elif tool_warnings:
+                result['warning'] = "；".join(tool_warnings)
+                result['status'] = 'warning'
+            else:
+                result['warning'] = "未检测到电源信息（可能需要 IPMI 支持）"
+                result['status'] = 'warning'
+        else:
+            result['status'] = 'normal'
         
         return result
+
+    @staticmethod
+    def _check_tool(tool_name: str) -> bool:
+        """检查工具是否已安装"""
+        stdout, stderr, code = run_command(f"which {tool_name}")
+        return code == 0 and stdout.strip() != ''
+
+    @staticmethod
+    def _ipmi_device_missing(stdout: str, stderr: str) -> bool:
+        """判断是否为 IPMI 设备不存在"""
+        combined = f"{stdout or ''}\n{stderr or ''}"
+        return "Could not open device" in combined and "/dev/ipmi" in combined
 
 # ========================= 报告生成器 =========================
 
@@ -1559,7 +1594,10 @@ class HardwareReporter:
         power = self.report_data.get('power', {})
         
         if power.get('error'):
-            self.log(f"  {color_text('提示:', Colors.YELLOW)} {power['error']}")
+            self.log(f"  {color_text('错误:', Colors.RED)} {power['error']}")
+            return
+        if power.get('warning'):
+            self.log(f"  {color_text(power['warning'], Colors.ORANGE)}")
             return
         
         supplies = power.get('supplies', [])
@@ -1872,6 +1910,11 @@ class HardwareReporter:
         power = self.report_data.get('power', {})
         if power.get('error'):
             collect_errors.append(f"电源：{power.get('error')}")
+        elif power.get('warning'):
+            power_tips.append({
+                "name": "电源",
+                "desc": f"<span style='color: orange'>{power.get('warning')}</span>"
+            })
         else:
             supplies = power.get('supplies', [])
             if supplies:
@@ -2194,7 +2237,11 @@ class HardwareReporter:
         # 生成电源信息表格
         power_rows = []
         power = self.report_data.get('power', {})
-        if not power.get('error'):
+        if power.get('error'):
+            power_rows.append(f"<tr><td>电源异常</td><td><span style='color: red'>{power.get('error')}</span></td></tr>")
+        elif power.get('warning'):
+            power_rows.append(f"<tr><td>电源信息</td><td><span style='color: orange'>{power.get('warning')}</span></td></tr>")
+        else:
             supplies = power.get('supplies', [])
             for supply in supplies:
                 if 'info' in supply:
