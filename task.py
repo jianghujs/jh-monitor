@@ -591,7 +591,7 @@ def hostReportNotifyTask():
                             report_title = report_data.get('title') if isinstance(report_data, dict) else ''
                             print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type=panel title={report_title}{Style.RESET_ALL}")
                             msg = h_api.renderHostReportHtml(row, report_data)
-                            title = "{0}({1})服务器报告".format(row.get('host_name', ''), host_ip or '')
+                            title = "{0}({1})-服务器报告".format(row.get('host_name', ''), host_ip or '')
                             send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
                             if send_ok:
                                 sent_any = True
@@ -614,7 +614,7 @@ def hostReportNotifyTask():
                             report_title = report_data.get('title') if isinstance(report_data, dict) else ''
                             print(f"{Fore.CYAN}★ ========= [hostReportNotifyTask] 准备发送: {host_id} {host_ip} type=pve title={report_title}{Style.RESET_ALL}")
                             msg = h_api.renderPVEReportHtml(row, report_data)
-                            title = "{0}({1})PVE硬件报告".format(row.get('host_name', ''), host_ip or '')
+                            title = "{0}({1})-PVE硬件报告".format(row.get('host_name', ''), host_ip or '')
                             send_ok = jh.notifyMessage(msg=msg, msgtype='html', title=title, stype='host_report_{0}'.format(host_id), trigger_time=0)
                             if send_ok:
                                 sent_any = True
