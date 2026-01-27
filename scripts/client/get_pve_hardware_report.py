@@ -935,7 +935,7 @@ class PowerCollector:
                         })
             else:
                 if PowerCollector._ipmi_device_missing(stdout, stderr):
-                    tool_warnings.append("未检测到电源信息（IPMI 设备不存在）")
+                    tool_warnings.append("未检测到电源")
                 else:
                     tool_errors.append("ipmitool 读取电源信息失败")
         
