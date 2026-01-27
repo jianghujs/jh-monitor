@@ -1220,13 +1220,6 @@ class HardwareReporter:
                             'detail': f'磁盘 {dev["device"]} 检测到媒体/数据完整性错误'
                         })
                     unsafe_shutdowns = to_int(nvme.get('unsafe_shutdowns'))
-                    if unsafe_shutdowns > 0:
-                        self.issues.append({
-                            'category': '磁盘健康',
-                            'severity': 'warning',
-                            'message': f'{dev["device"]} 不安全关机 {unsafe_shutdowns}',
-                            'detail': f'磁盘 {dev["device"]} 存在不安全关机记录'
-                        })
                 
                 temp = dev.get('temperature')
                 if temp is not None:
