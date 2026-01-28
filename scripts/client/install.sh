@@ -53,9 +53,13 @@ config_ansible_user() {
     fi
     echo "开始配置 $USERNAME 权限..."
     # 创建脚本执行目录
-    mkdir -p /home/ansible_user/jh-monitor-scripts/
-    chown -R ansible_user:ansible_user /home/ansible_user/jh-monitor-scripts/
-    echo "已配置脚本目录权限: /home/ansible_user/jh-monitor-scripts/"
+    mkdir -p /home/${USERNAME}/jh-monitor-scripts/
+    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/jh-monitor-scripts/
+    echo "已配置脚本目录权限: /home/${USERNAME}/jh-monitor-scripts/"
+    # 默认日志输出目录（避免写系统目录）
+    mkdir -p /home/${USERNAME}/jh-monitor-logs/
+    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/jh-monitor-logs/
+    echo "已配置日志目录权限: /home/${USERNAME}/jh-monitor-logs/"
     
     # 日志目录读写权限
     mkdir -p /www/server/log
@@ -94,12 +98,20 @@ config_ansible_user() {
 
     # 只读命令 sudo 权限
     mkdir -p /etc/sudoers.d/
-    SUDO_CMDS="/sbin/iptables -L, /sbin/iptables -L -n -v, /usr/sbin/iptables -L, /usr/sbin/iptables -L -n -v, /usr/sbin/smartctl --scan, /usr/sbin/smartctl -a *, /usr/bin/smartctl --scan, /usr/bin/smartctl -a *, /usr/bin/sensors, /usr/bin/ipmitool sensor, /usr/bin/ipmitool chassis status"
-    SUDO_RULE="${USERNAME} ALL=(ALL) NOPASSWD: ${SUDO_CMDS}"
     rm -f /etc/sudoers.d/ansible_user
-    echo "$SUDO_RULE" > /etc/sudoers.d/ansible_user
+    cat > /etc/sudoers.d/ansible_user <<EOF
+Cmnd_Alias JH_MONITOR_READ = /sbin/iptables -L, /sbin/iptables -L *, /usr/sbin/iptables -L, /usr/sbin/iptables -L *, /usr/sbin/smartctl --scan, /usr/sbin/smartctl -a /dev/*, /usr/bin/smartctl --scan, /usr/bin/smartctl -a /dev/*, /usr/bin/sensors, /usr/bin/sensors *, /usr/bin/ipmitool sensor, /usr/bin/ipmitool chassis status
+${USERNAME} ALL=(ALL) NOPASSWD: JH_MONITOR_READ
+EOF
     chmod 0440 /etc/sudoers.d/ansible_user
-    echo "已配置只读命令 sudo 权限: ${SUDO_CMDS}"
+    if command -v visudo >/dev/null 2>&1; then
+        if ! visudo -cf /etc/sudoers.d/ansible_user >/dev/null 2>&1; then
+            rm -f /etc/sudoers.d/ansible_user
+            show_error "sudoers 校验失败，已移除 /etc/sudoers.d/ansible_user"
+            exit 1
+        fi
+    fi
+    echo "已配置只读命令 sudo 权限"
     
 }
 

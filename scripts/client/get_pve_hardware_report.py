@@ -116,6 +116,28 @@ def with_sudo(cmd: str) -> str:
         return f"sudo -n {cmd}"
     return cmd
 
+def ensure_writable_dir(log_dir: str) -> Tuple[str, bool]:
+    """确保日志目录可写，必要时回退到用户目录。"""
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        test_path = os.path.join(log_dir, ".jh-monitor-write-test")
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write("")
+        os.remove(test_path)
+        return log_dir, False
+    except Exception:
+        fallback_dir = os.path.join(os.path.expanduser("~"), "jh-monitor-logs")
+        os.makedirs(fallback_dir, exist_ok=True)
+        return fallback_dir, True
+
+def ensure_writable_log_path(log_path: str) -> Tuple[str, bool]:
+    """确保日志路径可写，必要时回退到用户目录。"""
+    log_dir = os.path.dirname(log_path) or "."
+    resolved_dir, fallback_used = ensure_writable_dir(log_dir)
+    if fallback_used:
+        return os.path.join(resolved_dir, os.path.basename(log_path)), True
+    return log_path, False
+
 def to_int(value: Any, default: int = 0) -> int:
     """尝试转换为整数"""
     if isinstance(value, int):
@@ -1651,7 +1673,10 @@ class HardwareReporter:
         Returns:
             str: HTML报告文件路径
         """
-        os.makedirs(log_dir, exist_ok=True)
+        original_log_dir = log_dir
+        log_dir, fallback_used = ensure_writable_dir(log_dir)
+        if fallback_used:
+            self.log(color_text(f"提示: 无法写入 {original_log_dir}，报告将保存到 {log_dir}", Colors.YELLOW))
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
@@ -1692,6 +1717,10 @@ class HardwareReporter:
 
     def write_report_log(self, log_path: str = REPORT_LOG_PATH, return_payload_only: bool = False) -> Any:
         """写入报告数据日志"""
+        original_log_path = log_path
+        log_path, fallback_used = ensure_writable_log_path(log_path)
+        if fallback_used:
+            print(color_text(f"提示: 无法写入 {original_log_path}，已改用 {log_path}", Colors.YELLOW))
         now = datetime.now()
         self.end_time = self.end_time or now
         hostname = run_command("hostname")[0].strip() or "PVE服务器"
