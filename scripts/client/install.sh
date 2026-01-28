@@ -92,19 +92,14 @@ config_ansible_user() {
         echo "已设置 /var/log/jhpanel_report.log 归属为 $USERNAME"
     fi
 
-    # 防火墙读取权限
+    # 只读命令 sudo 权限
     mkdir -p /etc/sudoers.d/
-    echo "ansible_user ALL=(ALL) NOPASSWD: /sbin/iptables -L" >> /etc/sudoers.d/ansible_user
-    chmod 0440 /etc/sudoers.d/ansible_user
-    echo "已写入 /etc/sudoers.d/ansible_user 防火墙读取权限"
-
-    # 配置命令权限
-    SUDO_CMDS="/usr/sbin/smartctl, /usr/bin/ipmitool, /usr/bin/sensors, /usr/sbin/sensors-detect, /usr/bin/apt-get, /usr/bin/yum"
+    SUDO_CMDS="/sbin/iptables -L, /sbin/iptables -L -n -v, /usr/sbin/iptables -L, /usr/sbin/iptables -L -n -v, /usr/sbin/smartctl --scan, /usr/sbin/smartctl -a *, /usr/bin/smartctl --scan, /usr/bin/smartctl -a *, /usr/bin/sensors, /usr/bin/ipmitool sensor, /usr/bin/ipmitool chassis status"
     SUDO_RULE="${USERNAME} ALL=(ALL) NOPASSWD: ${SUDO_CMDS}"
     rm -f /etc/sudoers.d/ansible_user
-    echo "$SUDO_RULE" >> /etc/sudoers.d/ansible_user
+    echo "$SUDO_RULE" > /etc/sudoers.d/ansible_user
     chmod 0440 /etc/sudoers.d/ansible_user
-    echo "已配置命令权限: ${SUDO_CMDS}"
+    echo "已配置只读命令 sudo 权限: ${SUDO_CMDS}"
     
 }
 
