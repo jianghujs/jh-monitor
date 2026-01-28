@@ -730,6 +730,10 @@ class SensorCollector:
     """传感器信息采集器（温度、风扇、电压）"""
     TEMP_VALID_MIN = 5.0
     TEMP_VALID_MAX = 110.0
+    TEMP_IGNORED_SENSORS = {
+        'auxtin0',
+        'auxtin3',
+    }
     
     @staticmethod
     def collect(auto_install: bool = False) -> Dict[str, Any]:
@@ -936,6 +940,8 @@ class SensorCollector:
     @staticmethod
     def _is_valid_temperature(name: str, value: float) -> bool:
         """过滤明显异常的温度读数，避免误报。"""
+        if SensorCollector._is_ignored_temperature_sensor(name):
+            return False
         if value is None:
             return False
         if value < SensorCollector.TEMP_VALID_MIN:
@@ -943,6 +949,13 @@ class SensorCollector:
         if value > SensorCollector.TEMP_VALID_MAX:
             return False
         return True
+
+    @staticmethod
+    def _is_ignored_temperature_sensor(name: str) -> bool:
+        if not name:
+            return False
+        normalized = name.strip().lower()
+        return normalized in SensorCollector.TEMP_IGNORED_SENSORS
 
 class PowerCollector:
     """电源信息采集器"""
