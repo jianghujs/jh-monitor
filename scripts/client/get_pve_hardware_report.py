@@ -728,6 +728,8 @@ class NetworkCollector:
 
 class SensorCollector:
     """传感器信息采集器（温度、风扇、电压）"""
+    TEMP_VALID_MIN = 5.0
+    TEMP_VALID_MAX = 110.0
     
     @staticmethod
     def collect(auto_install: bool = False) -> Dict[str, Any]:
@@ -861,11 +863,12 @@ class SensorCollector:
                 if match:
                     name = match.group(1).strip()
                     value = to_float(match.group(2))
-                    result['temperatures'].append({
-                        'name': name,
-                        'value': value,
-                        'unit': '°C'
-                    })
+                    if SensorCollector._is_valid_temperature(name, value):
+                        result['temperatures'].append({
+                            'name': name,
+                            'value': value,
+                            'unit': '°C'
+                        })
             
             # 风扇
             elif 'fan' in line.lower() and 'RPM' in line:
@@ -911,11 +914,12 @@ class SensorCollector:
             
             # 分类
             if unit == 'degrees C':
-                result['temperatures'].append({
-                    'name': name,
-                    'value': value,
-                    'unit': '°C'
-                })
+                if SensorCollector._is_valid_temperature(name, value):
+                    result['temperatures'].append({
+                        'name': name,
+                        'value': value,
+                        'unit': '°C'
+                    })
             elif unit == 'RPM':
                 result['fans'].append({
                     'name': name,
@@ -928,6 +932,17 @@ class SensorCollector:
                     'value': value,
                     'unit': 'V'
                 })
+    
+    @staticmethod
+    def _is_valid_temperature(name: str, value: float) -> bool:
+        """过滤明显异常的温度读数，避免误报。"""
+        if value is None:
+            return False
+        if value < SensorCollector.TEMP_VALID_MIN:
+            return False
+        if value > SensorCollector.TEMP_VALID_MAX:
+            return False
+        return True
 
 class PowerCollector:
     """电源信息采集器"""
