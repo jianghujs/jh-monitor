@@ -86,6 +86,24 @@ config_ansible_user() {
         echo "未找到 /www/server/jh-panel，跳过面板目录权限配置"
     fi
 
+    # jh 命令执行权限
+    if [ -f /www/server/jh-panel/jh ]; then
+        if command -v setfacl >/dev/null 2>&1; then
+            setfacl -m u:${USERNAME}:rx /www/server/jh-panel/jh
+        else
+            chmod a+rx /www/server/jh-panel/jh
+        fi
+        echo "已设置 /www/server/jh-panel/jh 执行权限"
+    fi
+    if [ -f /usr/bin/jh ]; then
+        if command -v setfacl >/dev/null 2>&1; then
+            setfacl -m u:${USERNAME}:rx /usr/bin/jh
+        else
+            chmod a+rx /usr/bin/jh
+        fi
+        echo "已设置 /usr/bin/jh 执行权限"
+    fi
+
     # 报告日志写入权限
     touch /var/log/jhpanel_report.log
     if command -v setfacl >/dev/null 2>&1; then
