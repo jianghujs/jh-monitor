@@ -36,13 +36,6 @@ confirm_action() {
     local current_action="$1"
     local current_url="$2"
 
-    echo -ne "\033[1;31m提示：\033[0m 即将执行\033[1m江湖云监控客户端配置\033[0m，可能会创建用户、修改权限、安装运行环境并配置定时任务，确定执行吗？（默认n）[y/n]: "
-    read confirm_choice
-    confirm_choice=${confirm_choice:-n}
-    if [ "$confirm_choice" != "y" ]; then
-        echo "已取消执行客户端配置"
-        exit 0
-    fi
 
     echo "-----------------------"
     echo "即将执行客户端配置，包含内容如下："
