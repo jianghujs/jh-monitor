@@ -25,6 +25,17 @@ fail() {
   exit 1
 }
 
+build_collector_command() {
+  local collector_exec="${PYTHON_BIN} ${SCRIPT_HOME}/report_collector.py --output-dir ${DATA_DIR}"
+  if command -v flock >/dev/null 2>&1; then
+    collector_exec="$(command -v flock) -n ${LOCK_FILE} ${collector_exec}"
+  fi
+
+  cat <<EOF
+/bin/bash -lc 'pushd /www/server/jh-panel > /dev/null || exit 1; ${collector_exec}; collector_status=\$?; popd > /dev/null || true; exit \$collector_status'
+EOF
+}
+
 cleanup_legacy() {
   rm -f "$CRON_FILE"
 
@@ -39,13 +50,10 @@ cleanup_legacy() {
 }
 
 write_cron() {
-  local collector_cmd="${PYTHON_BIN} ${SCRIPT_HOME}/report_collector.py --output-dir ${DATA_DIR}"
+  local collector_cmd
+  collector_cmd="$(build_collector_command)"
   mkdir -p "$LOG_DIR"
   touch "$LOG_FILE"
-
-  if command -v flock >/dev/null 2>&1; then
-    collector_cmd="$(command -v flock) -n ${LOCK_FILE} ${collector_cmd}"
-  fi
 
   cat > "$CRON_FILE" <<CRON
 SHELL=/bin/bash
@@ -65,7 +73,8 @@ validate_cron() {
 
 run_once() {
   local output_path
-  output_path="$(${PYTHON_BIN} ${SCRIPT_HOME}/report_collector.py --output-dir ${DATA_DIR})" || fail "首次执行 report collector 失败"
+  output_path="$(build_collector_command)" || fail "生成 report collector 执行命令失败"
+  output_path="$(eval "$output_path")" || fail "首次执行 report collector 失败"
   [ -n "$output_path" ] || fail "report collector 未输出文件路径"
   [ -f "$output_path" ] || fail "report collector 输出文件不存在: ${output_path}"
   log "首次采集完成: ${output_path}"

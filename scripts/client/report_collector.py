@@ -12,11 +12,29 @@ import time
 import traceback
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PANEL_DIR = '/www/server/jh-panel'
+PANEL_CORE_DIR = os.path.join(PANEL_DIR, 'class/core')
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
+if PANEL_CORE_DIR not in sys.path:
+    sys.path.insert(0, PANEL_CORE_DIR)
 
 from get_host_info import get_host_ip
 from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info
+
+_original_cwd = os.getcwd()
+try:
+    if os.path.exists(PANEL_DIR):
+        os.chdir(PANEL_DIR)
+    import crontab_api as panel_crontab_api
+    import mw
+    import system_api as panel_system_api
+except Exception:
+    mw = None
+    panel_crontab_api = None
+    panel_system_api = None
+finally:
+    os.chdir(_original_cwd)
 
 DEFAULT_OUTPUT_DIR = os.environ.get(
     'REPORT_COLLECTOR_OUTPUT_DIR',
@@ -186,7 +204,6 @@ def parse_datetime_to_timestamp(raw_value):
 def get_report_window_start_timestamp():
     now = datetime.datetime.now()
     try:
-        import mw
         return int(mw.getReportCycleStartTime(now).timestamp())
     except Exception:
         return int(datetime.datetime(now.year, now.month, now.day).timestamp())
@@ -194,7 +211,8 @@ def get_report_window_start_timestamp():
 
 def get_crontab_enabled(crontab_name):
     try:
-        import crontab_api as panel_crontab_api
+        if panel_crontab_api is None:
+            return False
         crontab = panel_crontab_api.crontab_api().getCrontab(crontab_name)
         return bool(crontab and int(crontab.get('status', 0)) == 1)
     except Exception:
@@ -392,18 +410,12 @@ def load_panel_runtime_info():
         'rsync': []
     }
 
-    panel_dir = '/www/server/jh-panel'
-    panel_core_dir = os.path.join(panel_dir, 'class/core')
-    if not os.path.exists(panel_core_dir):
+    if panel_system_api is None or not os.path.exists(PANEL_CORE_DIR):
         return runtime
 
     old_cwd = os.getcwd()
     try:
-        os.chdir(panel_dir)
-        if panel_core_dir not in sys.path:
-            sys.path.insert(0, panel_core_dir)
-        import system_api as panel_system_api
-
+        os.chdir(PANEL_DIR)
         system_api_obj = panel_system_api.system_api()
         runtime['backup'] = load_backup_runtime_info()
 
