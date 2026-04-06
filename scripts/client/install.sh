@@ -32,6 +32,36 @@ check_command_exist() {
     command -v "$@" >/dev/null 2>&1
 }
 
+confirm_action() {
+    local current_action="$1"
+    local current_url="$2"
+
+    echo -ne "\033[1;31m提示：\033[0m 即将执行\033[1m江湖云监控客户端配置\033[0m，可能会创建用户、修改权限、安装运行环境并配置定时任务，确定执行吗？（默认n）[y/n]: "
+    read confirm_choice
+    confirm_choice=${confirm_choice:-n}
+    if [ "$confirm_choice" != "y" ]; then
+        echo "已取消执行客户端配置"
+        exit 0
+    fi
+
+    echo "-----------------------"
+    echo "即将执行客户端配置，包含内容如下："
+    echo "1. 创建或复用 ${USERNAME} 用户"
+    echo "2. 配置 ${USERNAME} 的目录与权限"
+    echo "3. 初始化 Python 运行环境"
+    echo "4. 安装或更新数据收集定时任务"
+    echo "5. 配置数据收集定时任务"
+    echo "6. 配置服务端 SSH 公钥访问"
+    echo "7. 配置 filebeat"
+    echo "8. 通知服务端添加当前主机"
+    echo "-----------------------"
+    prompt "确认执行吗？（默认y）[y/n]: " confirm_choice "y"
+    if [ "$confirm_choice" != "y" ]; then
+        echo "已取消执行"
+        exit 0
+    fi
+}
+
 add_ansible_user(){
     if id "$USERNAME" &>/dev/null; then
         echo "用户 $USERNAME 已经存在。"
@@ -251,8 +281,10 @@ if [ "$net_env_cn" == "cn" ]; then
 fi
 
 if [ "$action" == "uninstall" ]; then
+    confirm_action "$action" "$monitor_url"
     echo "卸载逻辑待实现"
 elif [ "$action" == "install" ]; then
+    confirm_action "$action" "$monitor_url"
     SERVER_IP=$(echo "${monitor_url}" | cut -d'/' -f3 | cut -d':' -f1)
     SERVER_PORT=$(echo "${monitor_url}" | awk -F ":" '{print $3}')
 
@@ -280,6 +312,7 @@ elif [ "$action" == "install" ]; then
     # 通知服务端添加主机
     notify_server_add_host
 elif [ "$action" == "set_user_permission" ]; then
+    confirm_action "$action" "$monitor_url"
     # 仅初始化ansible_user权限相关设置
     add_ansible_user
     config_ansible_user
