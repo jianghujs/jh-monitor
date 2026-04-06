@@ -91,14 +91,6 @@ run_cron_installer() {
   bash "$cron_script" "$cron_action"
 }
 
-run_once() {
-  local output_path
-  output_path="$(${PYTHON_BIN} ${SCRIPT_HOME}/report_collector.py --output-dir ${DATA_DIR})" || fail "首次执行 report collector 失败"
-  [ -n "$output_path" ] || fail "report collector 未输出文件路径"
-  [ -f "$output_path" ] || fail "report collector 输出文件不存在: ${output_path}"
-  log "首次采集完成: ${output_path}"
-}
-
 main() {
   case "$ACTION" in
     install|update)
@@ -109,7 +101,6 @@ main() {
         fetch_or_copy "$file_name"
       done
       run_cron_installer update
-      run_once
       ;;
     uninstall)
       run_cron_installer uninstall
