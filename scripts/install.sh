@@ -10,6 +10,10 @@ fi
 
 startTime=`date +%s`
 netEnvCn="$1"
+RAW_BASE="https://raw.githubusercontent.com/jianghujs/jh-monitor/master"
+if [ "$netEnvCn" == "cn" ]; then
+  RAW_BASE="https://gitee.com/jianghujs/jh-monitor/raw/master"
+fi
 echo "netEnvCn: ${netEnvCn}"
 _os=`uname`
 echo "use system: ${_os}"

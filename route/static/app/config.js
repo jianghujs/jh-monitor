@@ -76,6 +76,131 @@ $('input[name="bind_domain"]').change(function(){
 	});
 });
 
+function getReportConfigPayload(){
+	return {
+		'es_addr': $('#report_es_addr').val(),
+		'es_username': $('#report_es_username').val(),
+		'es_password': $('#report_es_password').val(),
+		'cpu': $('#report_cpu').val(),
+		'memory': $('#report_memory').val(),
+		'disk': $('#report_disk').val(),
+		'ssl_cert': $('#report_ssl_cert').val()
+	};
+}
+
+function getReportEsPayload(){
+	return {
+		'es_addr': $('#report_es_addr').val(),
+		'es_username': $('#report_es_username').val(),
+		'es_password': $('#report_es_password').val()
+	};
+}
+
+function getReportThresholdPayload(){
+	return {
+		'cpu': $('#report_cpu').val(),
+		'memory': $('#report_memory').val(),
+		'disk': $('#report_disk').val(),
+		'ssl_cert': $('#report_ssl_cert').val()
+	};
+}
+
+function fillReportConfig(data){
+	if (!data){
+		return;
+	}
+
+	var reportConfig = data.report_config || {};
+	var esConfig = data.es_config || {};
+
+	$('#report_es_addr').val(esConfig.addr || '');
+	$('#report_es_username').val(esConfig.username || '');
+	$('#report_es_password').val(esConfig.password || '');
+	$('#report_cpu').val(reportConfig.cpu === undefined ? '' : reportConfig.cpu);
+	$('#report_memory').val(reportConfig.memory === undefined ? '' : reportConfig.memory);
+	$('#report_disk').val(reportConfig.disk === undefined ? '' : reportConfig.disk);
+	$('#report_ssl_cert').val(reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert);
+}
+
+function loadReportConfig(){
+	$.get('/config/get_report_config', function(rdata){
+		if (!rdata.status){
+			layer.msg(rdata.msg,{icon:2});
+			return;
+		}
+		fillReportConfig(rdata.data);
+	}, 'json');
+}
+
+$('.btn_test_report_es').click(function(){
+	var payload = getReportEsPayload();
+	var loadT = layer.msg('正在测试ES连接...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/config/test_report_es', payload, function(rdata){
+		layer.close(loadT);
+		showMsg(rdata.msg, function(){}, {icon:rdata.status?1:2}, 2500);
+	}, 'json');
+});
+
+$('.btn_save_report_es').click(function(){
+	var payload = getReportEsPayload();
+	var loadT = layer.msg('正在保存ES配置...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/config/save_report_es', payload, function(rdata){
+		layer.close(loadT);
+		showMsg(rdata.msg, function(){
+			if (rdata.status){
+				loadReportConfig();
+			}
+		}, {icon:rdata.status?1:2}, 2500);
+	}, 'json');
+});
+
+$('.btn_reset_report_es').click(function(){
+	layer.confirm('确定将ES配置重置为本地默认值吗？<br/>地址：http://127.0.0.1:9200<br/>账号：elastic<br/>密码：changeme', {title:'重置ES配置', icon:13}, function(index){
+		var loadT = layer.msg('正在重置ES配置...', {icon:16,time:0,shade:[0.3, '#000']});
+		$.post('/config/reset_report_es', {}, function(rdata){
+			layer.close(loadT);
+			showMsg(rdata.msg, function(){
+				if (rdata.status){
+					loadReportConfig();
+				}
+				layer.close(index);
+			}, {icon:rdata.status?1:2}, 2500);
+		}, 'json');
+	});
+});
+
+$('.btn_save_report_threshold').click(function(){
+	var payload = getReportThresholdPayload();
+	var loadT = layer.msg('正在保存服务器报告阈值...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/config/save_report_threshold', payload, function(rdata){
+		layer.close(loadT);
+		showMsg(rdata.msg, function(){
+			if (rdata.status){
+				loadReportConfig();
+			}
+		}, {icon:rdata.status?1:2}, 2500);
+	}, 'json');
+});
+
+$('.btn_reset_report_threshold').click(function(){
+	layer.confirm('确定将服务器报告阈值重置为默认值吗？<br/>CPU：80<br/>内存：80<br/>磁盘：80<br/>SSL到期阈值：14天', {title:'重置服务器报告配置', icon:13}, function(index){
+		var loadT = layer.msg('正在重置服务器报告阈值...', {icon:16,time:0,shade:[0.3, '#000']});
+		$.post('/config/reset_report_threshold', {}, function(rdata){
+			layer.close(loadT);
+			showMsg(rdata.msg, function(){
+				if (rdata.status){
+					loadReportConfig();
+				}
+				layer.close(index);
+			}, {icon:rdata.status?1:2}, 2500);
+		}, 'json');
+	});
+});
+
+$(function(){
+	loadReportConfig();
+});
+
 $('input[name="bind_ssl"]').click(function(){
 	var open_ssl = $(this).prop("checked");
 	$.post('/config/set_panel_ssl',{}, function(rdata){

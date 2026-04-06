@@ -181,6 +181,69 @@
 					</p>
 
 				</div>
+
+				<div class="title c6 plr15"><h3 class="f16">ES设置</h3></div>
+
+				<div class="setting-con pd15">
+					<p class="mtb15">
+						<span class="set-tit text-right" title="ES地址">ES地址</span>
+						<input id="report_es_addr" name="report_es_addr" class="inputtxt bt-input-text" type="text" placeholder="例如：http://127.0.0.1:9200">
+						<button type="button" class="btn btn-default btn-sm ml5 btn_test_report_es">测试连接</button>
+						<span class="set-info c7">支持单个或多个ES地址，多个地址可使用英文逗号或换行分隔。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right" title="ES用户名">ES用户名</span>
+						<input id="report_es_username" name="report_es_username" class="inputtxt bt-input-text" type="text" placeholder="未开启鉴权可留空">
+						<span class="set-info c7">如ES未启用认证，可以留空。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right" title="ES密码">ES密码</span>
+						<input id="report_es_password" name="report_es_password" class="inputtxt bt-input-text" type="password" placeholder="未开启鉴权可留空">
+						<span class="set-info c7">保存前会由后端统一校验，不在前端直接落盘。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right"></span>
+						<button type="button" class="btn btn-success btn-sm ml5 btn_save_report_es">保存ES配置</button>
+						<button type="button" class="btn btn-warning btn-sm btn_reset_report_es">重置默认</button>
+					</p>
+				</div>
+
+				<div class="title c6 plr15"><h3 class="f16">服务器报告配置</h3></div>
+
+				<div class="setting-con pd15">
+					<p class="mtb15">
+						<span class="set-tit text-right" title="CPU阈值">CPU阈值</span>
+						<input id="report_cpu" name="report_cpu" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
+						<span class="set-info c7">日报分析中CPU平均使用率超过该阈值时记为异常。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right" title="内存阈值">内存阈值</span>
+						<input id="report_memory" name="report_memory" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
+						<span class="set-info c7">日报分析中内存平均使用率超过该阈值时记为异常。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right" title="磁盘阈值">磁盘阈值</span>
+						<input id="report_disk" name="report_disk" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
+						<span class="set-info c7">任一磁盘挂载点使用率超过该阈值时记为异常。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right" title="SSL证书到期阈值">SSL到期阈值</span>
+						<input id="report_ssl_cert" name="report_ssl_cert" class="inputtxt bt-input-text" type="number" min="0" max="3650" placeholder="单位：天">
+						<span class="set-info c7">非自动续签证书剩余有效期小于该天数时记为异常。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right"></span>
+						<button type="button" class="btn btn-success btn-sm btn_save_report_threshold">保存阈值配置</button>
+						<button type="button" class="btn btn-warning btn-sm ml5 btn_reset_report_threshold">重置默认</button>
+					</p>
+				</div>
 			</div>
 		</div>
 	</div>

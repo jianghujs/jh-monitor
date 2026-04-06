@@ -20,6 +20,46 @@ filebeat.inputs:
 
 # filestream is an input for collecting log messages from files.
 - type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-scripts/data/host-system-status-*.json
+    - /home/ansible/jh-monitor-scripts/data/host-system-status-*.json
+  json.keys_under_root: true
+  json.add_error_key: true
+  fields:
+    log_index: host-system-status
+
+- type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-scripts/data/host-xtrabackup-*.ndjson
+    - /home/ansible/jh-monitor-scripts/data/host-xtrabackup-*.ndjson
+  json.keys_under_root: true
+  json.add_error_key: true
+  fields:
+    log_index: host-xtrabackup
+
+- type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-scripts/data/host-xtrabackup-inc-*.ndjson
+    - /home/ansible/jh-monitor-scripts/data/host-xtrabackup-inc-*.ndjson
+  json.keys_under_root: true
+  json.add_error_key: true
+  fields:
+    log_index: host-xtrabackup-inc
+
+- type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-scripts/data/host-backup-*.ndjson
+    - /home/ansible/jh-monitor-scripts/data/host-backup-*.ndjson
+  json.keys_under_root: true
+  json.add_error_key: true
+  fields:
+    log_index: host-backup
+
+- type: log
 
   # Unique ID among all inputs, an ID is required.
   # id: my-filestream-id
@@ -144,6 +184,19 @@ setup.kibana:
 output.elasticsearch:
   # Array of hosts to connect to.
   hosts: ["<serverIp>:9200"]
+  indices:
+    - index: "host-system-status"
+      when.equals:
+        fields.log_index: "host-system-status"
+    - index: "host-xtrabackup"
+      when.equals:
+        fields.log_index: "host-xtrabackup"
+    - index: "host-xtrabackup-inc"
+      when.equals:
+        fields.log_index: "host-xtrabackup-inc"
+    - index: "host-backup"
+      when.equals:
+        fields.log_index: "host-backup"
 
   # Performance preset - one of "balanced", "throughput", "scale",
   # "latency", or "custom".

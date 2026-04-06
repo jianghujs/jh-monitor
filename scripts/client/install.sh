@@ -116,18 +116,17 @@ EOF
 }
 
 config_run_env() {
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    local local_script="${script_dir}/install/ensure_run_env.sh"
-    if [ -f "$local_script" ]; then
-        if ! bash "$local_script" "$net_env_cn"; then
-            show_error "Python 环境初始化失败"
-            exit 1
-        fi
-        return
-    fi
-
     if ! wget -O /tmp/install_ensure_run_env.sh "${RAW_BASE}/scripts/client/install/ensure_run_env.sh"; then
+        local script_dir
+        script_dir="$(cd "$(dirname "$0")" && pwd)"
+        local local_script="${script_dir}/install/ensure_run_env.sh"
+        if [ -f "$local_script" ]; then
+            if ! bash "$local_script" "$net_env_cn"; then
+                show_error "Python 环境初始化失败"
+                exit 1
+            fi
+            return
+        fi
         show_error "下载 Python 环境初始化脚本失败"
         exit 1
     fi
@@ -169,12 +168,38 @@ add_server_ssh_cert(){
 }
 
 config_filebeat() {
-    if check_command_exist filebeat && [ -f /etc/filebeat/filebeat.yml ]; then
-        echo "已安装 filebeat 且存在配置文件，跳过安装。"
-        return 0
+    if wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh"; then
+        bash /tmp/install_filebeat.sh "$net_env_cn"
+        return $?
     fi
-    # 安装filebeat
-    wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh" && bash /tmp/install_filebeat.sh "$net_env_cn"
+
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local local_script="${script_dir}/install/filebeat/install.sh"
+    if [ -f "$local_script" ]; then
+        bash "$local_script" "$net_env_cn"
+        return $?
+    fi
+    return 1
+}
+
+install_report_collector() {
+    export REPORT_COLLECTOR_USERNAME="$USERNAME"
+    export MONITOR_RAW_BASE="$RAW_BASE"
+
+    if wget -O /tmp/install_report_collector.sh "${RAW_BASE}/scripts/client/install/debian.sh"; then
+        REPORT_COLLECTOR_USERNAME="$USERNAME" MONITOR_RAW_BASE="$RAW_BASE" bash /tmp/install_report_collector.sh update
+        return $?
+    fi
+
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local local_script="${script_dir}/install/debian.sh"
+    if [ -f "$local_script" ]; then
+        bash "$local_script" update
+        return $?
+    fi
+    return 1
 }
 
 notify_server_add_host(){
@@ -242,6 +267,9 @@ elif [ "$action" == "install" ]; then
 
     # 配置客户端python环境
     config_run_env
+
+    # 安装或更新日报采集脚本与 cron
+    install_report_collector
 
     # 配置服务端访问权限
     add_server_ssh_cert

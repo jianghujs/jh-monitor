@@ -174,10 +174,32 @@ fi
 
 # 安装python依赖
 cd /www/server/jh-monitor/scripts && bash lib.sh
+mkdir -p /www/server/jh-monitor/data
 chmod 755 /www/server/jh-monitor/data
 
+# 默认 ES 配置
+init_report_default_es_config() {
+  if [ ! -s /www/server/jh-monitor/data/es.json ]; then
+    cat > /www/server/jh-monitor/data/es.json <<EOF
+{"addr":"http://127.0.0.1:9200","username":"elastic","password":"changeme","hosts":[{"host":"127.0.0.1","port":9200,"scheme":"http"}]}
+EOF
+    chmod 600 /www/server/jh-monitor/data/es.json
+    echo "已初始化默认ES配置(centos)"
+  fi
+}
 
-# 安装后文件会被清空(cn only)
-mkdir -p /www/server/jh-monitor/data
-echo "True" > /www/server/jh-monitor/data/net_env_cn.pl
+init_report_default_es_config
+
+# 默认服务器报告配置
+init_report_default_report_config() {
+  if [ ! -s /www/server/jh-monitor/data/report_config.json ]; then
+    cat > /www/server/jh-monitor/data/report_config.json <<EOF
+{"cpu":80,"memory":80,"disk":80,"ssl_cert":14}
+EOF
+    chmod 600 /www/server/jh-monitor/data/report_config.json
+    echo "已初始化默认服务器报告配置(centos)"
+  fi
+}
+
+init_report_default_report_config
 

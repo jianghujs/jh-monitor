@@ -20,21 +20,228 @@ import jh
 import re
 import json
 import pwd
+import tempfile
 
 from flask import session
 from flask import request
+
+try:
+    from urllib.parse import urlparse
+except ImportError:
+    from urlparse import urlparse
 
 
 class config_api:
 
     __version = '1.0.6'
     __api_addr = 'data/api.json'
+    __report_config_addr = 'data/report_config.json'
+    __es_config_addr = 'data/es.json'
 
     def __init__(self):
         pass
 
     def getVersion(self):
         return self.__version
+
+    def _getDefaultEsConfig(self):
+        return {
+            'addr': 'http://127.0.0.1:9200',
+            'username': 'elastic',
+            'password': 'changeme',
+            'hosts': [
+                {'host': '127.0.0.1', 'port': 9200, 'scheme': 'http'}
+            ]
+        }
+
+    def _getDefaultReportConfig(self):
+        return {
+            'cpu': 80,
+            'memory': 80,
+            'disk': 80,
+            'ssl_cert': 14
+        }
+
+    def _ensureJsonConfigFile(self, path):
+        config_dir = os.path.dirname(path)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        if not os.path.exists(path):
+            self._writeJsonConfig(path, {})
+        return True
+
+    def _readJsonConfig(self, path):
+        self._ensureJsonConfigFile(path)
+        try:
+            content = jh.readFile(path)
+            if not content:
+                return {}
+            return json.loads(content)
+        except Exception:
+            self._writeJsonConfig(path, {})
+            return {}
+
+    def _writeJsonConfig(self, path, data):
+        config_dir = os.path.dirname(path) or '.'
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+
+        fd, temp_path = tempfile.mkstemp(prefix='.tmp_', dir=config_dir)
+        try:
+            with os.fdopen(fd, 'w') as fp:
+                fp.write(json.dumps(data))
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.chmod(temp_path, 384)
+            os.replace(temp_path, path)
+            os.chmod(path, 384)
+            return True
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def _validateThresholdField(self, field_name, raw_value, min_value, max_value):
+        value = str(raw_value).strip()
+        if value == '':
+            return False, field_name + '不能为空!', None
+        if not re.match(r'^\d+$', value):
+            return False, field_name + '必须是整数!', None
+        value = int(value)
+        if value < min_value or value > max_value:
+            return False, field_name + '范围不正确!', None
+        return True, 'ok', value
+
+    def _getReportConfigData(self):
+        report_config = self._readJsonConfig(self.__report_config_addr)
+        default_report_config = self._getDefaultReportConfig()
+        data = {}
+        data['cpu'] = report_config.get('cpu', default_report_config.get('cpu', ''))
+        data['memory'] = report_config.get('memory', default_report_config.get('memory', ''))
+        data['disk'] = report_config.get('disk', default_report_config.get('disk', ''))
+        data['ssl_cert'] = report_config.get('ssl_cert', default_report_config.get('ssl_cert', ''))
+        return data
+
+    def _normalizeReportConfig(self, report_config):
+        checks = [
+            ('cpu', 'CPU阈值', 0, 100),
+            ('memory', '内存阈值', 0, 100),
+            ('disk', '磁盘阈值', 0, 100),
+            ('ssl_cert', 'SSL证书到期阈值', 0, 3650),
+        ]
+
+        normalized = {}
+        for field, title, min_value, max_value in checks:
+            ok, msg, value = self._validateThresholdField(
+                title, report_config.get(field, ''), min_value, max_value)
+            if not ok:
+                return False, msg, None
+            normalized[field] = value
+        return True, 'ok', normalized
+
+    def _parseEsHosts(self, address_text):
+        addr_text = str(address_text).strip()
+        if addr_text == '':
+            return False, 'ES地址不能为空!', None
+
+        raw_list = re.split(r'[\n,]+', addr_text)
+        hosts = []
+        for item in raw_list:
+            current = item.strip()
+            if current == '':
+                continue
+            if '://' not in current:
+                current = 'http://' + current
+
+            parsed = urlparse(current)
+            if not parsed.hostname:
+                return False, 'ES地址格式不正确!', None
+
+            scheme = parsed.scheme or 'http'
+            if scheme not in ['http', 'https']:
+                return False, 'ES地址协议仅支持http或https!', None
+
+            host_data = {
+                'host': parsed.hostname,
+                'port': parsed.port or (443 if scheme == 'https' else 9200),
+                'scheme': scheme
+            }
+            hosts.append(host_data)
+
+        if len(hosts) == 0:
+            return False, 'ES地址不能为空!', None
+        return True, 'ok', hosts
+
+    def _getEsConfigData(self):
+        es_config = self._readJsonConfig(self.__es_config_addr)
+        default_es_config = self._getDefaultEsConfig()
+        data = {}
+        data['addr'] = es_config.get('addr', default_es_config.get('addr', ''))
+        data['username'] = es_config.get('username', default_es_config.get('username', ''))
+        data['password'] = es_config.get('password', default_es_config.get('password', ''))
+        data['hosts'] = es_config.get('hosts', default_es_config.get('hosts', []))
+        return data
+
+    def _saveReportThresholdConfig(self, report_form):
+        ok, msg, report_config = self._normalizeReportConfig(report_form)
+        if not ok:
+            return False, msg
+        self._writeJsonConfig(self.__report_config_addr, report_config)
+        return True, '服务器报告阈值保存成功!'
+
+    def _saveEsConfig(self, es_form):
+        ok, msg, es_config = self._normalizeEsConfig(es_form)
+        if not ok:
+            return False, msg
+        self._writeJsonConfig(self.__es_config_addr, es_config)
+        return True, 'ES配置保存成功!'
+
+    def _normalizeEsConfig(self, es_config):
+        addr = es_config.get('addr', '')
+        username = es_config.get('username', '').strip()
+        password = es_config.get('password', '')
+
+        ok, msg, hosts = self._parseEsHosts(addr)
+        if not ok:
+            return False, msg, None
+
+        if username == '' and str(password).strip() != '':
+            return False, 'ES用户名不能为空!', None
+
+        normalized = {
+            'addr': str(addr).strip(),
+            'username': username,
+            'password': password,
+            'hosts': hosts
+        }
+        return True, 'ok', normalized
+
+    def _testEsConnection(self, es_config):
+        try:
+            from elasticsearch import Elasticsearch
+
+            client_kwargs = {
+                'hosts': es_config.get('hosts', []),
+                'request_timeout': 5,
+                'verify_certs': False
+            }
+            if es_config.get('username', '') != '':
+                client_kwargs['basic_auth'] = (
+                    es_config.get('username', ''),
+                    es_config.get('password', '')
+                )
+
+            es_client = Elasticsearch(**client_kwargs)
+            if not es_client.ping():
+                return False, 'ES连接失败，请检查地址或认证信息!', None
+
+            cluster_info = es_client.info()
+            info = {
+                'cluster_name': cluster_info.get('cluster_name', ''),
+                'version': cluster_info.get('version', {}).get('number', '')
+            }
+            return True, 'ES连接成功!', info
+        except Exception as e:
+            return False, 'ES连接失败: ' + str(e), None
 
     ##### ----- start ----- ###
 
@@ -171,6 +378,79 @@ class config_api:
         if backup_path != jh.getBackupDir():
             jh.setBackupDir(backup_path)
         return jh.returnJson(True, '修改默认备份目录成功!')
+
+    def getReportConfigApi(self):
+        data = {
+            'report_config': self._getReportConfigData(),
+            'es_config': self._getEsConfigData()
+        }
+        return jh.returnJson(True, '获取成功!', data)
+
+    def saveReportConfigApi(self):
+        report_form = {
+            'cpu': request.form.get('cpu', '').strip(),
+            'memory': request.form.get('memory', '').strip(),
+            'disk': request.form.get('disk', '').strip(),
+            'ssl_cert': request.form.get('ssl_cert', '').strip(),
+        }
+        ok, msg, report_config = self._normalizeReportConfig(report_form)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        es_form = {
+            'addr': request.form.get('es_addr', '').strip(),
+            'username': request.form.get('es_username', '').strip(),
+            'password': request.form.get('es_password', ''),
+        }
+        ok, msg, es_config = self._normalizeEsConfig(es_form)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        self._writeJsonConfig(self.__report_config_addr, report_config)
+        self._writeJsonConfig(self.__es_config_addr, es_config)
+        return jh.returnJson(True, '服务器报告配置保存成功!')
+
+    def saveReportThresholdApi(self):
+        report_form = {
+            'cpu': request.form.get('cpu', '').strip(),
+            'memory': request.form.get('memory', '').strip(),
+            'disk': request.form.get('disk', '').strip(),
+            'ssl_cert': request.form.get('ssl_cert', '').strip(),
+        }
+        ok, msg = self._saveReportThresholdConfig(report_form)
+        return jh.returnJson(ok, msg)
+
+    def saveReportEsApi(self):
+        es_form = {
+            'addr': request.form.get('es_addr', '').strip(),
+            'username': request.form.get('es_username', '').strip(),
+            'password': request.form.get('es_password', ''),
+        }
+        ok, msg = self._saveEsConfig(es_form)
+        return jh.returnJson(ok, msg, self._getEsConfigData() if ok else None)
+
+    def testReportEsApi(self):
+        es_form = {
+            'addr': request.form.get('es_addr', '').strip(),
+            'username': request.form.get('es_username', '').strip(),
+            'password': request.form.get('es_password', ''),
+        }
+        ok, msg, es_config = self._normalizeEsConfig(es_form)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        ok, msg, data = self._testEsConnection(es_config)
+        return jh.returnJson(ok, msg, data)
+
+    def resetReportEsApi(self):
+        default_es_config = self._getDefaultEsConfig()
+        self._writeJsonConfig(self.__es_config_addr, default_es_config)
+        return jh.returnJson(True, 'ES配置已重置为本地默认配置!', default_es_config)
+
+    def resetReportThresholdApi(self):
+        default_report_config = self._getDefaultReportConfig()
+        self._writeJsonConfig(self.__report_config_addr, default_report_config)
+        return jh.returnJson(True, '服务器报告阈值已重置为默认配置!', default_report_config)
 
     def setBasicAuthApi(self):
         basic_user = request.form.get('basic_user', '').strip()

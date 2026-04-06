@@ -1,20 +1,20 @@
 ## 1. Report configuration foundation
 
-- [ ] 1.1 Add the host report configuration section to `route/templates/default/config.html` and wire the related front-end actions for Elasticsearch settings and threshold fields.
-- [ ] 1.2 Implement backend read/save APIs for report thresholds and Elasticsearch settings, including default `{}` initialization and atomic JSON writes for `data/report_config.json` and `data/es.json`.
-- [ ] 1.3 Add payload validation and Elasticsearch connectivity checking so invalid settings are rejected before persistence.
+- [x] 1.1 Add the host report configuration section to `route/templates/default/config.html` and wire the related front-end actions for Elasticsearch settings and threshold fields.
+- [x] 1.2 Implement backend read/save APIs for report thresholds and Elasticsearch settings, including default `{}` initialization and atomic JSON writes for `data/report_config.json` and `data/es.json`.
+- [x] 1.3 Add payload validation and Elasticsearch connectivity checking so invalid settings are rejected before persistence.
 
 ## 2. Client collection pipeline
 
-- [ ] 2.1 Implement the local report collector script that emits normalized host system status JSON into `/home/${USERNAME}/jh-monitor-scripts/data/`.
-- [ ] 2.2 Update `scripts/client/install/debian.sh` to deploy the collector, create data/log directories, register `/etc/cron.d/jh-monitor-report-collector`, and execute the collector once after install/update.
-- [ ] 2.3 Adjust `scripts/client/install.sh` and related install assets so collector deployment remains compatible with the existing `ansible_user` directory conventions while running the collector from `root` cron.
-- [ ] 2.4 Extend filebeat configuration and install/update flow to ingest collector output, xtrabackup histories, and `backup.log` into the four raw Elasticsearch indices.
+- [x] 2.1 Implement the local report collector script that emits normalized host system status JSON into `/home/${USERNAME}/jh-monitor-scripts/data/`.
+- [x] 2.2 Update `scripts/client/install/debian.sh` to deploy the collector, create data/log directories, register `/etc/cron.d/jh-monitor-report-collector`, and execute the collector once after install/update.
+- [x] 2.3 Adjust `scripts/client/install.sh` and related install assets so collector deployment remains compatible with the existing `ansible_user` directory conventions while running the collector from `root` cron.
+- [x] 2.4 Extend filebeat configuration and install/update flow to ingest collector output, xtrabackup histories, and `backup.log` into the four raw Elasticsearch indices.
 
 ## 3. Elasticsearch report data modeling
 
-- [ ] 3.1 Define and create the required raw/report index mappings for `host-system-status`, `host-xtrabackup`, `host-xtrabackup-inc`, `host-backup`, `host-report-single`, and `host-report-overview`.
-- [ ] 3.2 Standardize shared document fields such as `host_id`, `host_name`, `host_ip`, report dates, timestamps, validation state, and delivery metadata across the pipeline.
+- [x] 3.1 Define and create the required raw/report index mappings for `host-system-status`, `host-xtrabackup`, `host-xtrabackup-inc`, `host-backup`, `host-report-single`, and `host-report-overview`.
+- [x] 3.2 Standardize shared document fields such as `host_id`, `host_name`, `host_ip`, report dates, timestamps, validation state, and delivery metadata across the pipeline.
 
 ## 4. Daily report analysis
 
