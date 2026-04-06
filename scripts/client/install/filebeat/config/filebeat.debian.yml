@@ -22,8 +22,8 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-scripts/data/host-system-status-*.json
-    - /home/ansible/jh-monitor-scripts/data/host-system-status-*.json
+    - /home/ansible_user/jh-monitor-data/host-system-status-*.json
+    - /home/ansible/jh-monitor-data/host-system-status-*.json
   json.keys_under_root: true
   json.add_error_key: true
   fields:
@@ -32,8 +32,8 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-scripts/data/host-xtrabackup-*.ndjson
-    - /home/ansible/jh-monitor-scripts/data/host-xtrabackup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-xtrabackup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-xtrabackup-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
@@ -42,8 +42,8 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-scripts/data/host-xtrabackup-inc-*.ndjson
-    - /home/ansible/jh-monitor-scripts/data/host-xtrabackup-inc-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-xtrabackup-inc-*.ndjson
+    - /home/ansible/jh-monitor-data/host-xtrabackup-inc-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
@@ -52,8 +52,8 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-scripts/data/host-backup-*.ndjson
-    - /home/ansible/jh-monitor-scripts/data/host-backup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-backup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-backup-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:

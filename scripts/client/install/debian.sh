@@ -12,8 +12,9 @@ PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLIENT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_HOME="/home/${USERNAME}/jh-monitor-scripts"
-DATA_DIR="${SCRIPT_HOME}/data"
+DATA_HOME="/home/${USERNAME}/jh-monitor-data"
 LOG_DIR="/home/${USERNAME}/jh-monitor-logs"
+DATA_DIR="${DATA_HOME}"
 LOG_FILE="${LOG_DIR}/report-collector.log"
 CRON_FILE="/etc/cron.d/jh-monitor-report-collector"
 LOCK_FILE="/tmp/jh-monitor-report-collector.lock"
@@ -43,10 +44,10 @@ ensure_user() {
 }
 
 prepare_dirs() {
-  mkdir -p "$SCRIPT_HOME" "$DATA_DIR" "$LOG_DIR"
+  mkdir -p "$SCRIPT_HOME" "$DATA_HOME" "$LOG_DIR"
   touch "$LOG_FILE"
-  chown -R "$USERNAME:$USERNAME" "$SCRIPT_HOME" "$LOG_DIR"
-  chmod 755 "$SCRIPT_HOME" "$DATA_DIR" "$LOG_DIR"
+  chown -R "$USERNAME:$USERNAME" "$SCRIPT_HOME" "$DATA_HOME" "$LOG_DIR"
+  chmod 755 "$SCRIPT_HOME" "$DATA_HOME" "$LOG_DIR"
   chmod 644 "$LOG_FILE"
 }
 
@@ -81,6 +82,7 @@ run_cron_installer() {
   fi
 
   REPORT_COLLECTOR_USERNAME="$USERNAME" \
+  REPORT_COLLECTOR_OUTPUT_DIR="$DATA_DIR" \
   PYTHON_BIN="$PYTHON_BIN" \
   SCRIPT_HOME="$SCRIPT_HOME" \
   DATA_DIR="$DATA_DIR" \

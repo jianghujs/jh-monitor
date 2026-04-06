@@ -16,7 +16,10 @@ if CURRENT_DIR not in sys.path:
 from get_host_info import get_host_ip
 from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info
 
-DEFAULT_OUTPUT_DIR = os.path.join(CURRENT_DIR, 'data')
+DEFAULT_OUTPUT_DIR = os.environ.get(
+    'REPORT_COLLECTOR_OUTPUT_DIR',
+    '/home/ansible_user/jh-monitor-data'
+)
 DEFAULT_RETENTION_DAYS = 7
 STATE_FILE_NAME = '.report-collector-state.json'
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
@@ -57,11 +60,27 @@ def atomic_write_json(path, data):
     atomic_write_text(path, json.dumps(data, ensure_ascii=False))
 
 
+def append_text(path, content):
+    output_dir = os.path.dirname(path) or '.'
+    ensure_dir(output_dir)
+    with open(path, 'a') as fp:
+        fp.write(content)
+        fp.flush()
+        os.fsync(fp.fileno())
+
+
 def write_ndjson(path, rows):
     content = '\n'.join([json.dumps(row, ensure_ascii=False) for row in rows])
     if content != '':
         content = content + '\n'
     atomic_write_text(path, content)
+
+
+def append_ndjson(path, rows):
+    if not rows:
+        return
+    content = '\n'.join([json.dumps(row, ensure_ascii=False) for row in rows]) + '\n'
+    append_text(path, content)
 
 
 def load_state(output_dir):
@@ -304,9 +323,9 @@ def build_status_payload(host_meta):
 
 
 def export_status_payload(output_dir, payload):
-    timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
-    output_path = os.path.join(output_dir, 'host-system-status-%s.json' % timestamp)
-    atomic_write_json(output_path, payload)
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, 'host-system-status-%s.json' % file_date)
+    append_ndjson(output_path, [payload])
     return output_path
 
 
@@ -348,9 +367,9 @@ def export_history_records(source_path, output_dir, state, state_key, file_prefi
     if len(rows) == 0:
         return None
 
-    timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
-    output_path = os.path.join(output_dir, '%s-%s.ndjson' % (file_prefix, timestamp))
-    write_ndjson(output_path, rows)
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, '%s-%s.ndjson' % (file_prefix, file_date))
+    append_ndjson(output_path, rows)
     state.setdefault('history_ids', {})[state_key] = sorted(list(seen_ids))
     return output_path
 
@@ -408,9 +427,9 @@ def export_backup_log(output_dir, state, host_meta):
     if len(rows) == 0:
         return None
 
-    timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
-    output_path = os.path.join(output_dir, 'host-backup-%s.ndjson' % timestamp)
-    write_ndjson(output_path, rows)
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, 'host-backup-%s.ndjson' % file_date)
+    append_ndjson(output_path, rows)
     return output_path
 
 
