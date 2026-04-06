@@ -38,7 +38,7 @@ confirm_action() {
 
 
     echo "-----------------------"
-    echo "即将执行客户端配置，包含内容如下："
+    echo "即将执行江湖云监控客户端配置，包含内容如下："
     echo "1. 创建或复用 ${USERNAME} 用户"
     echo "2. 配置 ${USERNAME} 的目录与权限"
     echo "3. 初始化 Python 运行环境"
@@ -47,6 +47,9 @@ confirm_action() {
     echo "6. 配置服务端 SSH 公钥访问"
     echo "7. 配置 filebeat"
     echo "8. 通知服务端添加当前主机"
+    echo "-----------------------"
+    echo "云监控地址: ${current_url:-未提供}"
+    echo "当前操作: ${current_action}"
     echo "-----------------------"
     prompt "确认执行吗？（默认y）[y/n]: " confirm_choice "y"
     if [ "$confirm_choice" != "y" ]; then
