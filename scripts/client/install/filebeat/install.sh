@@ -41,9 +41,10 @@ fi
 # 替换文件中的IP为当前服务器的IP
 sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
 
-echo "正在配置filebeat..."
-filebeat setup -e > /tmp/filebeat_setup.log 2>&1
-echo "filebeat配置完成✅"
+# 暂时不自动执行，因为太久了，手动执行一次就行
+# echo "正在配置filebeat..."
+# filebeat setup -e > /tmp/filebeat_setup.log 2>&1
+# echo "filebeat配置完成✅"
 
 echo "正在启动filebeat..."
 service filebeat start
