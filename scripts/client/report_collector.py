@@ -17,7 +17,7 @@ from get_host_info import get_host_ip
 from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info
 
 DEFAULT_OUTPUT_DIR = os.path.join(CURRENT_DIR, 'data')
-DEFAULT_RETENTION_DAYS = 30
+DEFAULT_RETENTION_DAYS = 7
 STATE_FILE_NAME = '.report-collector-state.json'
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
 XTRABACKUP_INC_HISTORY_FILE = '/www/server/xtrabackup-inc/data/backup_history.json'
