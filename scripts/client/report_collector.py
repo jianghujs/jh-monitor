@@ -5,8 +5,10 @@ import glob
 import json
 import os
 import socket
+import sqlite3
 import sys
 import tempfile
+import time
 import traceback
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,11 +22,12 @@ DEFAULT_OUTPUT_DIR = os.environ.get(
     'REPORT_COLLECTOR_OUTPUT_DIR',
     '/home/ansible_user/jh-monitor-data'
 )
-DEFAULT_RETENTION_DAYS = 7
+DEFAULT_RETENTION_DAYS = 30
 STATE_FILE_NAME = '.report-collector-state.json'
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
 XTRABACKUP_INC_HISTORY_FILE = '/www/server/xtrabackup-inc/data/backup_history.json'
 BACKUP_LOG_FILE = '/www/server/jh-panel/logs/backup.log'
+PANEL_DEFAULT_DB_FILE = '/www/server/jh-panel/data/default.db'
 
 
 def ensure_dir(path):
@@ -163,6 +166,209 @@ def format_disks(disk_info):
     return disks
 
 
+def parse_datetime_to_timestamp(raw_value):
+    value = str(raw_value or '').strip()
+    if value == '':
+        return 0
+
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            return int(time.mktime(datetime.datetime.strptime(value, fmt).timetuple()))
+        except Exception:
+            pass
+
+    try:
+        return int(float(value))
+    except Exception:
+        return 0
+
+
+def get_report_window_start_timestamp():
+    now = datetime.datetime.now()
+    try:
+        import mw
+        return int(mw.getReportCycleStartTime(now).timestamp())
+    except Exception:
+        return int(datetime.datetime(now.year, now.month, now.day).timestamp())
+
+
+def get_crontab_enabled(crontab_name):
+    try:
+        import crontab_api as panel_crontab_api
+        crontab = panel_crontab_api.crontab_api().getCrontab(crontab_name)
+        return bool(crontab and int(crontab.get('status', 0)) == 1)
+    except Exception:
+        return False
+
+
+def summarize_history_status(source_path, report_window_start, backup_type=None):
+    summary = {
+        'enabled': False,
+        'last_backup_time': None,
+        'last_backup_timestamp': 0,
+        'last_backup_size': '无',
+        'last_backup_size_bytes': 0,
+        'count_in_timeframe': 0,
+        'status': 'unknown'
+    }
+
+    if not os.path.exists(source_path):
+        return summary
+
+    try:
+        source_data = json.load(open(source_path, 'r'))
+    except Exception:
+        return summary
+
+    if not isinstance(source_data, dict):
+        return summary
+
+    rows = []
+    for record in source_data.values():
+        if not isinstance(record, dict):
+            continue
+        if backup_type and record.get('backup_type') != backup_type:
+            continue
+
+        add_timestamp = record.get('add_timestamp', 0)
+        try:
+            add_timestamp = int(float(add_timestamp))
+        except Exception:
+            add_timestamp = parse_datetime_to_timestamp(record.get('add_time', ''))
+
+        rows.append({
+            'add_time': record.get('add_time', ''),
+            'add_timestamp': add_timestamp,
+            'size': record.get('size', '无'),
+            'size_bytes': int(float(record.get('size_bytes', 0) or 0))
+        })
+
+    if len(rows) == 0:
+        return summary
+
+    last_row = max(rows, key=lambda item: item.get('add_timestamp', 0))
+    count_in_timeframe = len([
+        item for item in rows
+        if item.get('add_timestamp', 0) >= report_window_start
+    ])
+
+    summary['last_backup_time'] = last_row.get('add_time')
+    summary['last_backup_timestamp'] = last_row.get('add_timestamp', 0)
+    summary['last_backup_size'] = last_row.get('size', '无')
+    summary['last_backup_size_bytes'] = last_row.get('size_bytes', 0)
+    summary['count_in_timeframe'] = count_in_timeframe
+    summary['status'] = 'normal' if summary['last_backup_timestamp'] >= report_window_start else 'abnormal'
+    return summary
+
+
+def get_mysql_dump_status(report_window_start):
+    summary = {
+        'enabled': False,
+        'last_backup_time': None,
+        'last_backup_timestamp': 0,
+        'last_backup_filename': '',
+        'last_backup_path': '',
+        'last_backup_size': '无',
+        'last_backup_size_bytes': 0,
+        'count_in_timeframe': 0,
+        'abnormal_files_in_timeframe': 0,
+        'status': 'unknown'
+    }
+
+    if not os.path.exists(PANEL_DEFAULT_DB_FILE):
+        return summary
+
+    try:
+        conn = sqlite3.connect(PANEL_DEFAULT_DB_FILE)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT filename, size, addtime FROM backup WHERE type=? ORDER BY id DESC",
+            (1,)
+        )
+        rows = cur.fetchall()
+        conn.close()
+    except Exception:
+        return summary
+
+    parsed_rows = []
+    for filename, size_value, add_time in rows:
+        add_timestamp = parse_datetime_to_timestamp(add_time)
+        size_bytes = int(size_value or 0)
+        backup_path = filename or ''
+        parsed_rows.append({
+            'filename': os.path.basename(backup_path),
+            'path': backup_path,
+            'size_bytes': size_bytes,
+            'size': to_size(size_bytes),
+            'add_time': (add_time or '').replace('/', '-'),
+            'add_timestamp': add_timestamp
+        })
+
+    if len(parsed_rows) == 0:
+        return summary
+
+    last_row = max(parsed_rows, key=lambda item: item.get('add_timestamp', 0))
+    rows_in_timeframe = [
+        item for item in parsed_rows
+        if item.get('add_timestamp', 0) >= report_window_start
+    ]
+
+    summary['last_backup_time'] = last_row.get('add_time')
+    summary['last_backup_timestamp'] = last_row.get('add_timestamp', 0)
+    summary['last_backup_filename'] = last_row.get('filename', '')
+    summary['last_backup_path'] = last_row.get('path', '')
+    summary['last_backup_size'] = last_row.get('size', '无')
+    summary['last_backup_size_bytes'] = last_row.get('size_bytes', 0)
+    summary['count_in_timeframe'] = len(rows_in_timeframe)
+    summary['abnormal_files_in_timeframe'] = len([
+        item for item in rows_in_timeframe
+        if item.get('size_bytes', 0) < 200
+    ])
+    if summary['last_backup_timestamp'] >= report_window_start and summary['count_in_timeframe'] > 0:
+        summary['status'] = 'normal'
+    else:
+        summary['status'] = 'abnormal'
+    return summary
+
+
+def load_backup_runtime_info():
+    report_window_start = get_report_window_start_timestamp()
+    backup_runtime = {}
+    xtrabackup_enabled = get_crontab_enabled('[勿删]xtrabackup-cron')
+    xtrabackup_inc_enabled = get_crontab_enabled('[勿删]xtrabackup-inc增量备份')
+    mysql_dump_enabled = get_crontab_enabled('备份数据库[backupAll]')
+
+    if os.path.exists('/www/server/xtrabackup/'):
+        xtrabackup_status = summarize_history_status(
+            XTRABACKUP_HISTORY_FILE,
+            report_window_start
+        )
+        xtrabackup_status['enabled'] = xtrabackup_enabled
+        backup_runtime['xtrabackup'] = xtrabackup_status
+
+    if os.path.exists('/www/server/xtrabackup-inc/'):
+        backup_runtime['xtrabackup_inc'] = {
+            'enabled': xtrabackup_inc_enabled,
+            'full': summarize_history_status(
+                XTRABACKUP_INC_HISTORY_FILE,
+                report_window_start,
+                'full'
+            ),
+            'inc': summarize_history_status(
+                XTRABACKUP_INC_HISTORY_FILE,
+                report_window_start,
+                'inc'
+            )
+        }
+
+    if os.path.exists('/www/server/mysql-apt/'):
+        mysql_dump_status = get_mysql_dump_status(report_window_start)
+        mysql_dump_status['enabled'] = mysql_dump_enabled
+        backup_runtime['mysql_dump'] = mysql_dump_status
+
+    return backup_runtime
+
+
 def load_panel_runtime_info():
     runtime = {
         'site': [],
@@ -182,6 +388,7 @@ def load_panel_runtime_info():
             'send_open_count': 0,
             'send_close_count': 0
         },
+        'backup': {},
         'rsync': []
     }
 
@@ -198,6 +405,7 @@ def load_panel_runtime_info():
         import system_api as panel_system_api
 
         system_api_obj = panel_system_api.system_api()
+        runtime['backup'] = load_backup_runtime_info()
 
         try:
             site_info = system_api_obj.getSiteInfo()
@@ -311,13 +519,14 @@ def build_status_payload(host_meta):
         'jianghujs': runtime.get('jianghujs', []),
         'docker': runtime.get('docker', []),
         'mysql': runtime.get('mysql', {}),
+        'backup': runtime.get('backup', {}),
         'lsync': runtime.get('lsync', {}),
         'rsync': runtime.get('rsync', []),
         'add_time': add_time,
         'add_timestamp': add_timestamp,
         'collector': {
             'source': 'report_collector.py',
-            'version': '1.1.0'
+            'version': '1.2.0'
         }
     }
 
