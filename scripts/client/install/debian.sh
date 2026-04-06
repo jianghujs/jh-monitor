@@ -18,6 +18,7 @@ LOG_FILE="${LOG_DIR}/report-collector.log"
 CRON_FILE="/etc/cron.d/jh-monitor-report-collector"
 LOCK_FILE="/tmp/jh-monitor-report-collector.lock"
 FILES_TO_DEPLOY="report_collector.py get_host_usage.py get_host_info.py"
+CRON_HELPER_NAME="report_collector_cron.sh"
 
 log() {
   echo "[report-collector] $*"
@@ -66,38 +67,28 @@ fetch_or_copy() {
   chown "$USERNAME:$USERNAME" "$target_file"
 }
 
-cleanup_legacy() {
-  rm -f "$CRON_FILE"
+run_cron_installer() {
+  local cron_action="${1:-update}"
+  local cron_script="/tmp/${CRON_HELPER_NAME}"
+  local local_script="${SCRIPT_DIR}/${CRON_HELPER_NAME}"
 
-  if crontab -l >/tmp/jh_monitor_root_cron 2>/dev/null; then
-    grep -v 'jh-monitor-scripts/report_collector.py' /tmp/jh_monitor_root_cron >/tmp/jh_monitor_root_cron.new || true
-    if ! cmp -s /tmp/jh_monitor_root_cron /tmp/jh_monitor_root_cron.new; then
-      crontab /tmp/jh_monitor_root_cron.new
-      log "已清理 root crontab 中遗留的 report collector 任务"
+  if ! wget -O "$cron_script" "${RAW_BASE}/scripts/client/install/${CRON_HELPER_NAME}"; then
+    if [ -f "$local_script" ]; then
+      cron_script="$local_script"
+    else
+      fail "下载 ${CRON_HELPER_NAME} 失败"
     fi
-    rm -f /tmp/jh_monitor_root_cron /tmp/jh_monitor_root_cron.new
-  fi
-}
-
-write_cron() {
-  local collector_cmd="${PYTHON_BIN} ${SCRIPT_HOME}/report_collector.py --output-dir ${DATA_DIR}"
-  if command -v flock >/dev/null 2>&1; then
-    collector_cmd="$(command -v flock) -n ${LOCK_FILE} ${collector_cmd}"
   fi
 
-  cat > "$CRON_FILE" <<CRON
-SHELL=/bin/bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
-*/5 * * * * root ${collector_cmd} >> ${LOG_FILE} 2>&1
-CRON
-
-  chmod 644 "$CRON_FILE"
-  chown root:root "$CRON_FILE"
-}
-
-validate_cron() {
-  [ -f "$CRON_FILE" ] || fail "cron 文件不存在: ${CRON_FILE}"
-  grep -q 'report_collector.py' "$CRON_FILE" || fail "cron 文件未包含 report_collector.py"
+  REPORT_COLLECTOR_USERNAME="$USERNAME" \
+  PYTHON_BIN="$PYTHON_BIN" \
+  SCRIPT_HOME="$SCRIPT_HOME" \
+  DATA_DIR="$DATA_DIR" \
+  LOG_DIR="$LOG_DIR" \
+  LOG_FILE="$LOG_FILE" \
+  CRON_FILE="$CRON_FILE" \
+  LOCK_FILE="$LOCK_FILE" \
+  bash "$cron_script" "$cron_action"
 }
 
 run_once() {
@@ -114,16 +105,14 @@ main() {
       ensure_python
       ensure_user
       prepare_dirs
-      cleanup_legacy
       for file_name in $FILES_TO_DEPLOY; do
         fetch_or_copy "$file_name"
       done
-      write_cron
-      validate_cron
+      run_cron_installer update
       run_once
       ;;
     uninstall)
-      rm -f "$CRON_FILE"
+      run_cron_installer uninstall
       ;;
     *)
       fail "不支持的动作: ${ACTION}"
