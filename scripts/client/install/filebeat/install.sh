@@ -14,7 +14,12 @@ if [ "$1" == "cn" ]; then
   FILEBEAT_URL="https://mirrors.huaweicloud.com/filebeat/${FILEBEAT_VERSION}/${FILEBEAT_DEB}"
 fi
 
-wget -O /tmp/filebeat.deb "${FILEBEAT_URL}" && dpkg -i /tmp/filebeat.deb
+INSTALLED_FILEBEAT_VERSION="$(dpkg-query -W -f='${Version}' filebeat 2>/dev/null || true)"
+if echo "$INSTALLED_FILEBEAT_VERSION" | grep -q "^${FILEBEAT_VERSION}"; then
+  echo "filebeat ${INSTALLED_FILEBEAT_VERSION} 已安装，跳过重复安装"
+else
+  wget -O /tmp/filebeat.deb "${FILEBEAT_URL}" && dpkg -i /tmp/filebeat.deb
+fi
 
 # 配置filebeat
 config_type="debian"
