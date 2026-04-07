@@ -178,8 +178,8 @@ setup.template.settings:
 setup.ilm.enabled: true
 setup.ilm.check_exists: true
 
-setup.template.name: "debian-<hostId>-logs"
-setup.template.pattern: "debian-<hostId>-*"
+setup.template.name: "debian-<hostIdIndex>-logs"
+setup.template.pattern: "debian-<hostIdIndex>-*"
 setup.template.enabled: true
 setup.template.overwrite: true
 setup.template.priority: 200
@@ -224,31 +224,31 @@ setup.kibana:
 output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "debian-<hostId>-host-system-status-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-host-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-system-status"
-    - index: "debian-<hostId>-host-xtrabackup-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-host-xtrabackup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup"
-    - index: "debian-<hostId>-host-xtrabackup-inc-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-host-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup-inc"
-    - index: "debian-<hostId>-host-backup-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-host-backup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-backup"
-    - index: "debian-<hostId>-syslog-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
       when.equals:
         log_type: "syslog"
-    - index: "debian-<hostId>-nginx-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
       when.equals:
         log_type: "nginx"
-    - index: "debian-<hostId>-eggjs-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-eggjs-%{+yyyy.MM}"
       when.equals:
         log_type: "eggjs"
-    - index: "debian-<hostId>-mysql-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-mysql-%{+yyyy.MM}"
       when.equals:
         log_type: "mysql"
-    - index: "debian-<hostId>-jh-panel-%{+yyyy.MM}"
+    - index: "debian-<hostIdIndex>-jh-panel-%{+yyyy.MM}"
       when.equals:
         log_type: "jh-panel"
   pipelines:

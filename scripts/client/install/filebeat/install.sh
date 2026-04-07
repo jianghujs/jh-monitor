@@ -29,6 +29,20 @@ resolve_host_id() {
   return 0
 }
 
+normalize_host_id_for_index() {
+  local raw="$1"
+  local normalized
+  normalized="$(printf "%s" "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  if [ -z "$normalized" ]; then
+    normalized="host"
+  fi
+  printf "%s" "$normalized"
+}
+
+escape_sed_replacement() {
+  printf "%s" "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
 # wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
 FILEBEAT_VERSION="8.11.3"
 FILEBEAT_DEB="filebeat-${FILEBEAT_VERSION}-amd64.deb"
@@ -76,8 +90,13 @@ sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
 
 HOST_ID="$(resolve_host_id)"
 if [ -n "$HOST_ID" ]; then
-  sed -i "s/<hostId>/$HOST_ID/g" /etc/filebeat/filebeat.yml
+  HOST_ID_INDEX="$(normalize_host_id_for_index "$HOST_ID")"
+  ESCAPED_HOST_ID="$(escape_sed_replacement "$HOST_ID")"
+  ESCAPED_HOST_ID_INDEX="$(escape_sed_replacement "$HOST_ID_INDEX")"
+  sed -i "s/<hostId>/$ESCAPED_HOST_ID/g" /etc/filebeat/filebeat.yml
+  sed -i "s/<hostIdIndex>/$ESCAPED_HOST_ID_INDEX/g" /etc/filebeat/filebeat.yml
   echo "已写入 filebeat host_id: $HOST_ID"
+  echo "已写入 filebeat host_id_index: $HOST_ID_INDEX"
 else
   echo "警告: 未获取到 host_id，filebeat 配置将保留占位符"
 fi
