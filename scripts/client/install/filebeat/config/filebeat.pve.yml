@@ -117,6 +117,11 @@ setup.template.settings:
   #index.codec: best_compression
   #_source.enabled: false
 
+setup.template.name: "pve-<hostId>-logs"
+setup.template.pattern: "pve-<hostId>-*"
+setup.template.enabled: true
+setup.template.overwrite: true
+
 
 # ================================== General ===================================
 
@@ -186,16 +191,16 @@ output.elasticsearch:
   # Array of hosts to connect to.
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "host-system-status"
+    - index: "debian-<hostId>-host-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-system-status"
-    - index: "host-xtrabackup"
+    - index: "debian-<hostId>-host-xtrabackup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup"
-    - index: "host-xtrabackup-inc"
+    - index: "debian-<hostId>-host-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup-inc"
-    - index: "host-backup"
+    - index: "debian-<hostId>-host-backup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-backup"
 

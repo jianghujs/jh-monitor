@@ -12,13 +12,10 @@
 
 # ============================== Filebeat inputs ===============================
 
+name: "<hostId>"
+
 filebeat.inputs:
 
-# Each - is an input. Most options can be set at the input level, so
-# you can use different inputs for various configurations.
-# Below are the input-specific configurations.
-
-# filestream is an input for collecting log messages from files.
 - type: log
   enabled: true
   paths:
@@ -59,90 +56,133 @@ filebeat.inputs:
   fields:
     log_index: host-backup
 
+# Common
 - type: log
-
-  # Unique ID among all inputs, an ID is required.
-  # id: my-filestream-id
-
-  # Change to true to enable this input configuration.
   enabled: true
-
-  # Paths that should be crawled and fetched. Glob based paths.
   paths:
     - /var/log/*.log
     - /www/wwwlogs/*.log
     - /www/server/mysql-apt/data/*.log
     - /www/server/jh-panel/logs/report.log
-    #- c:\programdata\elasticsearch\logs\*
+  fields:
+    log_type: common
 
-  # Exclude lines. A list of regular expressions to match. It drops the lines that are
-  # matching any regular expression from the list.
-  # Line filtering happens after the parsers pipeline. If you would like to filter lines
-  # before parsers, use include_message parser.
-  #exclude_lines: ['^DBG']
+# Syslog Logs
+- type: filestream
+  id: syslog
+  enabled: true
+  paths:
+    - /var/log/syslog
+  exclude_files: ['\.gz$']
+  fields:
+    log_type: syslog
+  fields_under_root: true
+  parsers:
+    - syslog:
+        format: auto
 
-  # Include lines. A list of regular expressions to match. It exports the lines that are
-  # matching any regular expression from the list.
-  # Line filtering happens after the parsers pipeline. If you would like to filter lines
-  # before parsers, use include_message parser.
-  #include_lines: ['^ERR', '^WARN']
+# Nginx Logs
+- type: filestream
+  id: nginx
+  enabled: true
+  paths:
+    - /www/wwwlogs/*.log
+    - /www/server/openresty/nginx/logs/error.log
+  fields:
+    log_type: nginx
+  fields_under_root: true
+  exclude_files: ['\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
 
-  # Exclude files. A list of regular expressions to match. Filebeat drops the files that
-  # are matching any regular expression from the list. By default, no files are dropped.
-  #prospector.scanner.exclude_files: ['.gz$']
+# MySQL Logs
+- type: filestream
+  id: mysql-error
+  enabled: true
+  paths:
+    - /www/server/mysql-apt/data/error.log
+  fields:
+    log_type: mysql
+    mysql_log_type: error
+  fields_under_root: true
+  prospector.scanner.check_interval: 10s
+  close_inactive: 5m
+  parsers:
+    - multiline:
+        type: pattern
+        pattern: '^\d{4}-\d{2}-\d{2}'
+        negate: true
+        match: after
 
-  # Optional additional fields. These fields can be freely picked
-  # to add additional information to the crawled log files for filtering
-  #fields:
-  #  level: debug
-  #  review: 1
+- type: filestream
+  id: mysql-slow
+  enabled: true
+  paths:
+    - /www/server/mysql-apt/data/mysql-slow.log
+  fields:
+    log_type: mysql
+    mysql_log_type: slow
+  fields_under_root: true
+  prospector.scanner.check_interval: 10s
+  close_inactive: 5m
+  parsers:
+    - multiline:
+        type: pattern
+        pattern: '^(# Time:)'
+        negate: true
+        match: after
+
+# EggJS Logs
+- type: filestream
+  id: eggjs
+  enabled: true
+  paths:
+    - /www/wwwroot/*/logs/egg-web.log
+    - /www/wwwroot/*/logs/egg-schedule.log
+    - /www/wwwroot/*/logs/*-web.log
+    - /www/wwwroot/*/logs/*.resource.log
+  exclude_files: ['.gz$', '.tar$', '.json.log$']
+  fields:
+    log_type: eggjs
+    app_type: nodejs
+  fields_under_root: true
+  parsers:
+    - multiline:
+        type: pattern
+        pattern: '^\[\d{4}-\d{2}-\d{2}|^\d{4}-\d{2}-\d{2}'
+        negate: true
+        match: after
+
+# JHPanel Logs
+- type: filestream
+  id: jh-panel
+  enabled: true
+  paths:
+    - /www/server/jh-panel/logs/report.log
+  fields:
+    log_type: jh-panel
+  fields_under_root: true
 
 # ============================== Filebeat modules ==============================
 
 filebeat.config.modules:
-  # Glob pattern for configuration loading
   path: ${path.config}/modules.d/*.yml
-
-  # Set to true to enable config reloading
   reload.enabled: false
-
-  # Period on which files under path should be checked for changes
-  #reload.period: 10s
+  reload.period: 10s
 
 # ======================= Elasticsearch template setting =======================
 
 setup.template.settings:
   index.number_of_shards: 1
-  #index.codec: best_compression
-  #_source.enabled: false
+  index.codec: best_compression
+  index.refresh_interval: "5s"
 
+setup.ilm.enabled: true
+setup.ilm.check_exists: true
 
-# ================================== General ===================================
-
-# The name of the shipper that publishes the network data. It can be used to group
-# all the transactions sent by a single shipper in the web interface.
-#name:
-
-# The tags of the shipper are included in their field with each
-# transaction published.
-#tags: ["service-X", "web-tier"]
-
-# Optional fields that you can specify to add additional information to the
-# output.
-#fields:
-#  env: staging
-
-# ================================= Dashboards =================================
-# These settings control loading the sample dashboards to the Kibana index. Loading
-# the dashboards is disabled by default and can be enabled either by setting the
-# options here or by using the `setup` command.
-#setup.dashboards.enabled: false
-
-# The URL from where to download the dashboard archive. By default, this URL
-# has a value that is computed based on the Beat name and version. For released
-# versions, this URL points to the dashboard archive on the artifacts.elastic.co
-# website.
-#setup.dashboards.url:
+setup.template.name: "debian-<hostId>-logs"
+setup.template.pattern: "debian-<hostId>-*"
+setup.template.enabled: true
+setup.template.overwrite: true
+setup.template.priority: 200
 
 # =================================== Kibana ===================================
 
@@ -182,24 +222,39 @@ setup.kibana:
 
 # ---------------------------- Elasticsearch Output ----------------------------
 output.elasticsearch:
-  # Array of hosts to connect to.
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "host-system-status"
+    - index: "debian-<hostId>-host-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-system-status"
-    - index: "host-xtrabackup"
+    - index: "debian-<hostId>-host-xtrabackup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup"
-    - index: "host-xtrabackup-inc"
+    - index: "debian-<hostId>-host-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-xtrabackup-inc"
-    - index: "host-backup"
+    - index: "debian-<hostId>-host-backup-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-backup"
-
-  # Performance preset - one of "balanced", "throughput", "scale",
-  # "latency", or "custom".
+    - index: "debian-<hostId>-syslog-%{+yyyy.MM}"
+      when.equals:
+        log_type: "syslog"
+    - index: "debian-<hostId>-nginx-%{+yyyy.MM}"
+      when.equals:
+        log_type: "nginx"
+    - index: "debian-<hostId>-eggjs-%{+yyyy.MM}"
+      when.equals:
+        log_type: "eggjs"
+    - index: "debian-<hostId>-mysql-%{+yyyy.MM}"
+      when.equals:
+        log_type: "mysql"
+    - index: "debian-<hostId>-jh-panel-%{+yyyy.MM}"
+      when.equals:
+        log_type: "jh-panel"
+  pipelines:
+    - pipeline: "nginx-pipeline"
+      when.equals:
+        log_type: "nginx"
   preset: balanced
 
   # Protocol - either `http` (default) or `https`.
@@ -226,6 +281,7 @@ output.elasticsearch:
   #ssl.key: "/etc/pki/client/cert.key"
 
 # ================================= Processors =================================
+
 processors:
   - add_fields:
       target: ''
