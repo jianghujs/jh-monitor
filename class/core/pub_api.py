@@ -44,13 +44,19 @@ class pub_api:
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
         port = request.form.get('port', '10022')
-        host_id = 'H_' + host_name + '_' + jh.getRandomString(4)
+        host_id = request.form.get('host_id', '').strip()
+        if host_id == '':
+            host_id = 'H_' + host_name + '_' + jh.getRandomString(4)
         host_group_id = 'default'
         host_group_name = ''
 
-        exist_host = jh.M('host').where('ip=?', (ip,)).field('ip').find()
+        exist_host = jh.M('host').where('ip=?', (ip,)).field('host_id,ip').find()
         if len(exist_host) > 0:
-            return jh.returnJson(False, '主机已经存在!')
+            return jh.returnJson(False, '主机已经存在!', {'host_id': exist_host.get('host_id', '')})
+
+        exist_host_by_id = jh.M('host').where('host_id=?', (host_id,)).field('host_id').find()
+        if len(exist_host_by_id) > 0:
+            return jh.returnJson(False, 'host_id 已存在!', {'host_id': host_id})
         
         # 添加主机
         jh.M('host').add("host_id,host_name,host_group_id,host_group_name,ip,ssh_port,addtime", (host_id,host_name,host_group_id,host_group_name,ip,port,time.strftime('%Y-%m-%d %H:%M:%S')))
@@ -62,7 +68,7 @@ class pub_api:
             if ip_conf not in existing_ips:
                 f.write(f"{ip_conf}\n")
 
-        return jh.returnJson(True, '主机添加成功!')
+        return jh.returnJson(True, '主机添加成功!', {'host_id': host_id})
     
     def getHostAddrApi(self):
         return jh.returnJson(True, 'ok', jh.getHostAddr())

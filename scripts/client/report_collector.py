@@ -40,6 +40,10 @@ DEFAULT_OUTPUT_DIR = os.environ.get(
     'REPORT_COLLECTOR_OUTPUT_DIR',
     '/home/ansible_user/jh-monitor-data'
 )
+DEFAULT_HOST_ID_FILE = os.environ.get(
+    'JH_MONITOR_HOST_ID_FILE',
+    os.path.join(DEFAULT_OUTPUT_DIR, 'host_id')
+)
 DEFAULT_RETENTION_DAYS = 30
 STATE_FILE_NAME = '.report-collector-state.json'
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
@@ -140,6 +144,9 @@ def get_primary_ip():
 
 
 def get_host_id():
+    saved_host_id = safe_read(DEFAULT_HOST_ID_FILE)
+    if saved_host_id:
+        return saved_host_id
     machine_id = safe_read('/etc/machine-id')
     if machine_id:
         return machine_id

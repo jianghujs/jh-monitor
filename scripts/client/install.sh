@@ -8,6 +8,8 @@ export PATH
 USERNAME="ansible_user"
 SSH_DIR="/home/$USERNAME/.ssh"
 AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
+DATA_DIR="/home/$USERNAME/jh-monitor-data"
+HOST_ID_FILE="${DATA_DIR}/host_id"
 DEFAULT_RAW_BASE="https://raw.githubusercontent.com/jianghujs/jh-monitor/master"
 CN_RAW_BASE="https://gitee.com/jianghujs/jh-monitor/raw/master"
 
@@ -42,11 +44,11 @@ confirm_action() {
     echo "1. 创建或复用 ${USERNAME} 用户"
     echo "2. 配置 ${USERNAME} 的目录与权限"
     echo "3. 初始化 Python 运行环境"
-    echo "4. 安装或更新数据收集定时任务"
-    echo "5. 配置数据收集定时任务"
-    echo "6. 配置服务端 SSH 公钥访问"
-    echo "7. 配置 filebeat"
-    echo "8. 通知服务端添加当前主机"
+    echo "4. 配置服务端 SSH 公钥访问"
+    echo "5. 通知服务端添加当前主机并保存 host_id"
+    echo "6. 安装或更新数据收集定时任务"
+    echo "7. 配置数据收集定时任务"
+    echo "8. 配置 filebeat"
     echo "-----------------------"
     echo "云监控地址: ${current_url:-未提供}"
     echo "当前操作: ${current_action}"
@@ -142,17 +144,18 @@ EOF
 }
 
 config_run_env() {
-    if ! wget -O /tmp/install_ensure_run_env.sh "${RAW_BASE}/scripts/client/install/ensure_run_env.sh"; then
-        local script_dir
-        script_dir="$(cd "$(dirname "$0")" && pwd)"
-        local local_script="${script_dir}/install/ensure_run_env.sh"
-        if [ -f "$local_script" ]; then
-            if ! bash "$local_script" "$net_env_cn"; then
-                show_error "Python 环境初始化失败"
-                exit 1
-            fi
-            return
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local local_script="${script_dir}/install/ensure_run_env.sh"
+    if [ -f "$local_script" ]; then
+        if ! bash "$local_script" "$net_env_cn"; then
+            show_error "Python 环境初始化失败"
+            exit 1
         fi
+        return
+    fi
+
+    if ! wget -O /tmp/install_ensure_run_env.sh "${RAW_BASE}/scripts/client/install/ensure_run_env.sh"; then
         show_error "下载 Python 环境初始化脚本失败"
         exit 1
     fi
@@ -194,11 +197,7 @@ add_server_ssh_cert(){
 }
 
 config_filebeat() {
-    if wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh"; then
-        bash /tmp/install_filebeat.sh "$net_env_cn"
-        return $?
-    fi
-
+    export JH_MONITOR_HOST_ID_FILE="$HOST_ID_FILE"
     local script_dir
     script_dir="$(cd "$(dirname "$0")" && pwd)"
     local local_script="${script_dir}/install/filebeat/install.sh"
@@ -206,23 +205,75 @@ config_filebeat() {
         bash "$local_script" "$net_env_cn"
         return $?
     fi
+
+    if wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh"; then
+        bash /tmp/install_filebeat.sh "$net_env_cn"
+        return $?
+    fi
     return 1
+}
+
+read_json_value() {
+    local json_text="$1"
+    local field_path="$2"
+    python3 - "$field_path" <<'PY' <<<"$json_text"
+import json
+import sys
+
+field_path = sys.argv[1].split('.')
+raw = sys.stdin.read().strip()
+if not raw:
+    sys.exit(0)
+
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(0)
+
+current = data
+for key in field_path:
+    if isinstance(current, dict):
+        current = current.get(key, '')
+    else:
+        current = ''
+        break
+
+if current is None:
+    current = ''
+print(str(current))
+PY
+}
+
+persist_client_host_id() {
+    local host_id="$1"
+    if [ -z "$host_id" ]; then
+        return 1
+    fi
+
+    mkdir -p "$DATA_DIR"
+    printf "%s" "$host_id" > "$HOST_ID_FILE"
+    chown "${USERNAME}:${USERNAME}" "$HOST_ID_FILE" 2>/dev/null || true
+    chmod 644 "$HOST_ID_FILE"
+    export JH_MONITOR_HOST_ID="$host_id"
+    export JH_MONITOR_HOST_ID_FILE="$HOST_ID_FILE"
+    echo "已保存当前主机 host_id: $host_id -> $HOST_ID_FILE"
+    return 0
 }
 
 install_report_collector() {
     export REPORT_COLLECTOR_USERNAME="$USERNAME"
     export MONITOR_RAW_BASE="$RAW_BASE"
 
-    if wget -O /tmp/install_report_collector.sh "${RAW_BASE}/scripts/client/install/debian.sh"; then
-        REPORT_COLLECTOR_USERNAME="$USERNAME" MONITOR_RAW_BASE="$RAW_BASE" bash /tmp/install_report_collector.sh update
-        return $?
-    fi
-
     local script_dir
     script_dir="$(cd "$(dirname "$0")" && pwd)"
     local local_script="${script_dir}/install/debian.sh"
     if [ -f "$local_script" ]; then
         bash "$local_script" update
+        return $?
+    fi
+
+    if wget -O /tmp/install_report_collector.sh "${RAW_BASE}/scripts/client/install/debian.sh"; then
+        REPORT_COLLECTOR_USERNAME="$USERNAME" MONITOR_RAW_BASE="$RAW_BASE" bash /tmp/install_report_collector.sh update
         return $?
     fi
     return 1
@@ -256,16 +307,42 @@ notify_server_add_host(){
       exit 1
     fi
 
-    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" -d "host_name=$client_name" -d "ip=$client_ip" -d "port=$client_ssh_port")
-    echo $add_res
-    # 判断返回的json中status是否为true
-    if [[ "$add_res" =~ "true" ]]; then
-        echo "添加主机成功"
-    else
-        add_res_msg=$(echo $add_res | awk -F 'msg": "' '{print $2}' | awk -F '"' '{print $1}')
-        echo -e "添加主机失败，$add_res_msg"
-        exit 1
+    local existing_host_id=""
+    if [ -s "$HOST_ID_FILE" ]; then
+        existing_host_id=$(tr -d '\r\n[:space:]' < "$HOST_ID_FILE")
+        if [ -n "$existing_host_id" ]; then
+            echo "检测到本地已保存 host_id: $existing_host_id"
+        fi
     fi
+
+    add_res=$(curl -s -X POST "$monitor_url/pub/add_host" \
+        -d "host_name=$client_name" \
+        -d "ip=$client_ip" \
+        -d "port=$client_ssh_port" \
+        -d "host_id=$existing_host_id")
+    echo $add_res
+
+    local add_res_status
+    local add_res_host_id
+    local add_res_msg
+    add_res_status=$(read_json_value "$add_res" "status")
+    add_res_host_id=$(read_json_value "$add_res" "data.host_id")
+    add_res_msg=$(read_json_value "$add_res" "msg")
+
+    if [ "$add_res_status" = "True" ] || [ "$add_res_status" = "true" ]; then
+        persist_client_host_id "$add_res_host_id"
+        echo "添加主机成功"
+        return 0
+    fi
+
+    if [ -n "$add_res_host_id" ] && [ "$add_res_msg" = "主机已经存在!" ]; then
+        persist_client_host_id "$add_res_host_id"
+        echo "主机已存在，复用已有 host_id: $add_res_host_id"
+        return 0
+    fi
+
+    echo -e "添加主机失败，${add_res_msg:-未知错误}"
+    exit 1
 }
 
 action="${1}"
@@ -296,17 +373,17 @@ elif [ "$action" == "install" ]; then
     # 配置客户端python环境
     config_run_env
 
-    # 安装或更新日报采集脚本与 cron
-    install_report_collector
-
     # 配置服务端访问权限
     add_server_ssh_cert
 
-    # 配置filebeat
-    config_filebeat
-
     # 通知服务端添加主机
     notify_server_add_host
+
+    # 安装或更新日报采集脚本与 cron
+    install_report_collector
+
+    # 配置filebeat
+    config_filebeat
 elif [ "$action" == "set_user_permission" ]; then
     confirm_action "$action" "$monitor_url"
     # 仅初始化ansible_user权限相关设置

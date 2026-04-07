@@ -228,6 +228,10 @@ output.elasticsearch:
 
 # ================================= Processors =================================
 processors:
+  - add_fields:
+      target: ''
+      fields:
+        host_id: "<hostId>"
   - add_host_metadata:
       when.not.contains.tags: forwarded
   - add_cloud_metadata: ~

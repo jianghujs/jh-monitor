@@ -56,12 +56,10 @@ fetch_or_copy() {
   local local_file="${CLIENT_DIR}/${name}"
   local target_file="${SCRIPT_HOME}/${name}"
 
-  if ! wget -O "$target_file" "${RAW_BASE}/scripts/client/${name}"; then
-    if [ -f "$local_file" ]; then
-      cp "$local_file" "$target_file"
-    else
-      fail "下载 ${name} 失败"
-    fi
+  if [ -f "$local_file" ]; then
+    cp "$local_file" "$target_file"
+  elif ! wget -O "$target_file" "${RAW_BASE}/scripts/client/${name}"; then
+    fail "下载 ${name} 失败"
   fi
 
   chmod 755 "$target_file"
@@ -73,12 +71,10 @@ run_cron_installer() {
   local cron_script="/tmp/${CRON_HELPER_NAME}"
   local local_script="${SCRIPT_DIR}/${CRON_HELPER_NAME}"
 
-  if ! wget -O "$cron_script" "${RAW_BASE}/scripts/client/install/${CRON_HELPER_NAME}"; then
-    if [ -f "$local_script" ]; then
-      cron_script="$local_script"
-    else
-      fail "下载 ${CRON_HELPER_NAME} 失败"
-    fi
+  if [ -f "$local_script" ]; then
+    cron_script="$local_script"
+  elif ! wget -O "$cron_script" "${RAW_BASE}/scripts/client/install/${CRON_HELPER_NAME}"; then
+    fail "下载 ${CRON_HELPER_NAME} 失败"
   fi
 
   REPORT_COLLECTOR_USERNAME="$USERNAME" \
