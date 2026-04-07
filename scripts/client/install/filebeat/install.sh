@@ -113,13 +113,26 @@ validate_filebeat_config() {
 
 validate_filebeat_config
 
-# 暂时不自动执行，因为太久了，手动执行一次就行
-# echo "正在配置filebeat..."
-# filebeat setup -e > /tmp/filebeat_setup.log 2>&1
-# echo "filebeat配置完成✅"
+run_filebeat_setup() {
+  local setup_log_file="/tmp/filebeat_setup.log"
+  if ! command -v filebeat >/dev/null 2>&1; then
+    echo "警告: 未找到 filebeat 命令，跳过 setup"
+    return 0
+  fi
+
+  echo "正在配置filebeat，日志写入: ${setup_log_file}"
+  : > "${setup_log_file}"
+  if ! filebeat setup -e >"${setup_log_file}" 2>&1; then
+    echo "错误: filebeat setup 失败，请检查日志: ${setup_log_file}"
+    return 1
+  fi
+  echo "filebeat setup完成✅"
+}
+
+run_filebeat_setup || exit 1
 
 echo "正在启动filebeat..."
-service filebeat start
+service filebeat restart
 systemctl enable filebeat
 
 echo "filebeat配置完成✅"
