@@ -216,12 +216,12 @@ config_filebeat() {
 read_json_value() {
     local json_text="$1"
     local field_path="$2"
-    python3 - "$field_path" <<'PY' <<<"$json_text"
+    python3 -c '
 import json
 import sys
 
-field_path = sys.argv[1].split('.')
-raw = sys.stdin.read().strip()
+field_path = sys.argv[1].split(".")
+raw = sys.argv[2].strip()
 if not raw:
     sys.exit(0)
 
@@ -233,15 +233,15 @@ except Exception:
 current = data
 for key in field_path:
     if isinstance(current, dict):
-        current = current.get(key, '')
+        current = current.get(key, "")
     else:
-        current = ''
+        current = ""
         break
 
 if current is None:
-    current = ''
+    current = ""
 print(str(current))
-PY
+' "$field_path" "$json_text"
 }
 
 persist_client_host_id() {
