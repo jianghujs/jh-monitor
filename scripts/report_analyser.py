@@ -25,6 +25,19 @@ if ES_MODEL_DIR not in sys.path:
 import jh
 import value_tool
 from config_api import config_api
+from get_pve_hardware_report import (
+    DEFAULT_THRESHOLDS as DEFAULT_PVE_THRESHOLDS,
+    NVME_SPARE_CRIT,
+    NVME_SPARE_WARN,
+    NVME_USED_CRIT,
+    NVME_USED_WARN,
+    SMART_LIFE_CRIT,
+    SMART_LIFE_WARN,
+    all_fans_stopped,
+    determine_status,
+    to_float,
+    to_int,
+)
 from host_api import host_api
 from report_state import build_delivery_state, build_validation_state
 
@@ -41,10 +54,10 @@ DEFAULT_REPORT_THRESHOLDS = {
     'ssl_cert': 14,
 }
 
-RAW_STATUS_INDEX = 'host-system-status'
-RAW_XTRABACKUP_INDEX = 'host-xtrabackup'
-RAW_XTRABACKUP_INC_INDEX = 'host-xtrabackup-inc'
-RAW_BACKUP_INDEX = 'host-backup'
+RAW_STATUS_INDEX = 'host-*-system-status-*'
+RAW_XTRABACKUP_INDEX = 'host-debian-xtrabackup-*'
+RAW_XTRABACKUP_INC_INDEX = 'host-debian-xtrabackup-inc-*'
+RAW_BACKUP_INDEX = 'host-debian-backup-*'
 SINGLE_REPORT_INDEX = 'host-report-single'
 OVERVIEW_REPORT_INDEX = 'host-report-overview'
 
@@ -660,6 +673,323 @@ class HostReportAnalyser(object):
             })
         return mysqlinfo_tips
 
+    def _is_pve_host(self, host_row):
+        return host_row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
+
+    def _format_pve_bytes(self, value):
+        try:
+            return jh.toSize(int(float(value or 0)))
+        except Exception:
+            return '0B'
+
+    def _format_pve_issue_summary(self, issues):
+        summary_tips = []
+        error_tips = []
+        issue_groups = {}
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            category = issue.get('category', '未知')
+            issue_groups.setdefault(category, []).append(issue)
+
+        for category, items in issue_groups.items():
+            has_critical = any(item.get('severity') == 'critical' for item in items)
+            color = 'red' if has_critical else 'orange'
+            messages = [item.get('message', '') for item in items if str(item.get('message', '')).strip() != '']
+            if messages:
+                summary_tips.append("<span style='color: {0};'>{1}: {2}</span>".format(color, category, ', '.join(messages)))
+            for item in items:
+                if str(item.get('message', '')).strip() != '':
+                    error_tips.append('{0}: {1}'.format(category, item.get('message', '')))
+        return summary_tips, error_tips
+
+    def _build_pve_report_payload(self, host_row, latest_doc, window, validation_errors):
+        host_name = host_row.get('host_name', '')
+        host_ip = host_row.get('ip', '')
+        pve_status = latest_doc.get('pve', {}) if isinstance(latest_doc, dict) else {}
+        if not isinstance(pve_status, dict):
+            pve_status = {}
+
+        pve_data = pve_status.get('data', {}) or {}
+        if not isinstance(pve_data, dict):
+            pve_data = {}
+        pve_issues = pve_status.get('issues', []) or []
+        if not isinstance(pve_issues, list):
+            pve_issues = []
+        thresholds = dict(DEFAULT_PVE_THRESHOLDS)
+        if isinstance(pve_status.get('thresholds'), dict):
+            thresholds.update(pve_status.get('thresholds'))
+        collect_error = str(pve_status.get('error', '')).strip()
+
+        sysinfo_tips = []
+        network_tips = []
+        smart_tips = []
+        io_tips = []
+        sensor_tips = []
+        power_tips = []
+        summary_tips = []
+        error_tips = []
+        collect_errors = []
+
+        if not pve_status or not pve_data:
+            validation_errors.append('missing_pve_system_status')
+            summary_tips.append("<span style='color: red;'>PVE系统原始数据缺失，报告未生成完整</span>")
+            error_tips.append('PVE系统原始数据缺失')
+
+        cpu = pve_data.get('cpu', {})
+        if cpu.get('error'):
+            collect_errors.append('CPU：' + str(cpu.get('error')))
+        else:
+            usage = cpu.get('usage', 0)
+            load = cpu.get('load', [0, 0, 0]) or [0, 0, 0]
+            while len(load) < 3:
+                load.append(0)
+            color = 'red' if usage >= thresholds['cpu_crit'] else 'orange' if usage >= thresholds['cpu_warn'] else 'auto'
+            cpu_desc = "当前使用率：<span style='color: {0}'>{1}%</span><br/>负载: {2}, {3}, {4} (1/5/15分钟)".format(
+                color,
+                usage,
+                load[0],
+                load[1],
+                load[2]
+            )
+            top_procs = cpu.get('top_processes', [])
+            if top_procs:
+                cpu_desc += "<br/>TOP5进程:<br/>" + "<br/>".join([
+                    "{0}. {1}: {2}% (PID: {3})".format(
+                        index + 1,
+                        proc.get('command', '')[:50],
+                        proc.get('cpu', 0),
+                        proc.get('pid', '')
+                    )
+                    for index, proc in enumerate(top_procs[:5])
+                ])
+            sysinfo_tips.append({'name': 'CPU', 'desc': cpu_desc})
+
+        mem = pve_data.get('memory', {})
+        if mem.get('error'):
+            collect_errors.append('内存：' + str(mem.get('error')))
+        else:
+            usage_percent = mem.get('usage_percent', 0)
+            color = 'red' if usage_percent >= thresholds['mem_crit'] else 'orange' if usage_percent >= thresholds['mem_warn'] else 'auto'
+            mem_desc = "总内存: {0}<br/>已使用: {1} (<span style='color: {2}'>{3}%</span>)<br/>可用: {4}".format(
+                self._format_pve_bytes(mem.get('total', 0)),
+                self._format_pve_bytes(mem.get('used', 0)),
+                color,
+                usage_percent,
+                self._format_pve_bytes(mem.get('available', 0))
+            )
+            sysinfo_tips.append({'name': '内存', 'desc': mem_desc})
+
+        disk = pve_data.get('disk', {})
+        if disk.get('error'):
+            collect_errors.append('磁盘容量：' + str(disk.get('error')))
+        else:
+            for fs in disk.get('filesystems', []):
+                use_percent = fs.get('use_percent', 0)
+                color = 'red' if use_percent >= thresholds['disk_crit'] else 'orange' if use_percent >= thresholds['disk_warn'] else 'auto'
+                sysinfo_tips.append({
+                    'name': '磁盘({0})'.format(fs.get('mountpoint', '-')),
+                    'desc': "已使用<span style='color: {0}'>{1}%</span>（{2}/{3}）".format(
+                        color,
+                        use_percent,
+                        fs.get('used', '-'),
+                        fs.get('size', '-')
+                    )
+                })
+
+        sysinfo_tips.append({
+            'name': '最后监控时间',
+            'desc': value_tool.escapeHtml(latest_doc.get('add_time', '') if isinstance(latest_doc, dict) else '') or '无'
+        })
+
+        net = pve_data.get('network', {})
+        if net.get('error'):
+            collect_errors.append('网络：' + str(net.get('error')))
+        else:
+            for iface in net.get('interfaces', []):
+                state = iface.get('state', 'UNKNOWN')
+                state_color = 'red' if state == 'DOWN' else 'orange' if state == 'UNKNOWN' else 'auto'
+                err_count = iface.get('rx_errors', 0) + iface.get('tx_errors', 0)
+                err_color = 'red' if err_count > 0 else 'auto'
+                network_tips.append({
+                    'name': '网络({0})'.format(iface.get('name', '-')),
+                    'desc': "状态: <span style='color: {0}'>{1}</span><br/>接收: {2} ({3} 包, <span style='color: {4}'>{5} 错误</span>)<br/>发送: {6} ({7} 包, <span style='color: {4}'>{8} 错误</span>)".format(
+                        state_color,
+                        state,
+                        self._format_pve_bytes(iface.get('rx_bytes', 0)),
+                        iface.get('rx_packets', 0),
+                        err_color,
+                        iface.get('rx_errors', 0),
+                        self._format_pve_bytes(iface.get('tx_bytes', 0)),
+                        iface.get('tx_packets', 0),
+                        iface.get('tx_errors', 0)
+                    )
+                })
+
+        smart = pve_data.get('smart', {})
+        if smart.get('error'):
+            collect_errors.append('磁盘SMART：' + str(smart.get('error')))
+        else:
+            for dev in smart.get('devices', []):
+                health = dev.get('health', 'unknown')
+                health_color = 'green' if health == 'passed' else 'red' if health == 'failed' else 'orange'
+                desc_parts = [
+                    '型号: {0}'.format(dev.get('model', '未知')),
+                    '类型: {0}'.format(dev.get('type', '未知')),
+                    "健康状态: <span style='color: {0}'>{1}</span>".format(health_color, str(health).upper())
+                ]
+                if dev.get('serial') and dev.get('serial') != '未知':
+                    desc_parts.append('序列号: {0}'.format(dev.get('serial')))
+                if dev.get('capacity') and dev.get('capacity') != '未知':
+                    desc_parts.append('容量: {0}'.format(dev.get('capacity')))
+                if dev.get('health_score') is not None:
+                    desc_parts.append('健康度: {0}%'.format(dev.get('health_score')))
+                temp = dev.get('temperature')
+                if temp is not None:
+                    temp_status = determine_status(temp, thresholds['temp_warn'], thresholds['temp_crit'])
+                    temp_color = 'red' if temp_status == 'critical' else 'orange' if temp_status == 'warning' else 'auto'
+                    desc_parts.append("温度: <span style='color: {0}'>{1}°C</span>".format(temp_color, temp))
+                if dev.get('is_nvme'):
+                    nvme = dev.get('nvme', {})
+                    spare = to_float(nvme.get('available_spare'))
+                    if spare:
+                        spare_status = determine_status(spare, NVME_SPARE_WARN, NVME_SPARE_CRIT, reverse=True)
+                        spare_color = 'red' if spare_status == 'critical' else 'orange' if spare_status == 'warning' else 'auto'
+                        desc_parts.append("备用空间: <span style='color: {0}'>{1}%</span>".format(spare_color, spare))
+                    used = to_float(nvme.get('percentage_used'))
+                    if used:
+                        used_status = determine_status(used, NVME_USED_WARN, NVME_USED_CRIT)
+                        used_color = 'red' if used_status == 'critical' else 'orange' if used_status == 'warning' else 'auto'
+                        desc_parts.append("已用寿命: <span style='color: {0}'>{1}%</span>".format(used_color, used))
+                    media_errors = to_int(nvme.get('media_and_data_integrity_errors'))
+                    if media_errors:
+                        desc_parts.append("媒体错误: <span style='color: red'>{0}</span>".format(media_errors))
+                else:
+                    attrs = {attr.get('id'): attr for attr in dev.get('attributes', [])}
+                    life_attr = attrs.get('231')
+                    if life_attr:
+                        life_raw = life_attr.get('raw_int', 0)
+                        life_val = life_attr.get('value', 0)
+                        life = life_raw if life_raw > 0 else life_val
+                        life_status = determine_status(life, SMART_LIFE_WARN, SMART_LIFE_CRIT, reverse=True)
+                        life_color = 'red' if life_status == 'critical' else 'orange' if life_status == 'warning' else 'auto'
+                        desc_parts.append("剩余寿命: <span style='color: {0}'>{1}%</span>".format(life_color, life))
+                smart_tips.append({
+                    'name': 'SMART({0})'.format(dev.get('device', '-')),
+                    'desc': '<br/>'.join(desc_parts)
+                })
+
+        io = pve_data.get('io', {})
+        if io.get('error'):
+            collect_errors.append('磁盘IO：' + str(io.get('error')))
+        else:
+            for dev in io.get('devices', []):
+                io_tips.append({
+                    'name': 'IO({0})'.format(dev.get('device', '-')),
+                    'desc': '读取: {0:.2f} r/s, {1:.2f} kB/s<br/>写入: {2:.2f} w/s, {3:.2f} kB/s<br/>平均等待时间: {4:.2f} ms<br/>使用率: {5:.2f}%'.format(
+                        float(dev.get('r_s', 0) or 0),
+                        float(dev.get('rkB_s', 0) or 0),
+                        float(dev.get('w_s', 0) or 0),
+                        float(dev.get('wkB_s', 0) or 0),
+                        float(dev.get('await', 0) or 0),
+                        float(dev.get('util', 0) or 0)
+                    )
+                })
+
+        sensors = pve_data.get('sensors', {})
+        if sensors.get('error'):
+            collect_errors.append('传感器：' + str(sensors.get('error')))
+        else:
+            temps = sensors.get('temperatures', [])
+            if temps:
+                temp_lines = []
+                for temp in temps:
+                    status = determine_status(temp.get('value', 0), thresholds['temp_warn'], thresholds['temp_crit'])
+                    color = 'red' if status == 'critical' else 'orange' if status == 'warning' else 'auto'
+                    temp_lines.append("{0}: <span style='color: {1}'>{2}{3}</span>".format(
+                        temp.get('name', '-'),
+                        color,
+                        temp.get('value', 0),
+                        temp.get('unit', '')
+                    ))
+                sensor_tips.append({'name': '温度传感器', 'desc': '<br/>'.join(temp_lines)})
+
+            fans = sensors.get('fans', [])
+            if fans:
+                all_stopped = all_fans_stopped(fans)
+                fan_lines = []
+                for fan in fans:
+                    value = fan.get('value', 0)
+                    if value == 0:
+                        color = 'red' if all_stopped else 'orange'
+                    elif value < 500:
+                        color = 'orange'
+                    else:
+                        color = 'auto'
+                    fan_lines.append("{0}: <span style='color: {1}'>{2} {3}</span>".format(
+                        fan.get('name', '-'),
+                        color,
+                        value,
+                        fan.get('unit', '')
+                    ))
+                sensor_tips.append({'name': '风扇传感器', 'desc': '<br/>'.join(fan_lines)})
+
+            volts = sensors.get('voltages', [])
+            if volts:
+                volt_lines = []
+                for volt in volts:
+                    volt_lines.append('{0}: {1}{2}'.format(volt.get('name', '-'), volt.get('value', 0), volt.get('unit', '')))
+                sensor_tips.append({'name': '电压传感器', 'desc': '<br/>'.join(volt_lines)})
+
+        power = pve_data.get('power', {})
+        if power.get('error'):
+            collect_errors.append('电源：' + str(power.get('error')))
+        elif power.get('warning'):
+            power_tips.append({'name': '电源', 'desc': "<span style='color: orange'>{0}</span>".format(power.get('warning'))})
+        else:
+            supplies = power.get('supplies', [])
+            if supplies:
+                lines = []
+                for supply in supplies:
+                    if 'info' in supply:
+                        lines.append(supply.get('info'))
+                    elif 'power' in supply:
+                        lines.append('功率: {0:.2f} {1}'.format(float(supply.get('power', 0) or 0), supply.get('unit', '')))
+                power_tips.append({'name': '电源', 'desc': '<br/>'.join(lines)})
+
+        issue_summary_tips, issue_error_tips = self._format_pve_issue_summary(pve_issues)
+        summary_tips.extend(issue_summary_tips)
+        error_tips.extend(issue_error_tips)
+
+        if collect_error != '':
+            validation_errors.append('pve_system_status_collect_error')
+            collect_errors.append('PVE采集：' + collect_error)
+
+        for err in collect_errors:
+            summary_tips.append("<span style='color: red;'>数据采集异常: {0}</span>".format(value_tool.escapeHtml(err)))
+            error_tips.append(err)
+
+        if len(summary_tips) == 0:
+            summary_tips.append("<span style='color: green;'>服务运行正常，继续保持！</span>")
+
+        return {
+            'title': host_name or jh.getConfig('title'),
+            'ip': host_ip,
+            'report_time': latest_doc.get('add_time', '') if isinstance(latest_doc, dict) and latest_doc.get('add_time') else window['report_time'],
+            'start_time': window['start_time'],
+            'end_time': window['end_time'],
+            'start_date': window['start_date'],
+            'end_date': window['end_date'],
+            'summary_tips': summary_tips,
+            'error_tips': error_tips,
+            'sysinfo_tips': sysinfo_tips,
+            'network_tips': network_tips,
+            'smart_tips': smart_tips,
+            'io_tips': io_tips,
+            'sensor_tips': sensor_tips,
+            'power_tips': power_tips,
+        }, error_tips
+
     def build_single_host_report(self, host_row, host_group, window):
         """基于单台主机原始数据生成单机报告文档。"""
         host_id = host_row.get('host_id', '')
@@ -674,50 +1004,61 @@ class HostReportAnalyser(object):
         if len(status_docs) == 0:
             validation_errors.append('missing_system_status')
 
-        system_section = self._build_system_section(status_docs, window, validation_errors)
-        latest_doc = system_section.get('latest_doc', {})
-        backup_section = self._build_backup_section(latest_doc, xtrabackup_docs, xtrabackup_inc_docs, backup_docs, window, validation_errors)
-        site_section = self._build_site_section(latest_doc)
-        jianghujsinfo_tips = self._build_runtime_service_section(latest_doc, 'jianghujs', 'JianghuJS', 'orange')
-        dockerinfo_tips = self._build_runtime_service_section(latest_doc, 'docker', 'Docker', 'red')
-        mysqlinfo_tips = self._build_mysql_section(status_docs)
+        if self._is_pve_host(host_row):
+            latest_doc = status_docs[-1] if status_docs else {}
+            report_payload, error_tips = self._build_pve_report_payload(host_row, latest_doc, window, validation_errors)
+            summary_tips = report_payload.get('summary_tips', [])
+            backup_tips = []
+            siteinfo_tips = []
+            jianghujsinfo_tips = []
+            dockerinfo_tips = []
+            mysqlinfo_tips = []
+        else:
+            system_section = self._build_system_section(status_docs, window, validation_errors)
+            latest_doc = system_section.get('latest_doc', {})
+            backup_section = self._build_backup_section(latest_doc, xtrabackup_docs, xtrabackup_inc_docs, backup_docs, window, validation_errors)
+            site_section = self._build_site_section(latest_doc)
+            jianghujsinfo_tips = self._build_runtime_service_section(latest_doc, 'jianghujs', 'JianghuJS', 'orange')
+            dockerinfo_tips = self._build_runtime_service_section(latest_doc, 'docker', 'Docker', 'red')
+            mysqlinfo_tips = self._build_mysql_section(status_docs)
 
-        summary_tips = []
-        error_tips = []
-        summary_tips.extend(system_section.get('summary_tips', []))
-        summary_tips.extend(backup_section.get('summary_tips', []))
-        summary_tips.extend(site_section.get('summary_tips', []))
-        error_tips.extend(system_section.get('error_tips', []))
-        error_tips.extend(backup_section.get('error_tips', []))
-        error_tips.extend(site_section.get('error_tips', []))
+            summary_tips = []
+            error_tips = []
+            summary_tips.extend(system_section.get('summary_tips', []))
+            summary_tips.extend(backup_section.get('summary_tips', []))
+            summary_tips.extend(site_section.get('summary_tips', []))
+            error_tips.extend(system_section.get('error_tips', []))
+            error_tips.extend(backup_section.get('error_tips', []))
+            error_tips.extend(site_section.get('error_tips', []))
 
-        if len(status_docs) == 0:
-            summary_tips.append("<span style='color: red;'>系统监控原始数据缺失，报告未生成完整</span>")
-            error_tips.append('系统监控原始数据缺失')
+            if len(status_docs) == 0:
+                summary_tips.append("<span style='color: red;'>系统监控原始数据缺失，报告未生成完整</span>")
+                error_tips.append('系统监控原始数据缺失')
 
-        if len(summary_tips) == 0:
-            summary_tips.append("<span style='color: green;'>服务运行正常，继续保持！</span>")
+            if len(summary_tips) == 0:
+                summary_tips.append("<span style='color: green;'>服务运行正常，继续保持！</span>")
 
-        title = jh.getConfig('title')
-        report_payload = {
-            'title': title,
-            'ip': host_ip,
-            'report_time': window['report_time'],
-            'start_time': window['start_time'],
-            'end_time': window['end_time'],
-            'start_date': window['start_date'],
-            'end_date': window['end_date'],
-            'summary_tips': summary_tips,
-            'error_tips': error_tips,
-            'sysinfo_tips': system_section.get('tips', []),
-            'backup_tips': backup_section.get('tips', []),
-            'siteinfo_tips': site_section.get('tips', []),
-            'jianghujsinfo_tips': jianghujsinfo_tips,
-            'dockerinfo_tips': dockerinfo_tips,
-            'mysqlinfo_tips': mysqlinfo_tips,
-        }
+            report_payload = {
+                'title': jh.getConfig('title'),
+                'ip': host_ip,
+                'report_time': window['report_time'],
+                'start_time': window['start_time'],
+                'end_time': window['end_time'],
+                'start_date': window['start_date'],
+                'end_date': window['end_date'],
+                'summary_tips': summary_tips,
+                'error_tips': error_tips,
+                'sysinfo_tips': system_section.get('tips', []),
+                'backup_tips': backup_section.get('tips', []),
+                'siteinfo_tips': site_section.get('tips', []),
+                'jianghujsinfo_tips': jianghujsinfo_tips,
+                'dockerinfo_tips': dockerinfo_tips,
+                'mysqlinfo_tips': mysqlinfo_tips,
+            }
+            backup_tips = report_payload.get('backup_tips', [])
+            siteinfo_tips = report_payload.get('siteinfo_tips', [])
 
-        html_content = h_api.renderHostReportHtml(host_row, report_payload)
+        html_content = h_api.buildHostReportMessage(host_row, report_payload)
         if not html_content or '暂无报告内容' in html_content:
             validation_errors.append('empty_html_content')
 
@@ -736,7 +1077,11 @@ class HostReportAnalyser(object):
 
         document = {
             'report_type': 'single',
-            'title': '{0}({1})-服务器运行报告'.format(host_name, host_ip),
+            'title': '{0}({1})-{2}'.format(
+                host_name,
+                host_ip,
+                'PVE硬件健康报告' if self._is_pve_host(host_row) else '服务器运行报告'
+            ),
             'report_date': window['report_date'],
             'report_time': window['report_time'],
             'start_time': window['start_time'],
@@ -749,12 +1094,17 @@ class HostReportAnalyser(object):
             'summary_tips': summary_tips,
             'error_tips': error_tips,
             'html_content': html_content,
-            'sysinfo_tips': system_section.get('tips', []),
-            'backup_tips': backup_section.get('tips', []),
-            'siteinfo_tips': site_section.get('tips', []),
+            'sysinfo_tips': report_payload.get('sysinfo_tips', []),
+            'backup_tips': backup_tips,
+            'siteinfo_tips': siteinfo_tips,
             'jianghujsinfo_tips': jianghujsinfo_tips,
             'dockerinfo_tips': dockerinfo_tips,
             'mysqlinfo_tips': mysqlinfo_tips,
+            'network_tips': report_payload.get('network_tips', []),
+            'smart_tips': report_payload.get('smart_tips', []),
+            'io_tips': report_payload.get('io_tips', []),
+            'sensor_tips': report_payload.get('sensor_tips', []),
+            'power_tips': report_payload.get('power_tips', []),
             'validation': validation,
             'delivery': delivery_state,
             'is_abnormal': len(error_tips) > 0,

@@ -4,7 +4,7 @@ DATE_TIME_FORMAT = 'yyyy-MM-dd HH:mm:ss||strict_date_optional_time'
 DATE_ONLY_FORMAT = 'yyyy-MM-dd||strict_date_optional_time'
 
 REPORT_INDEXES = {
-    'host-system-status': {
+    'host-debian-system-status': {
         'settings': {
             'number_of_shards': 1,
             'number_of_replicas': 0
@@ -18,7 +18,8 @@ REPORT_INDEXES = {
                         'host_name': {'type': 'keyword'},
                         'host_ip': {'type': 'ip'},
                         'host_group': {'type': 'keyword'},
-                        'host_status': {'type': 'keyword'}
+                        'host_status': {'type': 'keyword'},
+                        'system_type': {'type': 'keyword'}
                     }
                 },
                 'system': {
@@ -47,7 +48,46 @@ REPORT_INDEXES = {
             }
         }
     },
-    'host-xtrabackup': {
+    'host-pve-system-status': {
+        'settings': {
+            'number_of_shards': 1,
+            'number_of_replicas': 0
+        },
+        'mappings': {
+            'dynamic': True,
+            'properties': {
+                'host': {
+                    'properties': {
+                        'host_id': {'type': 'keyword'},
+                        'host_name': {'type': 'keyword'},
+                        'host_ip': {'type': 'ip'},
+                        'host_group': {'type': 'keyword'},
+                        'host_status': {'type': 'keyword'},
+                        'system_type': {'type': 'keyword'}
+                    }
+                },
+                'system': {
+                    'properties': {
+                        'cpu': {'type': 'float'},
+                        'memory': {'type': 'float'},
+                        'load': {
+                            'properties': {
+                                'pro': {'type': 'float'},
+                                'one': {'type': 'float'},
+                                'five': {'type': 'float'},
+                                'fifteen': {'type': 'float'}
+                            }
+                        },
+                        'disks': {'type': 'nested'}
+                    }
+                },
+                'pve': {'type': 'object', 'dynamic': True},
+                'add_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                'add_timestamp': {'type': 'double'}
+            }
+        }
+    },
+    'host-debian-xtrabackup': {
         'settings': {
             'number_of_shards': 1,
             'number_of_replicas': 0
@@ -67,7 +107,7 @@ REPORT_INDEXES = {
             }
         }
     },
-    'host-xtrabackup-inc': {
+    'host-debian-xtrabackup-inc': {
         'settings': {
             'number_of_shards': 1,
             'number_of_replicas': 0
@@ -88,7 +128,7 @@ REPORT_INDEXES = {
             }
         }
     },
-    'host-backup': {
+    'host-debian-backup': {
         'settings': {
             'number_of_shards': 1,
             'number_of_replicas': 0

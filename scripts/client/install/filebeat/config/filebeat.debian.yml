@@ -19,42 +19,42 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-system-status-*.json
-    - /home/ansible/jh-monitor-data/host-system-status-*.json
+    - /home/ansible_user/jh-monitor-data/host-debian-system-status-*.json
+    - /home/ansible/jh-monitor-data/host-debian-system-status-*.json
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-system-status
+    log_index: host-debian-system-status
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-xtrabackup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-xtrabackup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-xtrabackup
+    log_index: host-debian-xtrabackup
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-xtrabackup-inc-*.ndjson
-    - /home/ansible/jh-monitor-data/host-xtrabackup-inc-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-xtrabackup-inc
+    log_index: host-debian-xtrabackup-inc
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-backup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-backup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-debian-backup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-backup-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-backup
+    log_index: host-debian-backup
 
 # Common
 - type: log
@@ -178,8 +178,8 @@ setup.template.settings:
 setup.ilm.enabled: true
 setup.ilm.check_exists: true
 
-setup.template.name: "debian-<hostIdIndex>-logs"
-setup.template.pattern: "debian-<hostIdIndex>-*"
+setup.template.name: "host-debian-<hostIdIndex>-logs"
+setup.template.pattern: "host-debian-<hostIdIndex>-*"
 setup.template.enabled: true
 setup.template.overwrite: true
 setup.template.priority: 200
@@ -224,31 +224,31 @@ setup.kibana:
 output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "debian-<hostIdIndex>-host-system-status-%{+yyyy.MM}"
+    - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-system-status"
-    - index: "debian-<hostIdIndex>-host-xtrabackup-%{+yyyy.MM}"
+        fields.log_index: "host-debian-system-status"
+    - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-xtrabackup"
-    - index: "debian-<hostIdIndex>-host-xtrabackup-inc-%{+yyyy.MM}"
+        fields.log_index: "host-debian-xtrabackup"
+    - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-xtrabackup-inc"
-    - index: "debian-<hostIdIndex>-host-backup-%{+yyyy.MM}"
+        fields.log_index: "host-debian-xtrabackup-inc"
+    - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-backup"
-    - index: "debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
+        fields.log_index: "host-debian-backup"
+    - index: "host-debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
       when.equals:
         log_type: "syslog"
-    - index: "debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
+    - index: "host-debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
       when.equals:
         log_type: "nginx"
-    - index: "debian-<hostIdIndex>-eggjs-%{+yyyy.MM}"
+    - index: "host-debian-<hostIdIndex>-eggjs-%{+yyyy.MM}"
       when.equals:
         log_type: "eggjs"
-    - index: "debian-<hostIdIndex>-mysql-%{+yyyy.MM}"
+    - index: "host-debian-<hostIdIndex>-mysql-%{+yyyy.MM}"
       when.equals:
         log_type: "mysql"
-    - index: "debian-<hostIdIndex>-jh-panel-%{+yyyy.MM}"
+    - index: "host-debian-<hostIdIndex>-jh-panel-%{+yyyy.MM}"
       when.equals:
         log_type: "jh-panel"
   pipelines:

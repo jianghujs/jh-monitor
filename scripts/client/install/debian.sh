@@ -18,7 +18,7 @@ DATA_DIR="${DATA_HOME}"
 LOG_FILE="${LOG_DIR}/report-collector.log"
 CRON_FILE="/etc/cron.d/jh-monitor-report-collector"
 LOCK_FILE="/tmp/jh-monitor-report-collector.lock"
-FILES_TO_DEPLOY="report_collector.py get_host_usage.py get_host_info.py"
+FILES_TO_DEPLOY="report_collector.py get_debian_system_status.py get_pve_system_status.py get_host_usage.py get_host_info.py get_pve_hardware_report.py"
 CRON_HELPER_NAME="report_collector_cron.sh"
 
 log() {

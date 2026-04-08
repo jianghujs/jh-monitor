@@ -19,45 +19,45 @@ filebeat.inputs:
 # Below are the input-specific configurations.
 
 # filestream is an input for collecting log messages from files.
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-system-status-*.json
-    - /home/ansible/jh-monitor-data/host-system-status-*.json
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-system-status
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-xtrabackup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-xtrabackup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-pve-system-status-*.json
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-xtrabackup
+    log_index: host-pve-system-status
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-xtrabackup-inc-*.ndjson
-    - /home/ansible/jh-monitor-data/host-xtrabackup-inc-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-xtrabackup-inc
+    log_index: host-debian-xtrabackup
 
 - type: log
   enabled: true
   paths:
-    - /home/ansible_user/jh-monitor-data/host-backup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-backup-*.ndjson
+    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    log_index: host-backup
+    log_index: host-debian-xtrabackup-inc
+
+- type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-data/host-debian-backup-*.ndjson
+    - /home/ansible/jh-monitor-data/host-debian-backup-*.ndjson
+  json.keys_under_root: true
+  json.add_error_key: true
+  fields:
+    log_index: host-debian-backup
 
 - type: log
 
@@ -117,8 +117,8 @@ setup.template.settings:
   #index.codec: best_compression
   #_source.enabled: false
 
-setup.template.name: "debian-<hostIdIndex>-logs"
-setup.template.pattern: "debian-<hostIdIndex>-*"
+setup.template.name: "host-pve-<hostIdIndex>-logs"
+setup.template.pattern: "host-pve-<hostIdIndex>-*"
 setup.template.enabled: true
 setup.template.overwrite: true
 
@@ -191,18 +191,18 @@ output.elasticsearch:
   # Array of hosts to connect to.
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "debian-<hostIdIndex>-host-system-status-%{+yyyy.MM}"
+    - index: "host-pve-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-system-status"
-    - index: "debian-<hostIdIndex>-host-xtrabackup-%{+yyyy.MM}"
+        fields.log_index: "host-pve-system-status"
+    - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-xtrabackup"
-    - index: "debian-<hostIdIndex>-host-xtrabackup-inc-%{+yyyy.MM}"
+        fields.log_index: "host-debian-xtrabackup"
+    - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-xtrabackup-inc"
-    - index: "debian-<hostIdIndex>-host-backup-%{+yyyy.MM}"
+        fields.log_index: "host-debian-xtrabackup-inc"
+    - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-backup"
+        fields.log_index: "host-debian-backup"
 
   # Performance preset - one of "balanced", "throughput", "scale",
   # "latency", or "custom".

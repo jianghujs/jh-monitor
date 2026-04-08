@@ -5,36 +5,17 @@ import glob
 import json
 import os
 import socket
-import sqlite3
 import sys
 import tempfile
-import time
 import traceback
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PANEL_DIR = '/www/server/jh-panel'
-PANEL_CORE_DIR = os.path.join(PANEL_DIR, 'class/core')
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
-if PANEL_CORE_DIR not in sys.path:
-    sys.path.insert(0, PANEL_CORE_DIR)
 
-from get_host_info import get_host_ip
-from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info
-
-_original_cwd = os.getcwd()
-try:
-    if os.path.exists(PANEL_DIR):
-        os.chdir(PANEL_DIR)
-    import crontab_api as panel_crontab_api
-    import mw
-    import system_api as panel_system_api
-except Exception:
-    mw = None
-    panel_crontab_api = None
-    panel_system_api = None
-finally:
-    os.chdir(_original_cwd)
+from get_debian_system_status import build_system_status as build_debian_system_status
+from get_host_info import get_host_ip, is_pve_machine
+from get_pve_system_status import build_system_status as build_pve_system_status
 
 DEFAULT_OUTPUT_DIR = os.environ.get(
     'REPORT_COLLECTOR_OUTPUT_DIR',
@@ -49,7 +30,6 @@ STATE_FILE_NAME = '.report-collector-state.json'
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
 XTRABACKUP_INC_HISTORY_FILE = '/www/server/xtrabackup-inc/data/backup_history.json'
 BACKUP_LOG_FILE = '/www/server/jh-panel/logs/backup.log'
-PANEL_DEFAULT_DB_FILE = '/www/server/jh-panel/data/default.db'
 
 
 def ensure_dir(path):
@@ -92,13 +72,6 @@ def append_text(path, content):
         fp.write(content)
         fp.flush()
         os.fsync(fp.fileno())
-
-
-def write_ndjson(path, rows):
-    content = '\n'.join([json.dumps(row, ensure_ascii=False) for row in rows])
-    if content != '':
-        content = content + '\n'
-    atomic_write_text(path, content)
 
 
 def append_ndjson(path, rows):
@@ -153,345 +126,6 @@ def get_host_id():
     return socket.gethostname()
 
 
-def to_size(value):
-    try:
-        size = float(value)
-    except Exception:
-        size = 0.0
-
-    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-    for unit in units:
-        if size < 1024 or unit == units[-1]:
-            if unit == 'B':
-                return '%d%s' % (int(size), unit)
-            return '%.2f%s' % (size, unit)
-        size = size / 1024.0
-    return '0B'
-
-
-def format_disks(disk_info):
-    disks = []
-    for disk in disk_info:
-        total = int(disk.get('total', 0))
-        used = int(disk.get('used', 0))
-        free = int(disk.get('free', 0))
-        used_percent = disk.get('usedPercent', 0)
-        disks.append({
-            'path': disk.get('mountpoint', ''),
-            'size': [
-                to_size(total),
-                to_size(used),
-                to_size(free),
-                '%s%%' % int(used_percent)
-            ],
-            'inodes': ['', '', '', ''],
-            'fstype': disk.get('fstype', ''),
-            'device': disk.get('name', '')
-        })
-    return disks
-
-
-def parse_datetime_to_timestamp(raw_value):
-    value = str(raw_value or '').strip()
-    if value == '':
-        return 0
-
-    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S', '%Y-%m-%d'):
-        try:
-            return int(time.mktime(datetime.datetime.strptime(value, fmt).timetuple()))
-        except Exception:
-            pass
-
-    try:
-        return int(float(value))
-    except Exception:
-        return 0
-
-
-def get_report_window_start_timestamp():
-    now = datetime.datetime.now()
-    try:
-        return int(mw.getReportCycleStartTime(now).timestamp())
-    except Exception:
-        return int(datetime.datetime(now.year, now.month, now.day).timestamp())
-
-
-def get_crontab_enabled(crontab_name):
-    try:
-        if panel_crontab_api is None:
-            return False
-        crontab = panel_crontab_api.crontab_api().getCrontab(crontab_name)
-        return bool(crontab and int(crontab.get('status', 0)) == 1)
-    except Exception:
-        return False
-
-
-def summarize_history_status(source_path, report_window_start, backup_type=None):
-    summary = {
-        'enabled': False,
-        'last_backup_time': None,
-        'last_backup_timestamp': 0,
-        'last_backup_size': '无',
-        'last_backup_size_bytes': 0,
-        'count_in_timeframe': 0,
-        'status': 'unknown'
-    }
-
-    if not os.path.exists(source_path):
-        return summary
-
-    try:
-        source_data = json.load(open(source_path, 'r'))
-    except Exception:
-        return summary
-
-    if not isinstance(source_data, dict):
-        return summary
-
-    rows = []
-    for record in source_data.values():
-        if not isinstance(record, dict):
-            continue
-        if backup_type and record.get('backup_type') != backup_type:
-            continue
-
-        add_timestamp = record.get('add_timestamp', 0)
-        try:
-            add_timestamp = int(float(add_timestamp))
-        except Exception:
-            add_timestamp = parse_datetime_to_timestamp(record.get('add_time', ''))
-
-        rows.append({
-            'add_time': record.get('add_time', ''),
-            'add_timestamp': add_timestamp,
-            'size': record.get('size', '无'),
-            'size_bytes': int(float(record.get('size_bytes', 0) or 0))
-        })
-
-    if len(rows) == 0:
-        return summary
-
-    last_row = max(rows, key=lambda item: item.get('add_timestamp', 0))
-    count_in_timeframe = len([
-        item for item in rows
-        if item.get('add_timestamp', 0) >= report_window_start
-    ])
-
-    summary['last_backup_time'] = last_row.get('add_time')
-    summary['last_backup_timestamp'] = last_row.get('add_timestamp', 0)
-    summary['last_backup_size'] = last_row.get('size', '无')
-    summary['last_backup_size_bytes'] = last_row.get('size_bytes', 0)
-    summary['count_in_timeframe'] = count_in_timeframe
-    summary['status'] = 'normal' if summary['last_backup_timestamp'] >= report_window_start else 'abnormal'
-    return summary
-
-
-def get_mysql_dump_status(report_window_start):
-    summary = {
-        'enabled': False,
-        'last_backup_time': None,
-        'last_backup_timestamp': 0,
-        'last_backup_filename': '',
-        'last_backup_path': '',
-        'last_backup_size': '无',
-        'last_backup_size_bytes': 0,
-        'count_in_timeframe': 0,
-        'abnormal_files_in_timeframe': 0,
-        'status': 'unknown'
-    }
-
-    if not os.path.exists(PANEL_DEFAULT_DB_FILE):
-        return summary
-
-    try:
-        conn = sqlite3.connect(PANEL_DEFAULT_DB_FILE)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT filename, size, addtime FROM backup WHERE type=? ORDER BY id DESC",
-            (1,)
-        )
-        rows = cur.fetchall()
-        conn.close()
-    except Exception:
-        return summary
-
-    parsed_rows = []
-    for filename, size_value, add_time in rows:
-        add_timestamp = parse_datetime_to_timestamp(add_time)
-        size_bytes = int(size_value or 0)
-        backup_path = filename or ''
-        parsed_rows.append({
-            'filename': os.path.basename(backup_path),
-            'path': backup_path,
-            'size_bytes': size_bytes,
-            'size': to_size(size_bytes),
-            'add_time': (add_time or '').replace('/', '-'),
-            'add_timestamp': add_timestamp
-        })
-
-    if len(parsed_rows) == 0:
-        return summary
-
-    last_row = max(parsed_rows, key=lambda item: item.get('add_timestamp', 0))
-    rows_in_timeframe = [
-        item for item in parsed_rows
-        if item.get('add_timestamp', 0) >= report_window_start
-    ]
-
-    summary['last_backup_time'] = last_row.get('add_time')
-    summary['last_backup_timestamp'] = last_row.get('add_timestamp', 0)
-    summary['last_backup_filename'] = last_row.get('filename', '')
-    summary['last_backup_path'] = last_row.get('path', '')
-    summary['last_backup_size'] = last_row.get('size', '无')
-    summary['last_backup_size_bytes'] = last_row.get('size_bytes', 0)
-    summary['count_in_timeframe'] = len(rows_in_timeframe)
-    summary['abnormal_files_in_timeframe'] = len([
-        item for item in rows_in_timeframe
-        if item.get('size_bytes', 0) < 200
-    ])
-    if summary['last_backup_timestamp'] >= report_window_start and summary['count_in_timeframe'] > 0:
-        summary['status'] = 'normal'
-    else:
-        summary['status'] = 'abnormal'
-    return summary
-
-
-def load_backup_runtime_info():
-    report_window_start = get_report_window_start_timestamp()
-    backup_runtime = {}
-    xtrabackup_enabled = get_crontab_enabled('[勿删]xtrabackup-cron')
-    xtrabackup_inc_enabled = get_crontab_enabled('[勿删]xtrabackup-inc增量备份')
-    mysql_dump_enabled = get_crontab_enabled('备份数据库[backupAll]')
-
-    if os.path.exists('/www/server/xtrabackup/'):
-        xtrabackup_status = summarize_history_status(
-            XTRABACKUP_HISTORY_FILE,
-            report_window_start
-        )
-        xtrabackup_status['enabled'] = xtrabackup_enabled
-        backup_runtime['xtrabackup'] = xtrabackup_status
-
-    if os.path.exists('/www/server/xtrabackup-inc/'):
-        backup_runtime['xtrabackup_inc'] = {
-            'enabled': xtrabackup_inc_enabled,
-            'full': summarize_history_status(
-                XTRABACKUP_INC_HISTORY_FILE,
-                report_window_start,
-                'full'
-            ),
-            'inc': summarize_history_status(
-                XTRABACKUP_INC_HISTORY_FILE,
-                report_window_start,
-                'inc'
-            )
-        }
-
-    if os.path.exists('/www/server/mysql-apt/'):
-        mysql_dump_status = get_mysql_dump_status(report_window_start)
-        mysql_dump_status['enabled'] = mysql_dump_enabled
-        backup_runtime['mysql_dump'] = mysql_dump_status
-
-    return backup_runtime
-
-
-def load_panel_runtime_info():
-    runtime = {
-        'site': [],
-        'jianghujs': [],
-        'docker': [],
-        'mysql': {
-            'total_size': '0B',
-            'total_size_bytes': 0,
-            'slave_status': [],
-            'tables': []
-        },
-        'lsync': {
-            'last_realtime_sync_date': None,
-            'last_realtime_sync_timestamp': None,
-            'realtime_delays': 0,
-            'send_count': 0,
-            'send_open_count': 0,
-            'send_close_count': 0
-        },
-        'backup': {},
-        'rsync': []
-    }
-
-    if panel_system_api is None or not os.path.exists(PANEL_CORE_DIR):
-        return runtime
-
-    old_cwd = os.getcwd()
-    try:
-        os.chdir(PANEL_DIR)
-        system_api_obj = panel_system_api.system_api()
-        runtime['backup'] = load_backup_runtime_info()
-
-        try:
-            site_info = system_api_obj.getSiteInfo()
-            for site in site_info.get('site_list', []):
-                cert_data = site.get('cert_data') or {}
-                ssl_type = site.get('ssl_type') or ''
-                runtime['site'].append({
-                    'id': site.get('id'),
-                    'name': site.get('name', ''),
-                    'path': site.get('path', ''),
-                    'ps': site.get('ps', ''),
-                    'status': site.get('status', ''),
-                    'ssl_status': '已配置' if cert_data else '未配置',
-                    'ssl_type': ssl_type,
-                    'ssl_data': cert_data,
-                    'add_time': site.get('addtime', '')
-                })
-        except Exception:
-            pass
-
-        try:
-            jianghujs_info = system_api_obj.getJianghujsInfo()
-            for project in jianghujs_info.get('project_list', []):
-                runtime['jianghujs'].append({
-                    'id': project.get('id'),
-                    'name': project.get('name', ''),
-                    'path': project.get('path', ''),
-                    'status': project.get('status', ''),
-                    'add_time': project.get('addtime', '')
-                })
-        except Exception:
-            pass
-
-        try:
-            docker_info = system_api_obj.getDockerInfo()
-            for project in docker_info.get('project_list', []):
-                runtime['docker'].append({
-                    'id': project.get('id'),
-                    'name': project.get('name', ''),
-                    'path': project.get('path', ''),
-                    'status': project.get('status', ''),
-                    'add_time': project.get('addtime', '')
-                })
-        except Exception:
-            pass
-
-        try:
-            mysql_info = system_api_obj.getMysqlInfo()
-            runtime['mysql']['total_size'] = mysql_info.get('total_size', '0B')
-            runtime['mysql']['total_size_bytes'] = mysql_info.get('total_bytes', 0)
-            for table in mysql_info.get('database_list', []):
-                runtime['mysql']['tables'].append({
-                    'id': table.get('id'),
-                    'pid': table.get('pid', 0),
-                    'table_name': table.get('name', ''),
-                    'size': table.get('size', '0B'),
-                    'size_bytes': table.get('size_bytes', 0)
-                })
-        except Exception:
-            pass
-    except Exception:
-        pass
-    finally:
-        os.chdir(old_cwd)
-    return runtime
-
-
 def get_host_meta():
     return {
         'host_id': get_host_id(),
@@ -500,59 +134,9 @@ def get_host_meta():
     }
 
 
-def build_status_payload(host_meta):
-    now = datetime.datetime.now()
-    add_time = now.strftime('%Y-%m-%d %H:%M:%S')
-    add_timestamp = now.timestamp()
-
-    cpu_info = get_cpu_info()
-    mem_info = get_mem_info()
-    load_avg = get_load_avg()
-    disk_info = get_disk_info()
-    runtime = load_panel_runtime_info()
-
-    cpu_cores = cpu_info.get('cpuCount', 1) or 1
-    load_one = float(load_avg.get('1min', 0))
-    load_pro = round((load_one / float(cpu_cores)) * 100, 2)
-
-    return {
-        'host': {
-            'host_id': host_meta['host_id'],
-            'host_name': host_meta['host_name'],
-            'host_ip': host_meta['host_ip'],
-            'host_group': '',
-            'host_status': 'running'
-        },
-        'system': {
-            'cpu': round(float(cpu_info.get('percent', 0)), 2),
-            'memory': round(float(mem_info.get('usedPercent', 0)), 2),
-            'load': {
-                'pro': load_pro,
-                'one': round(load_one, 2),
-                'five': round(float(load_avg.get('5min', 0)), 2),
-                'fifteen': round(float(load_avg.get('15min', 0)), 2)
-            },
-            'disks': format_disks(disk_info)
-        },
-        'site': runtime.get('site', []),
-        'jianghujs': runtime.get('jianghujs', []),
-        'docker': runtime.get('docker', []),
-        'mysql': runtime.get('mysql', {}),
-        'backup': runtime.get('backup', {}),
-        'lsync': runtime.get('lsync', {}),
-        'rsync': runtime.get('rsync', []),
-        'add_time': add_time,
-        'add_timestamp': add_timestamp,
-        'collector': {
-            'source': 'report_collector.py',
-            'version': '1.2.0'
-        }
-    }
-
-
-def export_status_payload(output_dir, payload):
+def export_status_payload(output_dir, payload, file_prefix='host-debian-system-status'):
     file_date = datetime.datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(output_dir, 'host-system-status-%s.json' % file_date)
+    output_path = os.path.join(output_dir, '%s-%s.json' % (file_prefix, file_date))
     append_ndjson(output_path, [payload])
     return output_path
 
@@ -656,7 +240,7 @@ def export_backup_log(output_dir, state, host_meta):
         return None
 
     file_date = datetime.datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(output_dir, 'host-backup-%s.ndjson' % file_date)
+    output_path = os.path.join(output_dir, 'host-debian-backup-%s.ndjson' % file_date)
     append_ndjson(output_path, rows)
     return output_path
 
@@ -665,10 +249,11 @@ def cleanup_old_files(output_dir, retention_days):
     now_ts = datetime.datetime.now().timestamp()
     expire_ts = now_ts - int(retention_days) * 86400
     patterns = [
-        'host-system-status-*.json',
-        'host-xtrabackup-*.ndjson',
-        'host-xtrabackup-inc-*.ndjson',
-        'host-backup-*.ndjson',
+        'host-debian-system-status-*.json',
+        'host-pve-system-status-*.json',
+        'host-debian-xtrabackup-*.ndjson',
+        'host-debian-xtrabackup-inc-*.ndjson',
+        'host-debian-backup-*.ndjson',
     ]
     for pattern in patterns:
         for path in glob.glob(os.path.join(output_dir, pattern)):
@@ -679,6 +264,16 @@ def cleanup_old_files(output_dir, retention_days):
                 pass
 
 
+def collect_status_payloads(host_meta):
+    if is_pve_machine():
+        return [
+            ('host-pve-system-status', build_pve_system_status(host_meta))
+        ]
+    return [
+        ('host-debian-system-status', build_debian_system_status(host_meta))
+    ]
+
+
 def run(output_dir, retention_days):
     ensure_dir(output_dir)
     cleanup_old_files(output_dir, retention_days)
@@ -686,15 +281,16 @@ def run(output_dir, retention_days):
     host_meta = get_host_meta()
 
     created_files = []
-    status_path = export_status_payload(output_dir, build_status_payload(host_meta))
-    created_files.append(status_path)
+    for file_prefix, payload in collect_status_payloads(host_meta):
+        status_path = export_status_payload(output_dir, payload, file_prefix=file_prefix)
+        created_files.append(status_path)
 
     xtrabackup_path = export_history_records(
         XTRABACKUP_HISTORY_FILE,
         output_dir,
         state,
         'host-xtrabackup',
-        'host-xtrabackup',
+        'host-debian-xtrabackup',
         host_meta
     )
     if xtrabackup_path:
@@ -705,7 +301,7 @@ def run(output_dir, retention_days):
         output_dir,
         state,
         'host-xtrabackup-inc',
-        'host-xtrabackup-inc',
+        'host-debian-xtrabackup-inc',
         host_meta
     )
     if xtrabackup_inc_path:
@@ -716,7 +312,8 @@ def run(output_dir, retention_days):
         created_files.append(backup_log_path)
 
     save_state(state_path, state)
-    print(status_path)
+    if created_files:
+        print(created_files[0])
     return 0
 
 
