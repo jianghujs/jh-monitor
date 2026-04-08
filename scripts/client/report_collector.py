@@ -13,8 +13,6 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from get_debian_system_status import build_system_status as build_debian_system_status
-from get_debian_system_status import collect_extra_exports as collect_debian_extra_exports
 from get_host_info import get_host_ip, is_pve_machine
 from get_pve_system_status import build_system_status as build_pve_system_status
 
@@ -165,6 +163,7 @@ def collect_status_payloads(host_meta, is_pve=None):
         return [
             ('host-pve-system-status', build_pve_system_status(host_meta))
         ]
+    from get_debian_system_status import build_system_status as build_debian_system_status
     return [
         ('host-debian-system-status', build_debian_system_status(host_meta))
     ]
@@ -183,6 +182,7 @@ def run(output_dir, retention_days):
         created_files.append(status_path)
 
     if not is_pve:
+        from get_debian_system_status import collect_extra_exports as collect_debian_extra_exports
         created_files.extend(collect_debian_extra_exports(output_dir, state, host_meta))
 
     save_state(state_path, state)
