@@ -105,21 +105,191 @@ function getReportThresholdPayload(){
 	};
 }
 
+var reportScheduleCronDefault = {
+	type: 'day',
+	where1: '',
+	hour: 0,
+	minute: 0,
+	week: ''
+};
+var reportScheduleCron = $.extend({}, reportScheduleCronDefault);
+var reportHostOptions = [];
+var reportConfigFormSnapshot = null;
+
+function cloneReportConfigData(data){
+	return JSON.parse(JSON.stringify(data || {}));
+}
+
+function getReportConfigFormState(data){
+	var reportConfig = data.report_config || {};
+	var reportScheduleConfig = data.report_schedule_config || {};
+
+	return {
+		report_config: {
+			cpu: reportConfig.cpu === undefined ? '' : reportConfig.cpu,
+			memory: reportConfig.memory === undefined ? '' : reportConfig.memory,
+			disk: reportConfig.disk === undefined ? '' : reportConfig.disk,
+			ssl_cert: reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert
+		},
+		report_schedule_config: {
+			enabled: !!reportScheduleConfig.enabled,
+			report_host_ids: (reportScheduleConfig.report_host_ids || []).slice(),
+			cron: $.extend({}, reportScheduleCronDefault, reportScheduleConfig.cron || {})
+		},
+		report_host_options: (data.report_host_options || []).slice()
+	};
+}
+
+function applyReportConfigFormState(state){
+	if (!state){
+		return;
+	}
+
+	var reportConfig = state.report_config || {};
+	var reportScheduleConfig = state.report_schedule_config || {};
+
+	$('#report_cpu').val(reportConfig.cpu === undefined ? '' : reportConfig.cpu);
+	$('#report_memory').val(reportConfig.memory === undefined ? '' : reportConfig.memory);
+	$('#report_disk').val(reportConfig.disk === undefined ? '' : reportConfig.disk);
+	$('#report_ssl_cert').val(reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert);
+
+	reportHostOptions = state.report_host_options || [];
+	reportScheduleCron = $.extend({}, reportScheduleCronDefault, reportScheduleConfig.cron || {});
+	updateReportScheduleText();
+	$('#report_enabled_switch').createRadioSwitch(!!reportScheduleConfig.enabled, function(){});
+	renderReportHostOptions(reportScheduleConfig.report_host_ids || []);
+}
+
+function getReportSchedulePayload(){
+	return {
+		'enabled': $('#report_enabled_switch').getRadioSwitchValue() ? 1 : 0,
+		'report_host_ids': getSelectedReportHostIds(),
+		'cpu': $('#report_cpu').val(),
+		'memory': $('#report_memory').val(),
+		'disk': $('#report_disk').val(),
+		'ssl_cert': $('#report_ssl_cert').val(),
+		'type': reportScheduleCron.type || reportScheduleCronDefault.type,
+		'where1': reportScheduleCron.where1 === undefined ? '' : reportScheduleCron.where1,
+		'hour': reportScheduleCron.hour === undefined ? 0 : reportScheduleCron.hour,
+		'minute': reportScheduleCron.minute === undefined ? 0 : reportScheduleCron.minute,
+		'week': reportScheduleCron.week === undefined ? '' : reportScheduleCron.week
+	};
+}
+
+function getReportWeekText(week){
+	var weekMap = {
+		0: '周日',
+		1: '周一',
+		2: '周二',
+		3: '周三',
+		4: '周四',
+		5: '周五',
+		6: '周六'
+	};
+	return weekMap[parseInt(week, 10)] || '周日';
+}
+
+function padReportCronNumber(value){
+	var number = parseInt(value, 10);
+	if (isNaN(number)) {
+		number = 0;
+	}
+	return number < 10 ? '0' + number : '' + number;
+}
+
+function formatReportCronText(cron){
+	var currentCron = $.extend({}, reportScheduleCronDefault, cron || {});
+	var hour = padReportCronNumber(currentCron.hour);
+	var minute = padReportCronNumber(currentCron.minute);
+	var where1 = currentCron.where1;
+	if (where1 === undefined || where1 === null) {
+		where1 = '';
+	}
+
+	switch (currentCron.type) {
+		case 'day':
+			return '每天 ' + hour + ':' + minute;
+		case 'day-n':
+			return '每' + where1 + '天 ' + hour + ':' + minute;
+		case 'hour':
+			return '每小时 ' + minute + '分';
+		case 'hour-n':
+			return '每' + where1 + '小时 ' + minute + '分';
+		case 'minute-n':
+			return '每' + where1 + '分钟';
+		case 'week':
+			return '每周' + getReportWeekText(currentCron.week || currentCron.where1) + ' ' + hour + ':' + minute;
+		case 'month':
+			return '每月' + where1 + '日 ' + hour + ':' + minute;
+		default:
+			return '每天 ' + hour + ':' + minute;
+	}
+}
+
+function updateReportScheduleText(){
+	$('#report_cron_text').text(formatReportCronText(reportScheduleCron));
+}
+
+function getSelectedReportHostIds(){
+	return $('#report_host_list input[name="report_host_ids[]"]:checked').map(function(){
+		return $(this).val();
+	}).get();
+}
+
+function updateSelectedReportHostText(){
+	var selectedCount = getSelectedReportHostIds().length;
+	$('#report_host_selected_text').text('已选择' + selectedCount + '台主机');
+}
+
+function renderReportHostOptions(selectedIds){
+	var selectedMap = {};
+	var html = '';
+	var selectedList = selectedIds || [];
+
+	for (var i = 0; i < selectedList.length; i++) {
+		selectedMap[selectedList[i]] = true;
+	}
+
+	if (!reportHostOptions.length) {
+		$('#report_host_list').html('<div class="c7">暂无主机可选</div>');
+		updateSelectedReportHostText();
+		return;
+	}
+
+	for (var j = 0; j < reportHostOptions.length; j++) {
+		var item = reportHostOptions[j];
+		var checked = selectedMap[item.host_id] ? ' checked' : '';
+		var hostName = item.host_name || item.host_id;
+		var hostIp = item.ip || '-';
+		html += '' +
+			'<div class="report-host-item">' +
+				'<label>' +
+					'<input type="checkbox" name="report_host_ids[]" value="' + item.host_id + '"' + checked + '> ' +
+					hostName +
+					'<span class="report-host-meta">(' + hostIp + ')</span>' +
+				'</label>' +
+			'</div>';
+	}
+
+	$('#report_host_list').html(html);
+	$('#report_host_list input[name="report_host_ids[]"]').off('change').on('change', function(){
+		updateSelectedReportHostText();
+	});
+	updateSelectedReportHostText();
+}
+
 function fillReportConfig(data){
 	if (!data){
 		return;
 	}
 
-	var reportConfig = data.report_config || {};
 	var esConfig = data.es_config || {};
 
 	$('#report_es_addr').val(esConfig.addr || '');
 	$('#report_es_username').val(esConfig.username || '');
 	$('#report_es_password').val(esConfig.password || '');
-	$('#report_cpu').val(reportConfig.cpu === undefined ? '' : reportConfig.cpu);
-	$('#report_memory').val(reportConfig.memory === undefined ? '' : reportConfig.memory);
-	$('#report_disk').val(reportConfig.disk === undefined ? '' : reportConfig.disk);
-	$('#report_ssl_cert').val(reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert);
+	reportConfigFormSnapshot = cloneReportConfigData(getReportConfigFormState(data));
+	applyReportConfigFormState(reportConfigFormSnapshot);
 }
 
 function loadReportConfig(){
@@ -169,10 +339,45 @@ $('.btn_reset_report_es').click(function(){
 	});
 });
 
-$('.btn_save_report_threshold').click(function(){
-	var payload = getReportThresholdPayload();
-	var loadT = layer.msg('正在保存服务器报告阈值...', {icon:16,time:0,shade:[0.3, '#000']});
-	$.post('/config/save_report_threshold', payload, function(rdata){
+$('.btn_reset_report_threshold').click(function(){
+	if (!reportConfigFormSnapshot){
+		layer.msg('当前没有可恢复的内容', {icon:2});
+		return;
+	}
+	layer.confirm('是否重置为修改前的内容？', {title:'重置服务器报告配置', icon:13}, function(index){
+		applyReportConfigFormState(cloneReportConfigData(reportConfigFormSnapshot));
+		layer.close(index);
+		layer.msg('已恢复为修改前的内容', {icon:1});
+	});
+});
+
+$('.btn_open_report_schedule').click(function(){
+	openCronSelectorLayer(reportScheduleCron, {
+		title: '配置服务器报告频率',
+		yes: function(cronData){
+			if (!cronData){
+				return;
+			}
+			reportScheduleCron = $.extend({}, reportScheduleCronDefault, cronData || {});
+			updateReportScheduleText();
+		}
+	});
+});
+
+$('.btn_select_all_report_host').click(function(){
+	$('#report_host_list input[name="report_host_ids[]"]').prop('checked', true);
+	updateSelectedReportHostText();
+});
+
+$('.btn_clear_report_host').click(function(){
+	$('#report_host_list input[name="report_host_ids[]"]').prop('checked', false);
+	updateSelectedReportHostText();
+});
+
+$('.btn_save_report_schedule').click(function(){
+	var payload = getReportSchedulePayload();
+	var loadT = layer.msg('正在保存服务器报告配置...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/config/save_report_schedule', payload, function(rdata){
 		layer.close(loadT);
 		showMsg(rdata.msg, function(){
 			if (rdata.status){
@@ -180,21 +385,6 @@ $('.btn_save_report_threshold').click(function(){
 			}
 		}, {icon:rdata.status?1:2}, 2500);
 	}, 'json');
-});
-
-$('.btn_reset_report_threshold').click(function(){
-	layer.confirm('确定将服务器报告阈值重置为默认值吗？<br/>CPU：80<br/>内存：80<br/>磁盘：80<br/>SSL到期阈值：14天', {title:'重置服务器报告配置', icon:13}, function(index){
-		var loadT = layer.msg('正在重置服务器报告阈值...', {icon:16,time:0,shade:[0.3, '#000']});
-		$.post('/config/reset_report_threshold', {}, function(rdata){
-			layer.close(loadT);
-			showMsg(rdata.msg, function(){
-				if (rdata.status){
-					loadReportConfig();
-				}
-				layer.close(index);
-			}, {icon:rdata.status?1:2}, 2500);
-		}, 'json');
-	});
 });
 
 $(function(){

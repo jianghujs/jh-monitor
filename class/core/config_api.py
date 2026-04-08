@@ -62,6 +62,25 @@ class config_api:
             'ssl_cert': 14
         }
 
+    def _getDefaultReportCron(self):
+        return {
+            'type': 'day',
+            'where1': '',
+            'hour': 0,
+            'minute': 0,
+            'week': ''
+        }
+
+    def getDefaultReportCronData(self):
+        return dict(self._getDefaultReportCron())
+
+    def _getDefaultReportScheduleConfig(self):
+        return {
+            'enabled': False,
+            'report_host_ids': [],
+            'cron': self._getDefaultReportCron()
+        }
+
     def _ensureJsonConfigFile(self, path):
         config_dir = os.path.dirname(path)
         if config_dir and not os.path.exists(config_dir):
@@ -111,8 +130,111 @@ class config_api:
             return False, field_name + '范围不正确!', None
         return True, 'ok', value
 
+    def _toBool(self, value):
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+    def _getRawReportConfig(self):
+        data = self._readJsonConfig(self.__report_config_addr)
+        if not isinstance(data, dict):
+            data = {}
+        return data
+
+    def _normalizeReportHostIds(self, raw_host_ids, valid_host_ids=None):
+        host_ids = []
+        seen = set()
+
+        if isinstance(raw_host_ids, list):
+            candidates = raw_host_ids
+        elif isinstance(raw_host_ids, tuple):
+            candidates = list(raw_host_ids)
+        else:
+            candidates = str(raw_host_ids or '').replace('\n', ',').split(',')
+
+        for item in candidates:
+            host_id = str(item).strip()
+            if host_id == '' or host_id in seen:
+                continue
+            if valid_host_ids is not None and host_id not in valid_host_ids:
+                continue
+            seen.add(host_id)
+            host_ids.append(host_id)
+        return host_ids
+
+    def _getReportHostOptions(self):
+        data = jh.M('view01_host').field('host_id,host_name,ip,host_status').order('id desc').select()
+        if isinstance(data, str) or data is None:
+            return []
+
+        options = []
+        for item in data:
+            host_id = str(item.get('host_id', '')).strip()
+            if host_id == '':
+                continue
+            options.append({
+                'host_id': host_id,
+                'host_name': item.get('host_name', ''),
+                'ip': item.get('ip', ''),
+                'host_status': item.get('host_status', 0)
+            })
+        return options
+
+    def _normalizeReportCron(self, cron_form):
+        default_cron = self._getDefaultReportCron()
+        cron_type = str(cron_form.get('type', default_cron['type'])).strip() or default_cron['type']
+        allowed_types = ('day', 'day-n', 'hour', 'hour-n', 'minute-n', 'week', 'month')
+        if cron_type not in allowed_types:
+            return False, '服务器报告频率类型不正确!', None
+
+        ok, msg, hour = self._validateThresholdField('小时', cron_form.get('hour', default_cron['hour']), 0, 23)
+        if not ok:
+            return False, msg, None
+
+        ok, msg, minute = self._validateThresholdField('分钟', cron_form.get('minute', default_cron['minute']), 0, 59)
+        if not ok:
+            return False, msg, None
+
+        where1 = ''
+        week = ''
+
+        if cron_type == 'day-n':
+            ok, msg, where1 = self._validateThresholdField('N天', cron_form.get('where1', ''), 1, 31)
+            if not ok:
+                return False, msg, None
+        elif cron_type == 'hour-n':
+            ok, msg, where1 = self._validateThresholdField('N小时', cron_form.get('where1', ''), 1, 23)
+            if not ok:
+                return False, msg, None
+        elif cron_type == 'minute-n':
+            interval_value = cron_form.get('where1', cron_form.get('minute', ''))
+            ok, msg, where1 = self._validateThresholdField('N分钟', interval_value, 1, 59)
+            if not ok:
+                return False, msg, None
+            minute = where1
+        elif cron_type == 'month':
+            ok, msg, where1 = self._validateThresholdField('每月日期', cron_form.get('where1', ''), 1, 31)
+            if not ok:
+                return False, msg, None
+        elif cron_type == 'week':
+            week_value = cron_form.get('week', '')
+            if str(week_value).strip() == '':
+                week_value = cron_form.get('where1', default_cron['week'])
+            ok, msg, week = self._validateThresholdField('星期', week_value, 0, 6)
+            if not ok:
+                return False, msg, None
+            where1 = week
+
+        return True, 'ok', {
+            'type': cron_type,
+            'where1': where1,
+            'hour': hour,
+            'minute': minute,
+            'week': week
+        }
+
     def _getReportConfigData(self):
-        report_config = self._readJsonConfig(self.__report_config_addr)
+        report_config = self._getRawReportConfig()
         default_report_config = self._getDefaultReportConfig()
         data = {}
         data['cpu'] = report_config.get('cpu', default_report_config.get('cpu', ''))
@@ -120,6 +242,89 @@ class config_api:
         data['disk'] = report_config.get('disk', default_report_config.get('disk', ''))
         data['ssl_cert'] = report_config.get('ssl_cert', default_report_config.get('ssl_cert', ''))
         return data
+
+    def _getReportScheduleConfigData(self):
+        report_config = self._getRawReportConfig()
+        default_schedule = self._getDefaultReportScheduleConfig()
+        options = self._getReportHostOptions()
+        valid_host_ids = set(item['host_id'] for item in options)
+
+        data = {
+            'enabled': self._toBool(report_config.get('enabled', default_schedule['enabled'])),
+            'report_host_ids': self._normalizeReportHostIds(
+                report_config.get('report_host_ids', default_schedule['report_host_ids']),
+                valid_host_ids
+            ),
+            'cron': dict(default_schedule['cron'])
+        }
+
+        ok, msg, cron_config = self._normalizeReportCron(report_config.get('cron', default_schedule['cron']))
+        if ok:
+            data['cron'] = cron_config
+
+        return data
+
+    def getReportDispatchConfigData(self):
+        report_config = self._getRawReportConfig()
+        schedule_config = self._getReportScheduleConfigData()
+        options = self._getReportHostOptions()
+        valid_host_ids = set(item['host_id'] for item in options)
+        has_schedule_key = False
+        for key in ('enabled', 'report_host_ids', 'cron'):
+            if key in report_config:
+                has_schedule_key = True
+                break
+
+        if not has_schedule_key:
+            return {
+                'enabled': False,
+                'report_host_ids': [],
+                'cron': dict(self._getDefaultReportCron())
+            }
+
+        return {
+            'enabled': bool(schedule_config.get('enabled')),
+            'report_host_ids': self._normalizeReportHostIds(
+                schedule_config.get('report_host_ids', []),
+                valid_host_ids
+            ),
+            'cron': dict(schedule_config.get('cron', self._getDefaultReportCron()))
+        }
+
+    def saveReportDispatchConfigData(self, enabled, report_host_ids, cron_config):
+        report_config = self._getRawReportConfig()
+        normalized_ids = self._normalizeReportHostIds(report_host_ids)
+        ok, msg, normalized_cron = self._normalizeReportCron(cron_config or self._getDefaultReportCron())
+        if not ok:
+            normalized_cron = self._getDefaultReportCron()
+
+        report_config['enabled'] = bool(enabled)
+        report_config['report_host_ids'] = normalized_ids
+        report_config['cron'] = normalized_cron
+        report_config.pop('report_last_sent_at', None)
+        self._writeJsonConfig(self.__report_config_addr, report_config)
+        return {
+            'enabled': bool(enabled),
+            'report_host_ids': normalized_ids,
+            'cron': normalized_cron
+        }
+
+    def applyReportScheduleForNewHost(self, host_id):
+        host_id = str(host_id).strip()
+        if host_id == '':
+            return False
+
+        schedule_config = self._getReportScheduleConfigData()
+        report_host_ids = list(schedule_config.get('report_host_ids', []))
+        if host_id not in report_host_ids:
+            report_host_ids.append(host_id)
+
+        self.saveReportDispatchConfigData(
+            schedule_config.get('enabled', False),
+            report_host_ids,
+            schedule_config.get('cron', self._getDefaultReportCron())
+        )
+        return True
 
     def _normalizeReportConfig(self, report_config):
         checks = [
@@ -185,7 +390,9 @@ class config_api:
         ok, msg, report_config = self._normalizeReportConfig(report_form)
         if not ok:
             return False, msg
-        self._writeJsonConfig(self.__report_config_addr, report_config)
+        current_config = self._getRawReportConfig()
+        current_config.update(report_config)
+        self._writeJsonConfig(self.__report_config_addr, current_config)
         return True, '服务器报告阈值保存成功!'
 
     def _saveEsConfig(self, es_form):
@@ -382,7 +589,9 @@ class config_api:
     def getReportConfigApi(self):
         data = {
             'report_config': self._getReportConfigData(),
-            'es_config': self._getEsConfigData()
+            'es_config': self._getEsConfigData(),
+            'report_schedule_config': self._getReportScheduleConfigData(),
+            'report_host_options': self._getReportHostOptions()
         }
         return jh.returnJson(True, '获取成功!', data)
 
@@ -406,7 +615,9 @@ class config_api:
         if not ok:
             return jh.returnJson(False, msg)
 
-        self._writeJsonConfig(self.__report_config_addr, report_config)
+        current_config = self._getRawReportConfig()
+        current_config.update(report_config)
+        self._writeJsonConfig(self.__report_config_addr, current_config)
         self._writeJsonConfig(self.__es_config_addr, es_config)
         return jh.returnJson(True, '服务器报告配置保存成功!')
 
@@ -419,6 +630,54 @@ class config_api:
         }
         ok, msg = self._saveReportThresholdConfig(report_form)
         return jh.returnJson(ok, msg)
+
+    def saveReportScheduleApi(self):
+        host_options = self._getReportHostOptions()
+        valid_host_ids = set(item['host_id'] for item in host_options)
+        report_host_ids = request.form.getlist('report_host_ids[]')
+        if len(report_host_ids) == 0:
+            report_host_ids = request.form.getlist('report_host_ids')
+        if len(report_host_ids) == 0:
+            report_host_ids = self._normalizeReportHostIds(request.form.get('report_host_ids', ''), valid_host_ids)
+        else:
+            report_host_ids = self._normalizeReportHostIds(report_host_ids, valid_host_ids)
+
+        enabled = self._toBool(request.form.get('enabled', '0'))
+        cron_form = {
+            'type': request.form.get('type', '').strip(),
+            'where1': request.form.get('where1', '').strip(),
+            'hour': request.form.get('hour', '').strip(),
+            'minute': request.form.get('minute', '').strip(),
+            'week': request.form.get('week', '').strip()
+        }
+        ok, msg, cron_config = self._normalizeReportCron(cron_form)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        threshold_form = {
+            'cpu': request.form.get('cpu', '').strip(),
+            'memory': request.form.get('memory', '').strip(),
+            'disk': request.form.get('disk', '').strip(),
+            'ssl_cert': request.form.get('ssl_cert', '').strip(),
+        }
+        ok, msg, threshold_config = self._normalizeReportConfig(threshold_form)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        report_config = self._getRawReportConfig()
+        report_config.update(threshold_config)
+        self._writeJsonConfig(self.__report_config_addr, report_config)
+        self.saveReportDispatchConfigData(
+            enabled,
+            report_host_ids,
+            cron_config
+        )
+
+        return jh.returnJson(True, '服务器报告配置保存成功!', {
+            'enabled': enabled,
+            'report_host_ids': report_host_ids,
+            'cron': cron_config
+        })
 
     def saveReportEsApi(self):
         es_form = {
@@ -449,7 +708,9 @@ class config_api:
 
     def resetReportThresholdApi(self):
         default_report_config = self._getDefaultReportConfig()
-        self._writeJsonConfig(self.__report_config_addr, default_report_config)
+        report_config = self._getRawReportConfig()
+        report_config.update(default_report_config)
+        self._writeJsonConfig(self.__report_config_addr, report_config)
         return jh.returnJson(True, '服务器报告阈值已重置为默认配置!', default_report_config)
 
     def setBasicAuthApi(self):

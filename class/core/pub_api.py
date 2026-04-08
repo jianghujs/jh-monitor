@@ -30,6 +30,9 @@ from flask import Flask, request, jsonify
 import jh
 import time
 
+from config_api import config_api
+c_api = config_api()
+
 app = Flask(__name__)
 
 class pub_api:
@@ -67,6 +70,12 @@ class pub_api:
             ip_conf = f"{ip} ansible_ssh_user=ansible_user ansible_ssh_port={port}"
             if ip_conf not in existing_ips:
                 f.write(f"{ip_conf}\n")
+
+        # 配置新主机的报告计划任务
+        try:
+            c_api.applyReportScheduleForNewHost(host_id)
+        except Exception:
+            pass
 
         return jh.returnJson(True, '主机添加成功!', {'host_id': host_id})
     

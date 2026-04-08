@@ -2,8 +2,6 @@ var refreshTimer = null;
 var refreshInterval = 5000; // 默认5秒
 var loadT = layer.load();
 var hostList = [];
-var hostReportCronDefault = { type: 'day', where1: '', hour: 0, minute: 0, week: '' };
-var hostReportCron = Object.assign({}, hostReportCronDefault);
 var hostReportTemplates = { panel: null, pve: null };
 var hostReportTemplateQueue = { panel: [], pve: [] };
 
@@ -1098,19 +1096,6 @@ function detailBaseMonitor(host_id, name, msg, status) {
     clearInterval(updateDetailHostBaseMonitorTask);
   }
   var bodyHtml = `
-    <div class="bgw mb15 pd15">
-      <div class="flex align-center">
-        <div class="mr50 pull-left">
-          <div class="ss-text pull-left">
-            <em>开启服务器报告</em>
-            <div class='ssh-item' id="openHostReportSwitch"></div>
-          </div>
-        </div>
-        <div class="mr50 pull-left flex align-center" id="hostReportCronDetail">
-          <button class="open-host-report-cron btn btn-default btn-sm mr20" type="button">配置报告频率</button>
-        </div>
-      </div>
-    </div>
     <div class="control">
       <div class="col-xs-12 col-sm-12 col-md-12 pull-left pd0 view0">
         <div class="mb15">
@@ -1226,53 +1211,6 @@ function detailBaseMonitor(host_id, name, msg, status) {
   setTimeout(() => {
     updateDetailHostBaseMonitorChartData();
   }, 0);
-
-  initHostReportConfig(host_id);
-}
-
-function initHostReportConfig(host_id) {
-  $("#openHostReportSwitch").html('');
-  $("#hostReportCronDetail .open-host-report-cron").off('click');
-  getHostReportConfig(host_id);
-}
-
-function getHostReportConfig(host_id) {
-  $.post('/host/get_host_report_config', { host_id: host_id }, function(rdata) {
-    let enabled = false;
-    hostReportCron = Object.assign({}, hostReportCronDefault);
-    if (rdata && rdata.status && rdata.data) {
-      enabled = !!rdata.data.enabled;
-      if (rdata.data.cron) {
-        hostReportCron = Object.assign({}, hostReportCronDefault, rdata.data.cron);
-      }
-    }
-
-    $("#openHostReportSwitch").createRadioSwitch(enabled, (checked) => {
-      visibleDom('#hostReportCronDetail', checked);
-      saveHostReportConfig(host_id, checked, hostReportCron);
-    });
-
-    visibleDom('#hostReportCronDetail', enabled);
-
-    $("#hostReportCronDetail .open-host-report-cron").off('click').on('click', () => {
-      openCronSelectorLayer(hostReportCron, { yes: (cronData) => {
-        saveHostReportConfig(host_id, true, cronData);
-      }});
-    });
-  }, 'json');
-}
-
-function saveHostReportConfig(host_id, enabled, cronData) {
-  let payload = { host_id: host_id, enabled: enabled ? 1 : 0, last_sent_at: null };
-  if (cronData) {
-    payload = Object.assign(payload, cronData);
-  }
-  $.post('/host/set_host_report_config', payload, function(rdata) {
-    if (rdata && rdata.status && rdata.data) {
-      hostReportCron = Object.assign({}, hostReportCronDefault, rdata.data.cron || {});
-    }
-    layer.msg(rdata.msg, {icon: rdata.status ? 1 : 2});
-  }, 'json');
 }
 
 /**

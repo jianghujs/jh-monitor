@@ -170,7 +170,7 @@ class HostReportSender(HostReportAnalyser):
         self._es.index(index_name, doc_id, document=document, refresh='wait_for')
         self.log('[report-delivery] mark skipped index={0} doc_id={1} reason={2}'.format(index_name, doc_id, error_message))
 
-    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None, update_last_sent=True):
+    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None):
         """执行发送阶段：先发总览，再发异常单机报告。"""
         window = self.get_report_window(report_date)
         if due_rows is None or report_config is None or enabled_rows is None:
@@ -278,12 +278,6 @@ class HostReportSender(HostReportAnalyser):
                 self.log('[report-delivery] single report send failed {0}: {1}'.format(doc_id, error_message))
 
         all_done = (single_failed == 0 and overview_success)
-        if all_done and update_last_sent:
-            self.mark_hosts_sent(report_config, enabled_rows or due_rows, self.now_ts)
-            self.log('[report-delivery] mark hosts sent report_date={0} host_ids={1}'.format(
-                window['report_date'],
-                [row.get('host_id') for row in (enabled_rows or due_rows) if row.get('host_id')]
-            ))
 
         self.log(
             '[report-delivery] finished report_date={0} status={1} overview_sent={2} single_success={3} single_failed={4} single_skipped={5}'.format(

@@ -24,10 +24,12 @@ if ES_MODEL_DIR not in sys.path:
 
 import jh
 import value_tool
+from config_api import config_api
 from host_api import host_api
 from report_state import build_delivery_state, build_validation_state
 
 h_api = host_api()
+c_api = config_api()
 
 REPORT_CONFIG_PATH = os.path.join(ROOT_DIR, 'data', 'report_config.json')
 OVERVIEW_TEMPLATE_DIR = os.path.join(ROOT_DIR, 'route', 'templates', 'report')
@@ -87,7 +89,16 @@ class HostReportAnalyser(object):
 
     def get_schedule_state(self):
         """计算已启用主机、到期主机以及对应的发送配置。"""
-        report_config = h_api.getHostReportConfigData() or {}
+        dispatch_config = c_api.getReportDispatchConfigData() or {}
+        report_enabled = bool(dispatch_config.get('enabled'))
+        report_cron = dispatch_config.get('cron', c_api.getDefaultReportCronData())
+        report_host_ids = dispatch_config.get('report_host_ids', []) or []
+        report_config = {}
+        for host_id in report_host_ids:
+            report_config[host_id] = {
+                'enabled': report_enabled,
+                'cron': dict(report_cron)
+            }
         self._last_schedule_debug_rows = []
         enabled_host_ids = []
         for host_id, cfg in report_config.items():
@@ -107,55 +118,26 @@ class HostReportAnalyser(object):
             if host_id in enabled_host_ids:
                 enabled_rows.append(row)
 
-        default_cron = h_api.getDefaultHostReportCronData()
         due_rows = []
         for row in enabled_rows:
             host_id = row.get('host_id')
             cfg = report_config.get(host_id, {})
-            cron = dict(default_cron)
-            if isinstance(cfg.get('cron'), dict):
-                cron.update(cfg.get('cron'))
-            try:
-                last_sent_at = int(cfg.get('last_sent_at') or 0)
-            except Exception:
-                last_sent_at = 0
-            is_due = jh.cronShouldRun(cron, last_sent_at, self.now_ts)
+            cron = dict(report_cron)
+            host_due = jh.cronShouldRun(cron, 0, self.now_ts)
             self._last_schedule_debug_rows.append({
                 'host_id': host_id,
                 'host_name': row.get('host_name', ''),
-                'is_due': is_due,
-                'last_sent_at': last_sent_at,
-                'last_sent_time': datetime.datetime.fromtimestamp(last_sent_at).strftime('%Y-%m-%d %H:%M:%S') if last_sent_at > 0 else '',
+                'is_due': host_due,
                 'cron': cron,
-                'reason': 'due' if is_due else 'cron_not_due_or_interval_not_elapsed'
+                'reason': 'due' if host_due else 'cron_not_due'
             })
-            if is_due:
+            if host_due:
                 due_rows.append(row)
         return report_config, enabled_rows, due_rows
 
     def get_schedule_debug_rows(self):
         """返回最近一次排期计算的调试信息。"""
         return list(self._last_schedule_debug_rows)
-
-    def mark_hosts_sent(self, report_config, due_rows, sent_ts=None):
-        """回写主机最后发送时间，供下一轮 cron 判定使用。"""
-        sent_ts = int(sent_ts or self.now_ts)
-        if not due_rows:
-            return False
-        changed = False
-        for row in due_rows:
-            host_id = row.get('host_id')
-            if not host_id:
-                continue
-            cfg = report_config.get(host_id, {})
-            if not isinstance(cfg, dict):
-                cfg = {}
-            cfg['last_sent_at'] = sent_ts
-            report_config[host_id] = cfg
-            changed = True
-        if changed:
-            h_api.saveHostReportConfigData(report_config)
-        return changed
 
     def get_report_window(self, report_date=None):
         """生成报告时间窗口，默认取上一自然日。"""

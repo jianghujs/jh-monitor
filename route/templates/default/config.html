@@ -215,38 +215,106 @@
 
 				<div class="setting-con pd15">
 					<p class="mtb15">
-						<span class="set-tit text-right" title="CPU阈值">CPU阈值</span>
+						<span class="set-tit text-right report-config-label" title="开启服务器报告" style="float: left;">开启服务器报告</span>
+						<span id="report_enabled_switch" style="float: left; margin-top: 4px;"></span>
+						<span class="set-info c7">统一控制服务器报告发送开关。</span>
+					</p>
+
+					<p class="mtb15">
+						<span class="set-tit text-right report-config-label" title="服务器报告频率" style="float: left;">服务器报告频率</span>
+						<button type="button" class="btn btn-default btn-sm btn_open_report_schedule">配置报告频率</button>
+						<span class="set-info c7" id="report_cron_text" style="margin-left: 10px;">每天 00:00</span>
+					</p>
+
+					<div class="mtb15 clearfix">
+						<span class="set-tit text-right report-config-label" title="报告主机" style="float: left;">报告主机</span>
+						<div class="report-host-setting">
+							<div class="report-host-tools">
+								<button type="button" class="btn btn-default btn-xs btn_select_all_report_host">全选</button>
+								<button type="button" class="btn btn-default btn-xs ml5 btn_clear_report_host">清空</button>
+								<span class="set-info c7" id="report_host_selected_text" style="margin-left: 10px;">已选择0台主机</span>
+							</div>
+							<div id="report_host_list" class="report-host-list">
+								<div class="c7">暂无主机可选</div>
+							</div>
+						</div>
+					</div>
+
+					<p class="mtb15">
+						<span class="set-tit text-right report-config-label" title="CPU阈值">CPU阈值</span>
 						<input id="report_cpu" name="report_cpu" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
 						<span class="set-info c7">日报分析中CPU平均使用率超过该阈值时记为异常。</span>
 					</p>
 
 					<p class="mtb15">
-						<span class="set-tit text-right" title="内存阈值">内存阈值</span>
+						<span class="set-tit text-right report-config-label" title="内存阈值">内存阈值</span>
 						<input id="report_memory" name="report_memory" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
 						<span class="set-info c7">日报分析中内存平均使用率超过该阈值时记为异常。</span>
 					</p>
 
 					<p class="mtb15">
-						<span class="set-tit text-right" title="磁盘阈值">磁盘阈值</span>
+						<span class="set-tit text-right report-config-label" title="磁盘阈值">磁盘阈值</span>
 						<input id="report_disk" name="report_disk" class="inputtxt bt-input-text" type="number" min="0" max="100" placeholder="0-100">
 						<span class="set-info c7">任一磁盘挂载点使用率超过该阈值时记为异常。</span>
 					</p>
 
 					<p class="mtb15">
-						<span class="set-tit text-right" title="SSL证书到期阈值">SSL到期阈值</span>
+						<span class="set-tit text-right report-config-label" title="SSL证书到期阈值">SSL到期阈值</span>
 						<input id="report_ssl_cert" name="report_ssl_cert" class="inputtxt bt-input-text" type="number" min="0" max="3650" placeholder="单位：天">
 						<span class="set-info c7">非自动续签证书剩余有效期小于该天数时记为异常。</span>
 					</p>
 
-					<p class="mtb15">
-						<span class="set-tit text-right"></span>
-						<button type="button" class="btn btn-success btn-sm btn_save_report_threshold">保存阈值配置</button>
-						<button type="button" class="btn btn-warning btn-sm ml5 btn_reset_report_threshold">重置默认</button>
-					</p>
+						<p class="mtb15">
+							<span class="set-tit text-right"></span>
+							<button type="button" class="btn btn-success btn-sm btn_save_report_schedule">保存服务器报告配置</button>
+							<button type="button" class="btn btn-warning btn-sm ml5 btn_reset_report_threshold">重置</button>
+						</p>
 				</div>
 			</div>
 		</div>
 	</div>
 </div>
+<style>
+.report-config-label {
+	width: 120px !important;
+}
+
+.report-host-setting {
+	float: left;
+	width: calc(100% - 140px);
+	max-width: calc(100% - 140px);
+	box-sizing: border-box;
+  margin-left: 10px;
+}
+
+.report-host-tools {
+	margin-bottom: 10px;
+}
+
+.report-host-list {
+	max-height: 180px;
+	overflow-y: auto;
+	border: 1px solid #e5e5e5;
+	padding: 10px 12px;
+	background: #fafafa;
+}
+
+.report-host-item {
+	display: inline-block;
+	min-width: 220px;
+	margin: 0 12px 8px 0;
+}
+
+.report-host-item label {
+	font-weight: normal;
+	margin-bottom: 0;
+	cursor: pointer;
+}
+
+.report-host-item .report-host-meta {
+	color: #999;
+	margin-left: 4px;
+}
+</style>
 <script src="/static/app/config.js?v={{config.version}}"></script>
 {% endblock %}
