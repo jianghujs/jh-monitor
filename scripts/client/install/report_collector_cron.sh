@@ -84,6 +84,7 @@ run_once() {
   log "run collector once for validation"
   output_path="$(build_collector_command)" || fail "生成 report collector 执行命令失败"
   log "execute command: ${output_path}"
+  echo "首次执行 report collector: ${output_path}" >&2
   output_path="$(eval "$output_path")" || fail "首次执行 report collector 失败"
   [ -n "$output_path" ] || fail "report collector 未输出文件路径"
   [ -f "$output_path" ] || fail "report collector 输出文件不存在: ${output_path}"
