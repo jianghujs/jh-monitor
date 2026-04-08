@@ -28,6 +28,16 @@ DEFAULT_RETENTION_DAYS = 30
 STATE_FILE_NAME = '.report-collector-state.json'
 
 
+def log(message):
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    sys.stderr.write('[report-collector] %s %s\n' % (now, message))
+    sys.stderr.flush()
+
+
+def log_exception(stage):
+    log('%s failed:\n%s' % (stage, traceback.format_exc().rstrip()))
+
+
 def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -80,16 +90,21 @@ def append_ndjson(path, rows):
 def load_state(output_dir):
     state_path = os.path.join(output_dir, STATE_FILE_NAME)
     if not os.path.exists(state_path):
+        log('state file not found, use empty state: %s' % state_path)
         return {}, state_path
     try:
         with open(state_path, 'r') as fp:
-            return json.load(fp), state_path
+            state = json.load(fp)
+        log('state loaded: %s' % state_path)
+        return state, state_path
     except Exception:
+        log_exception('load_state')
         return {}, state_path
 
 
 def save_state(state_path, state):
     atomic_write_json(state_path, state)
+    log('state saved: %s' % state_path)
 
 
 def get_primary_ip():
@@ -134,6 +149,7 @@ def export_status_payload(output_dir, payload, file_prefix='host-debian-system-s
     file_date = datetime.datetime.now().strftime('%Y%m%d')
     output_path = os.path.join(output_dir, '%s-%s.json' % (file_prefix, file_date))
     append_ndjson(output_path, [payload])
+    log('status payload exported: %s' % output_path)
     return output_path
 
 
@@ -152,42 +168,58 @@ def cleanup_old_files(output_dir, retention_days):
             try:
                 if os.path.getmtime(path) < expire_ts:
                     os.remove(path)
+                    log('expired file removed: %s' % path)
             except Exception:
-                pass
+                log_exception('cleanup_old_files')
 
 
 def collect_status_payloads(host_meta, is_pve=None):
     if is_pve is None:
         is_pve = is_pve_machine()
     if is_pve:
+        log('collect pve system status')
         return [
             ('host-pve-system-status', build_pve_system_status(host_meta))
         ]
     from get_debian_system_status import build_system_status as build_debian_system_status
+    log('collect debian system status')
     return [
         ('host-debian-system-status', build_debian_system_status(host_meta))
     ]
 
 
 def run(output_dir, retention_days):
+    log('collector start, output_dir=%s retention_days=%s' % (output_dir, retention_days))
     ensure_dir(output_dir)
+    log('output dir ready: %s' % output_dir)
     cleanup_old_files(output_dir, retention_days)
     state, state_path = load_state(output_dir)
     host_meta = get_host_meta()
     is_pve = is_pve_machine()
+    log(
+        'host detected: host_id=%s host_name=%s host_ip=%s is_pve=%s'
+        % (host_meta['host_id'], host_meta['host_name'], host_meta['host_ip'], is_pve)
+    )
 
     created_files = []
     for file_prefix, payload in collect_status_payloads(host_meta, is_pve=is_pve):
+        log('export status payload: %s' % file_prefix)
         status_path = export_status_payload(output_dir, payload, file_prefix=file_prefix)
         created_files.append(status_path)
 
     if not is_pve:
         from get_debian_system_status import collect_extra_exports as collect_debian_extra_exports
+        log('collect debian extra exports')
         created_files.extend(collect_debian_extra_exports(output_dir, state, host_meta))
+    else:
+        log('skip debian extra exports on pve host')
 
     save_state(state_path, state)
     if created_files:
+        log('collector finished, created_files=%s' % json.dumps(created_files, ensure_ascii=False))
         print(created_files[0])
+    else:
+        log('collector finished, no files created')
     return 0
 
 
@@ -200,7 +232,7 @@ def main():
     try:
         return run(args.output_dir, args.retention_days)
     except Exception:
-        traceback.print_exc()
+        log_exception('main')
         return 1
 
 
