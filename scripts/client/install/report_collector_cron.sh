@@ -32,7 +32,7 @@ build_collector_command() {
   fi
 
   cat <<EOF
-/bin/bash -lc 'pushd /www/server/jh-panel > /dev/null || exit 1; ${collector_exec}; collector_status=\$?; popd > /dev/null || true; exit \$collector_status'
+/bin/bash -lc 'if [ -d /www/server/jh-panel ]; then pushd /www/server/jh-panel > /dev/null || exit 1; fi; ${collector_exec}; collector_status=\$?; if [ -d /www/server/jh-panel ]; then popd > /dev/null || true; fi; exit \$collector_status'
 EOF
 }
 
