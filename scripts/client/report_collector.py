@@ -14,6 +14,7 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 from get_debian_system_status import build_system_status as build_debian_system_status
+from get_debian_system_status import collect_extra_exports as collect_debian_extra_exports
 from get_host_info import get_host_ip, is_pve_machine
 from get_pve_system_status import build_system_status as build_pve_system_status
 
@@ -27,9 +28,6 @@ DEFAULT_HOST_ID_FILE = os.environ.get(
 )
 DEFAULT_RETENTION_DAYS = 30
 STATE_FILE_NAME = '.report-collector-state.json'
-XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
-XTRABACKUP_INC_HISTORY_FILE = '/www/server/xtrabackup-inc/data/backup_history.json'
-BACKUP_LOG_FILE = '/www/server/jh-panel/logs/backup.log'
 
 
 def ensure_dir(path):
@@ -141,110 +139,6 @@ def export_status_payload(output_dir, payload, file_prefix='host-debian-system-s
     return output_path
 
 
-def export_history_records(source_path, output_dir, state, state_key, file_prefix, host_meta):
-    if not os.path.exists(source_path):
-        return None
-
-    try:
-        with open(source_path, 'r') as fp:
-            source_data = json.load(fp)
-    except Exception:
-        return None
-
-    if not isinstance(source_data, dict):
-        return None
-
-    seen_ids = set(state.get('history_ids', {}).get(state_key, []))
-    rows = []
-    items = sorted(source_data.items(), key=lambda item: item[1].get('add_timestamp', 0))
-    for record_id, record in items:
-        if record_id in seen_ids:
-            continue
-        row = {
-            'host_id': host_meta['host_id'],
-            'host_name': host_meta['host_name'],
-            'host_ip': host_meta['host_ip'],
-            'id': record.get('id', record_id),
-            'add_time': record.get('add_time', ''),
-            'add_timestamp': record.get('add_timestamp', 0),
-            'size': record.get('size', ''),
-            'size_bytes': record.get('size_bytes', 0),
-            'collector_source': os.path.basename(source_path)
-        }
-        if 'backup_type' in record:
-            row['backup_type'] = record.get('backup_type')
-        rows.append(row)
-        seen_ids.add(record_id)
-
-    if len(rows) == 0:
-        return None
-
-    file_date = datetime.datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(output_dir, '%s-%s.ndjson' % (file_prefix, file_date))
-    append_ndjson(output_path, rows)
-    state.setdefault('history_ids', {})[state_key] = sorted(list(seen_ids))
-    return output_path
-
-
-def parse_backup_log_line(line, host_meta):
-    record = None
-    try:
-        record = json.loads(line)
-    except Exception:
-        record = {
-            'message': line
-        }
-
-    if not isinstance(record, dict):
-        record = {
-            'message': line
-        }
-
-    record['host_id'] = host_meta['host_id']
-    record['host_name'] = host_meta['host_name']
-    record['host_ip'] = host_meta['host_ip']
-    if 'add_time' not in record or str(record.get('add_time', '')).strip() == '':
-        record['add_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    record['collector_source'] = os.path.basename(BACKUP_LOG_FILE)
-    return record
-
-
-def export_backup_log(output_dir, state, host_meta):
-    if not os.path.exists(BACKUP_LOG_FILE):
-        return None
-
-    stat_info = os.stat(BACKUP_LOG_FILE)
-    backup_state = state.get('backup_log', {})
-    last_inode = backup_state.get('inode')
-    last_offset = int(backup_state.get('offset', 0))
-
-    if last_inode != stat_info.st_ino or stat_info.st_size < last_offset:
-        last_offset = 0
-
-    rows = []
-    with open(BACKUP_LOG_FILE, 'r') as fp:
-        fp.seek(last_offset)
-        for line in fp:
-            line = line.strip()
-            if line == '':
-                continue
-            rows.append(parse_backup_log_line(line, host_meta))
-        new_offset = fp.tell()
-
-    state['backup_log'] = {
-        'inode': stat_info.st_ino,
-        'offset': new_offset
-    }
-
-    if len(rows) == 0:
-        return None
-
-    file_date = datetime.datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(output_dir, 'host-debian-backup-%s.ndjson' % file_date)
-    append_ndjson(output_path, rows)
-    return output_path
-
-
 def cleanup_old_files(output_dir, retention_days):
     now_ts = datetime.datetime.now().timestamp()
     expire_ts = now_ts - int(retention_days) * 86400
@@ -264,8 +158,10 @@ def cleanup_old_files(output_dir, retention_days):
                 pass
 
 
-def collect_status_payloads(host_meta):
-    if is_pve_machine():
+def collect_status_payloads(host_meta, is_pve=None):
+    if is_pve is None:
+        is_pve = is_pve_machine()
+    if is_pve:
         return [
             ('host-pve-system-status', build_pve_system_status(host_meta))
         ]
@@ -279,37 +175,15 @@ def run(output_dir, retention_days):
     cleanup_old_files(output_dir, retention_days)
     state, state_path = load_state(output_dir)
     host_meta = get_host_meta()
+    is_pve = is_pve_machine()
 
     created_files = []
-    for file_prefix, payload in collect_status_payloads(host_meta):
+    for file_prefix, payload in collect_status_payloads(host_meta, is_pve=is_pve):
         status_path = export_status_payload(output_dir, payload, file_prefix=file_prefix)
         created_files.append(status_path)
 
-    xtrabackup_path = export_history_records(
-        XTRABACKUP_HISTORY_FILE,
-        output_dir,
-        state,
-        'host-xtrabackup',
-        'host-debian-xtrabackup',
-        host_meta
-    )
-    if xtrabackup_path:
-        created_files.append(xtrabackup_path)
-
-    xtrabackup_inc_path = export_history_records(
-        XTRABACKUP_INC_HISTORY_FILE,
-        output_dir,
-        state,
-        'host-xtrabackup-inc',
-        'host-debian-xtrabackup-inc',
-        host_meta
-    )
-    if xtrabackup_inc_path:
-        created_files.append(xtrabackup_inc_path)
-
-    backup_log_path = export_backup_log(output_dir, state, host_meta)
-    if backup_log_path:
-        created_files.append(backup_log_path)
+    if not is_pve:
+        created_files.extend(collect_debian_extra_exports(output_dir, state, host_meta))
 
     save_state(state_path, state)
     if created_files:

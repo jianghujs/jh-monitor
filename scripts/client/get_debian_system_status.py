@@ -34,7 +34,30 @@ finally:
 
 XTRABACKUP_HISTORY_FILE = '/www/server/xtrabackup/data/backup_history.json'
 XTRABACKUP_INC_HISTORY_FILE = '/www/server/xtrabackup-inc/data/backup_history.json'
+BACKUP_LOG_FILE = '/www/server/jh-panel/logs/backup.log'
 PANEL_DEFAULT_DB_FILE = '/www/server/jh-panel/data/default.db'
+
+
+def ensure_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
+
+
+def append_text(path, content):
+    output_dir = os.path.dirname(path) or '.'
+    ensure_dir(output_dir)
+    with open(path, 'a') as fp:
+        fp.write(content)
+        fp.flush()
+        os.fsync(fp.fileno())
+
+
+def append_ndjson(path, rows):
+    if not rows:
+        return
+    content = '\n'.join([json.dumps(row, ensure_ascii=False) for row in rows]) + '\n'
+    append_text(path, content)
 
 
 def to_size(value):
@@ -375,6 +398,142 @@ def load_panel_runtime_info():
     finally:
         os.chdir(old_cwd)
     return runtime
+
+
+def export_history_records(source_path, output_dir, state, state_key, file_prefix, host_meta):
+    if not os.path.exists(source_path):
+        return None
+
+    try:
+        with open(source_path, 'r') as fp:
+            source_data = json.load(fp)
+    except Exception:
+        return None
+
+    if not isinstance(source_data, dict):
+        return None
+
+    seen_ids = set(state.get('history_ids', {}).get(state_key, []))
+    rows = []
+    items = sorted(source_data.items(), key=lambda item: item[1].get('add_timestamp', 0))
+    for record_id, record in items:
+        if record_id in seen_ids:
+            continue
+        row = {
+            'host_id': host_meta['host_id'],
+            'host_name': host_meta['host_name'],
+            'host_ip': host_meta['host_ip'],
+            'id': record.get('id', record_id),
+            'add_time': record.get('add_time', ''),
+            'add_timestamp': record.get('add_timestamp', 0),
+            'size': record.get('size', ''),
+            'size_bytes': record.get('size_bytes', 0),
+            'collector_source': os.path.basename(source_path)
+        }
+        if 'backup_type' in record:
+            row['backup_type'] = record.get('backup_type')
+        rows.append(row)
+        seen_ids.add(record_id)
+
+    if len(rows) == 0:
+        return None
+
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, '%s-%s.ndjson' % (file_prefix, file_date))
+    append_ndjson(output_path, rows)
+    state.setdefault('history_ids', {})[state_key] = sorted(list(seen_ids))
+    return output_path
+
+
+def parse_backup_log_line(line, host_meta):
+    record = None
+    try:
+        record = json.loads(line)
+    except Exception:
+        record = {
+            'message': line
+        }
+
+    if not isinstance(record, dict):
+        record = {
+            'message': line
+        }
+
+    record['host_id'] = host_meta['host_id']
+    record['host_name'] = host_meta['host_name']
+    record['host_ip'] = host_meta['host_ip']
+    if 'add_time' not in record or str(record.get('add_time', '')).strip() == '':
+        record['add_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    record['collector_source'] = os.path.basename(BACKUP_LOG_FILE)
+    return record
+
+
+def export_backup_log(output_dir, state, host_meta):
+    if not os.path.exists(BACKUP_LOG_FILE):
+        return None
+
+    stat_info = os.stat(BACKUP_LOG_FILE)
+    backup_state = state.get('backup_log', {})
+    last_inode = backup_state.get('inode')
+    last_offset = int(backup_state.get('offset', 0))
+
+    if last_inode != stat_info.st_ino or stat_info.st_size < last_offset:
+        last_offset = 0
+
+    rows = []
+    with open(BACKUP_LOG_FILE, 'r') as fp:
+        fp.seek(last_offset)
+        for line in fp:
+            line = line.strip()
+            if line == '':
+                continue
+            rows.append(parse_backup_log_line(line, host_meta))
+        new_offset = fp.tell()
+
+    state['backup_log'] = {
+        'inode': stat_info.st_ino,
+        'offset': new_offset
+    }
+
+    if len(rows) == 0:
+        return None
+
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, 'host-debian-backup-%s.ndjson' % file_date)
+    append_ndjson(output_path, rows)
+    return output_path
+
+
+def collect_extra_exports(output_dir, state, host_meta):
+    created_files = []
+
+    xtrabackup_path = export_history_records(
+        XTRABACKUP_HISTORY_FILE,
+        output_dir,
+        state,
+        'host-xtrabackup',
+        'host-debian-xtrabackup',
+        host_meta
+    )
+    if xtrabackup_path:
+        created_files.append(xtrabackup_path)
+
+    xtrabackup_inc_path = export_history_records(
+        XTRABACKUP_INC_HISTORY_FILE,
+        output_dir,
+        state,
+        'host-xtrabackup-inc',
+        'host-debian-xtrabackup-inc',
+        host_meta
+    )
+    if xtrabackup_inc_path:
+        created_files.append(xtrabackup_inc_path)
+
+    backup_log_path = export_backup_log(output_dir, state, host_meta)
+    if backup_log_path:
+        created_files.append(backup_log_path)
+
+    return created_files
 
 
 def build_system_status(host_meta=None):
