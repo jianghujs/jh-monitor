@@ -30,6 +30,7 @@ build_collector_command() {
   if command -v flock >/dev/null 2>&1; then
     collector_exec="$(command -v flock) -n ${LOCK_FILE} ${collector_exec}"
   fi
+  printf '%s\n' "${collector_exec}"
 
   cat <<EOF
 /bin/bash -lc 'if [ -d /www/server/jh-panel ]; then pushd /www/server/jh-panel > /dev/null || exit 1; fi; ${collector_exec}; collector_status=\$?; if [ -d /www/server/jh-panel ]; then popd > /dev/null || true; fi; exit \$collector_status'
