@@ -3,5 +3,17 @@
   "configurations": [
     {"command":"codex-dsp","name":"codex","request":"launch","type":"node-terminal"},
     {"command":"python3 task.py","name":"start task","request":"launch","type":"node-terminal"},
+    {
+      "name": "test_host_report_pipeline_send.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/test_host_report_pipeline_send.py",
+      "args": [
+        "--host-id", "H_BK100-32_olDA",
+        "--report-date", "2026-04-07",
+        "--force-resend"
+      ],
+      "console": "integratedTerminal"
+    }
   ]
 }

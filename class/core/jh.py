@@ -31,6 +31,7 @@ import pytz
 import traceback
 sys.path.append(os.getcwd() + "/class/plugin")
 from retry_tool import retry
+import value_tool as value_utils
 
 
 def execShell(cmdstring, cwd=None, timeout=None, shell=True, useTmpFile=False):
@@ -573,6 +574,38 @@ def readFile(filename):
     except Exception as e:
         # print(e)
         return False
+
+
+def writeJsonFile(filename, data, mode='w+'):
+    # 写 JSON 文件内容
+    try:
+        base_dir = os.path.dirname(filename)
+        if base_dir and not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        return writeFile(filename, json.dumps(data, ensure_ascii=False), mode)
+    except Exception as e:
+        return False
+
+
+def readJsonFile(filename, default_data=None, auto_create=False):
+    # 读 JSON 文件内容，支持缺省值和自动创建
+    try:
+        if auto_create and not os.path.exists(filename) and default_data is not None:
+            writeJsonFile(filename, default_data)
+
+        content = readFile(filename)
+        if content is False:
+            raise Exception('read json file failed')
+
+        content = str(content).strip()
+        if content == '':
+            raise Exception('json file is empty')
+
+        return json.loads(content)
+    except Exception as e:
+        if isinstance(default_data, (dict, list)):
+            return json.loads(json.dumps(default_data, ensure_ascii=False))
+        return default_data
 
 
 def getDate():

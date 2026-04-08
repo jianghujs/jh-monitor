@@ -18,19 +18,19 @@
 
 ## 4. Daily report analysis
 
-- [ ] 4.1 Add a daily analysis task in `task.py` that loads the target report window from Elasticsearch and groups raw data by host and date.
-- [ ] 4.2 Port the anomaly and summary rules from `/www/server/jh-panel/scripts/report.py` so the analyzer produces `summary_tips`, `error_tips`, and structured system/backup/business detail sections.
-- [ ] 4.3 Render and persist single-host reports into `host-report-single`, including HTML content, completeness validation results, and resend-ready metadata.
-- [ ] 4.4 Aggregate the same-day single-host outputs into the overview report and persist it into `host-report-overview` with host totals and abnormal host summaries.
+- [x] 4.1 Add a daily analysis task in `task.py` that loads the target report window from Elasticsearch and groups raw data by host and date.
+- [x] 4.2 Port the anomaly and summary rules from `/www/server/jh-panel/scripts/report.py` so the analyzer produces `summary_tips`, `error_tips`, and structured system/backup/business detail sections.
+- [x] 4.3 Render and persist single-host reports into `host-report-single`, including HTML content, completeness validation results, and resend-ready metadata.
+- [x] 4.4 Aggregate the same-day single-host outputs into the overview report and persist it into `host-report-overview` with host totals and abnormal host summaries.
 
 ## 5. Daily report delivery
 
-- [ ] 5.1 Add a delivery task in `task.py` that reads only validated same-day report documents from Elasticsearch instead of fetching live host data.
-- [ ] 5.2 Reuse the existing email notification path to send the overview report every day and only the abnormal single-host reports.
-- [ ] 5.3 Persist per-report delivery status, recipients, failure reason, and retry count so skipped, failed, and successful sends can be audited and retried.
+- [x] 5.1 Add a delivery task in `task.py` that reads only validated same-day report documents from Elasticsearch instead of fetching live host data.
+- [x] 5.2 Reuse the existing email notification path to send the overview report every day and only the abnormal single-host reports.
+- [x] 5.3 Persist per-report delivery status, recipients, failure reason, and retry count so skipped, failed, and successful sends can be audited and retried.
 
 ## 6. Validation and rollout safeguards
 
-- [ ] 6.1 Add install/runtime checks that confirm the collector cron, first-run output, and filebeat inputs are present after deployment.
-- [ ] 6.2 Add analysis and delivery preflight validation for missing raw data, empty HTML, invalid report dates, and incomplete report documents.
-- [ ] 6.3 Document or script the rollout sequence for enabling configuration, collection, analysis, and delivery with a defined fallback to the legacy send path during cutover.
+- [x] 6.1 Add install/runtime checks that confirm the collector cron, first-run output, and filebeat inputs are present after deployment.
+- [x] 6.2 Add analysis and delivery preflight validation for missing raw data, empty HTML, invalid report dates, and incomplete report documents.
+- [x] 6.3 Document or script the rollout sequence for enabling configuration, collection, analysis, and delivery with a defined fallback to the legacy send path during cutover.

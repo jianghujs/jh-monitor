@@ -1,0 +1,78 @@
+<style>
+  h3 { font-size: bold; }
+  table {
+      border-top: 1px solid #999;
+      border-left: 1px solid #999;
+      border-spacing: 0;
+      width: 100%;
+  }
+  table tr td {
+      padding: 5px;
+      line-height: 20px;
+  }
+  table tr td:first-child {
+      width: 28%;
+  }
+  table tr td:nth-child(2) {
+      width: 72%;
+  }
+  .report-card {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px dashed #bbb;
+  }
+</style>
+<div class="panel_report bgw p-5">
+  <div class="title c6 f16 plr15">
+    <h3 class="c6 f16 pull-left">{{ title }}</h3>
+  </div>
+  <div class="mx-auto leading-10 plr15">
+    <h3 class="pt-5" style="color: #cecece">日期：{{ start_time }} 至 {{ end_time }}（报告时间：{{ report_time }}）</h3>
+
+    <h3 class="font-bold my-5">主机统计：</h3>
+    <table border class="w-full">
+      <tr><td>主机总数</td><td>{{ host_overview_info.host_total }}</td></tr>
+      <tr><td>在线主机</td><td>{{ host_overview_info.host_online }}</td></tr>
+      <tr><td>离线主机</td><td>{{ host_overview_info.host_offline }}</td></tr>
+      <tr><td>异常主机</td><td>{{ host_overview_info.host_error }}</td></tr>
+    </table>
+
+    <h3 class="font-bold my-5">主机概况：</h3>
+    <table border class="w-full">
+    {% for item in host_overview_tips %}
+      <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+    {% endfor %}
+    </table>
+
+    <h3 class="font-bold my-5">异常主机摘要：</h3>
+    <table border class="w-full">
+    {% if exception_host_summary_tips %}
+      {% for item in exception_host_summary_tips %}
+      <tr><td>{{ item.name }}</td><td>{{ item.desc }}</td></tr>
+      {% endfor %}
+    {% else %}
+      <tr><td>异常摘要</td><td>当天没有异常主机</td></tr>
+    {% endif %}
+    </table>
+
+    <h3 class="font-bold my-5">主机单机报告列表：</h3>
+    {% for item in single_host_report_list %}
+    <div class="report-card">
+      <h3>
+        [{{ loop.index }}] {{ item.host_name }}（{{ item.host_ip }}）
+        {% if item.is_error %}
+        <span style="color: red;">异常</span>
+        {% else %}
+        <span style="color: green;">正常</span>
+        {% endif %}
+      </h3>
+      <ul>
+      {% for tip in item.summary_tips %}
+        <li>{{ tip }}</li>
+      {% endfor %}
+      </ul>
+      <div>{{ item.html_content }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

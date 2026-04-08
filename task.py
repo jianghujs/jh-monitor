@@ -37,6 +37,8 @@ sys.path.append(os.getcwd() + "/scripts")
 sys.path.append(os.getcwd() + "/scripts/client")
 from run_script_batch import run_script_batch
 from report_fetcher import fetch_reports, send_report_error
+from report_analyser import HostReportAnalyser
+from report_sender import HostReportSender
 
 # print sys.path
 
@@ -517,6 +519,38 @@ def hostGrowthAlarmTask():
 
 
 # --------------------------------------Host Report Notify Start   --------------------------------------------- #
+def hostReportPipelineTask():
+    try:
+        while True:
+            try:
+                now_ts = int(time.time())
+                host_report_logger = lambda message: print(f"{Fore.CYAN}★ ========= [hostReportPipelineTask] {message}{Style.RESET_ALL}")
+                analyser = HostReportAnalyser(now_ts=now_ts, logger=host_report_logger)
+                sender = HostReportSender(now_ts=now_ts, logger=host_report_logger, es_client=analyser._es)
+                report_config, enabled_rows, due_rows = analyser.get_schedule_state()
+                if not enabled_rows or not due_rows:
+                    time.sleep(31)
+                    continue
+                
+                print(f"{Fore.BLUE}★ ========= [hostReportPipelineTask] STARTED - 待分析主机数: {len(enabled_rows)} 触发主机数: {len(due_rows)}{Style.RESET_ALL}")
+
+                analysis_result = analyser.run_analysis(enabled_rows)
+                print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] ANALYSIS - 日期: {analysis_result.get('report_date')} ready={analysis_result.get('single_ready')}/{analysis_result.get('single_total')} abnormal={analysis_result.get('single_abnormal')} overview_ready={analysis_result.get('overview_ready')}{Style.RESET_ALL}")
+
+                result = sender.run_delivery(due_rows, report_config, enabled_rows=enabled_rows)
+                status = result.get('status')
+                if status == 'ok':
+                    print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] SUCCESS - 日期: {result.get('report_date')} overview={result.get('overview_sent')} single_success={result.get('single_success')} single_skipped={result.get('single_skipped')}{Style.RESET_ALL}")
+                elif status in ('partial', 'blocked', 'failed', 'skipped'):
+                    print(f"{Fore.YELLOW}★ ========= [hostReportPipelineTask] {status.upper()} - {result}{Style.RESET_ALL}")
+            except Exception as ex:
+                traceback.print_exc()
+                print(f"{Fore.RED}★ ========= [hostReportPipelineTask] ERROR：{str(ex)} {Style.RESET_ALL}")
+            time.sleep(31)
+    except Exception:
+        traceback.print_exc()
+
+
 def hostReportNotifyTask():
     try:
         import host_api
@@ -716,20 +750,25 @@ def setDaemon(t):
 
 if __name__ == "__main__":
    
-    # client监控
-    ct = threading.Thread(target=clientTask)
-    ct = setDaemon(ct)
-    ct.start()
+    # # client监控
+    # ct = threading.Thread(target=clientTask)
+    # ct = setDaemon(ct)
+    # ct.start()
 
-    # 资源增长告警
-    hga = threading.Thread(target=hostGrowthAlarmTask)
-    hga = setDaemon(hga)
-    hga.start()
+    # # 资源增长告警
+    # hga = threading.Thread(target=hostGrowthAlarmTask)
+    # hga = setDaemon(hga)
+    # hga.start()
 
-    # 主机报告通知
-    hrn = threading.Thread(target=hostReportNotifyTask)
-    hrn = setDaemon(hrn)
-    hrn.start()
+    # 主机报告流水线
+    hrp = threading.Thread(target=hostReportPipelineTask)
+    hrp = setDaemon(hrp)
+    hrp.start()
+
+    # # 主机报告通知
+    # hrn = threading.Thread(target=hostReportNotifyTask)
+    # hrn = setDaemon(hrn)
+    # hrn.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)
