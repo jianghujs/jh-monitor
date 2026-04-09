@@ -156,23 +156,26 @@ class HostReportAnalyser(object):
         return list(self._last_schedule_debug_rows)
 
     def get_report_window(self, report_date=None):
-        """生成报告时间窗口，默认取上一自然日。"""
+        """生成报告时间窗口，默认统计最近 24 小时。"""
         now_dt = datetime.datetime.fromtimestamp(self.now_ts)
         if report_date:
             if isinstance(report_date, datetime.date):
                 target_date = report_date
             else:
                 target_date = datetime.datetime.strptime(str(report_date), '%Y-%m-%d').date()
+            if target_date == now_dt.date():
+                end_dt = now_dt
+            else:
+                end_dt = datetime.datetime.combine(target_date, datetime.time(23, 59, 59))
         else:
-            target_date = (now_dt - datetime.timedelta(days=1)).date()
+            end_dt = now_dt
 
-        start_dt = datetime.datetime.combine(target_date, datetime.time(0, 0, 0))
-        end_dt = datetime.datetime.combine(target_date, datetime.time(23, 59, 59))
+        start_dt = end_dt - datetime.timedelta(hours=24)
         return {
-            'report_date': target_date.strftime('%Y-%m-%d'),
+            'report_date': end_dt.strftime('%Y-%m-%d'),
             'report_time': now_dt.strftime('%Y-%m-%d %H:%M:%S'),
-            'start_date': target_date.strftime('%Y-%m-%d'),
-            'end_date': target_date.strftime('%Y-%m-%d'),
+            'start_date': start_dt.strftime('%Y-%m-%d'),
+            'end_date': end_dt.strftime('%Y-%m-%d'),
             'start_time': start_dt.strftime('%Y-%m-%d %H:%M:%S'),
             'end_time': end_dt.strftime('%Y-%m-%d %H:%M:%S'),
             'start_timestamp': int(start_dt.timestamp()),

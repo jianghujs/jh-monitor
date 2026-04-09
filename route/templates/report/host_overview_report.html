@@ -26,8 +26,11 @@
   <div class="title c6 f16 plr15">
     <h3 class="c6 f16 pull-left">{{ title }}</h3>
   </div>
+  <div class="pt-5" style="color: #efefef; font-size: 14px;">
+    <div>统计范围：{{ start_time }} 至 {{ end_time }}</div>
+    <div>报告时间：{{ report_time }}</div>
+  </div>
   <div class="mx-auto leading-10 plr15">
-    <h3 class="pt-5" style="color: #cecece">日期：{{ start_time }} 至 {{ end_time }}（报告时间：{{ report_time }}）</h3>
 
     <h3 class="font-bold my-5">主机统计：</h3>
     <table border class="w-full">
