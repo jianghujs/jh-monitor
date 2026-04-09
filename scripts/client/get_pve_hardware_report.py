@@ -169,10 +169,6 @@ def to_float(value: Any, default: float = 0.0) -> float:
         return float(match.group()) if match else default
 
 
-def normalize_metric_int(value: Any, default: int = 0) -> int:
-    """统一将容易出现 long/float 混用的指标输出为整数。"""
-    return int(round(to_float(value, float(default))))
-
 def parse_sata_attributes(output: str) -> Dict[str, Dict[str, Any]]:
     """解析SATA设备的SMART属性"""
     attrs = {}
@@ -871,11 +867,11 @@ class SensorCollector:
                 match = re.match(r'(.+?):\s*\+?(-?\d+\.?\d*)', line)
                 if match:
                     name = match.group(1).strip()
-                    raw_value = to_float(match.group(2))
-                    if SensorCollector._is_valid_temperature(name, raw_value):
+                    value = to_float(match.group(2))
+                    if SensorCollector._is_valid_temperature(name, value):
                         result['temperatures'].append({
                             'name': name,
-                            'value': normalize_metric_int(raw_value),
+                            'value': value,
                             'unit': '°C'
                         })
             
@@ -884,7 +880,7 @@ class SensorCollector:
                 match = re.match(r'(.+?):\s*(\d+)', line)
                 if match:
                     name = match.group(1).strip()
-                    value = normalize_metric_int(match.group(2))
+                    value = to_int(match.group(2))
                     result['fans'].append({
                         'name': name,
                         'value': value,
@@ -926,13 +922,13 @@ class SensorCollector:
                 if SensorCollector._is_valid_temperature(name, value):
                     result['temperatures'].append({
                         'name': name,
-                        'value': normalize_metric_int(value),
+                        'value': value,
                         'unit': '°C'
                     })
             elif unit == 'RPM':
                 result['fans'].append({
                     'name': name,
-                    'value': normalize_metric_int(value),
+                    'value': value,
                     'unit': 'RPM'
                 })
             elif unit == 'Volts':

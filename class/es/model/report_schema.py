@@ -81,7 +81,146 @@ REPORT_INDEXES = {
                         'disks': {'type': 'nested'}
                     }
                 },
-                'pve': {'type': 'object', 'dynamic': True},
+                'pve': {
+                    'type': 'object',
+                    'dynamic': True,
+                    'properties': {
+                        'data': {
+                            'type': 'object',
+                            'dynamic': True,
+                            'properties': {
+                                'cpu': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'usage': {'type': 'float'},
+                                        'load': {'type': 'float'},
+                                        'top_processes': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'user': {'type': 'keyword'},
+                                                'pid': {'type': 'keyword'},
+                                                'cpu': {'type': 'float'},
+                                                'mem': {'type': 'float'},
+                                                'command': {'type': 'text'}
+                                            }
+                                        }
+                                    }
+                                },
+                                'memory': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'usage_percent': {'type': 'float'}
+                                    }
+                                },
+                                'disk': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'filesystems': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'use_percent': {'type': 'float'}
+                                            }
+                                        },
+                                        'large_disks': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'use_percent': {'type': 'float'}
+                                            }
+                                        }
+                                    }
+                                },
+                                'sensors': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'temperatures': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'name': {'type': 'keyword'},
+                                                'value': {'type': 'float'},
+                                                'unit': {'type': 'keyword'}
+                                            }
+                                        },
+                                        'fans': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'name': {'type': 'keyword'},
+                                                'value': {'type': 'float'},
+                                                'unit': {'type': 'keyword'}
+                                            }
+                                        },
+                                        'voltages': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'name': {'type': 'keyword'},
+                                                'value': {'type': 'float'},
+                                                'unit': {'type': 'keyword'}
+                                            }
+                                        }
+                                    }
+                                },
+                                'smart': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'devices': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'temperature': {'type': 'float'},
+                                                'health_score': {'type': 'float'},
+                                                'attributes': {
+                                                    'type': 'nested',
+                                                    'dynamic': True,
+                                                    'properties': {
+                                                        'value': {'type': 'float'},
+                                                        'worst': {'type': 'float'},
+                                                        'threshold': {'type': 'float'},
+                                                        'raw_int': {'type': 'float'}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                'io': {
+                                    'type': 'object',
+                                    'dynamic': True,
+                                    'properties': {
+                                        'devices': {
+                                            'type': 'nested',
+                                            'dynamic': True,
+                                            'properties': {
+                                                'rrqm_s': {'type': 'float'},
+                                                'wrqm_s': {'type': 'float'},
+                                                'r_s': {'type': 'float'},
+                                                'w_s': {'type': 'float'},
+                                                'rkB_s': {'type': 'float'},
+                                                'wkB_s': {'type': 'float'},
+                                                'avgrq_sz': {'type': 'float'},
+                                                'avgqu_sz': {'type': 'float'},
+                                                'await': {'type': 'float'},
+                                                'r_await': {'type': 'float'},
+                                                'w_await': {'type': 'float'},
+                                                'svctm': {'type': 'float'},
+                                                'util': {'type': 'float'}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 'add_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
                 'add_timestamp': {'type': 'double'}
             }
