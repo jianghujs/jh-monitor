@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import datetime
 import json
 import os
@@ -11,6 +12,40 @@ if CURRENT_DIR not in sys.path:
 
 from get_host_info import get_host_ip, is_pve_machine
 from get_pve_hardware_report import DEFAULT_THRESHOLDS, HardwareReporter
+
+DEFAULT_OUTPUT_DIR = os.environ.get(
+    'REPORT_COLLECTOR_OUTPUT_DIR',
+    '/home/ansible_user/jh-monitor-data'
+)
+
+
+def ensure_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
+
+
+def append_text(path, content):
+    output_dir = os.path.dirname(path) or '.'
+    ensure_dir(output_dir)
+    with open(path, 'a') as fp:
+        fp.write(content)
+        fp.flush()
+        os.fsync(fp.fileno())
+
+
+def append_ndjson(path, rows):
+    if not rows:
+        return
+    content = '\n'.join([json.dumps(row, ensure_ascii=False) for row in rows]) + '\n'
+    append_text(path, content)
+
+
+def export_system_status(output_dir, payload):
+    file_date = datetime.datetime.now().strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, 'host-pve-system-status-%s.json' % file_date)
+    append_ndjson(output_path, [payload])
+    return output_path
 
 
 def format_pve_disks(filesystems):
@@ -106,7 +141,18 @@ def build_system_status(host_meta=None):
 
 
 def main():
-    print(json.dumps(build_system_status(), ensure_ascii=False))
+    parser = argparse.ArgumentParser(description='Collect PVE system status.')
+    parser.add_argument('--output-dir', default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument('--stdout-json', action='store_true')
+    args = parser.parse_args()
+
+    payload = build_system_status()
+    if args.stdout_json:
+        print(json.dumps(payload, ensure_ascii=False))
+        return
+
+    output_path = export_system_status(args.output_dir, payload)
+    print(output_path)
 
 
 if __name__ == '__main__':
