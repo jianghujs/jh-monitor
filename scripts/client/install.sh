@@ -291,6 +291,7 @@ notify_server_add_host(){
         fi
     fi
 
+    echo "开始请求服务端添加主机..."
     add_res=$(curl -s -X POST "$monitor_url/pub/add_host" \
         -d "host_name=$client_name" \
         -d "ip=$client_ip" \
@@ -304,6 +305,7 @@ notify_server_add_host(){
     add_res_status=$(read_json_value "$add_res" "status")
     add_res_host_id=$(read_json_value "$add_res" "data.host_id")
     add_res_msg=$(read_json_value "$add_res" "msg")
+    echo "add_host 返回: status=${add_res_status}, msg=${add_res_msg}, host_id=${add_res_host_id}"
 
     if [ "$add_res_status" = "True" ] || [ "$add_res_status" = "true" ]; then
         persist_client_host_id "$add_res_host_id"
@@ -311,9 +313,17 @@ notify_server_add_host(){
         return 0
     fi
 
-    if [ -n "$add_res_host_id" ] && [ "$add_res_msg" = "主机已经存在!" ]; then
-        persist_client_host_id "$add_res_host_id"
-        echo "主机已存在，复用已有 host_id: $add_res_host_id"
+    if echo "${add_res_msg}" | grep -q "主机已经存在"; then
+        if [ -n "$add_res_host_id" ]; then
+            persist_client_host_id "$add_res_host_id"
+            echo "主机已存在，复用服务端返回的 host_id: $add_res_host_id"
+        elif [ -n "$existing_host_id" ]; then
+            persist_client_host_id "$existing_host_id"
+            echo "主机已存在，复用本地已有 host_id: $existing_host_id"
+        else
+            echo "主机已存在，但服务端未返回 host_id，本地也没有旧 host_id，继续执行后续安装流程"
+        fi
+        echo "主机已存在，继续执行后续安装/更新流程"
         return 0
     fi
 
