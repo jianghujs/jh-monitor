@@ -12,32 +12,34 @@
 # 主机管理
 # ---------------------------------------------------------------------------------
 
-import time
 import os
 import sys
-from urllib.parse import urlparse
+import time
+
 import jh
-import re
+sys.path.append(os.getcwd() + "/class/plugin")
+sys.path.append(os.getcwd() + "/class/es/mapper")
+sys.path.append(os.getcwd() + "/class/es/query")
+sys.path.append(os.getcwd() + "/class/es/service")
+import value_tool as value_utils
+import host_status_mapper as host_status_mapper_utils
+import host_query as host_query_utils
+import host_status_service as host_status_service_utils
 import json
-import shutil
-import psutil
 import traceback
 from jinja2 import Environment, FileSystemLoader
 
-from flask import request
-
-
-from flask import Flask, request, jsonify
-import jh
-import time
+from flask import Flask, request
 
 app = Flask(__name__)
 
 class host_api:
     
+    host_meta_field = 'id,host_id,host_name,host_group_id,host_group_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime'
     host_field = 'id,host_id,host_name,host_group_id,host_group_name,ip,os,remark,ssh_port,ssh_user,ssh_pkey,is_jhpanel,is_pve,is_master,backup_host_id,backup_host_name,backup_ip,addtime,host_status,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,detail_addtime'
     host_detail_field = 'id,host_id,host_name,host_status,uptime,host_info,cpu_info,mem_info,disk_info,net_info,load_avg,firewall_info,port_info,backup_info,temperature_info,ssh_user_list,last_update,addtime'
     host_alarm_field = "id,host_id,host_name,alarm_type,alarm_level,alarm_content,addtime"
+    host_status_indexes = host_query_utils.HOST_STATUS_INDEXES
 
     def normalizeHostReportData(self, report_raw):
         if report_raw is None:
@@ -148,10 +150,50 @@ class host_api:
         return html
 
     def buildHostReportMessage(self, host_row, report_data):
-        is_pve = host_row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
+        is_pve = value_utils.safeBool(host_row.get('is_pve'))
         if is_pve:
             return self.renderPVEReportHtml(host_row, report_data)
         return self.renderHostReportHtml(host_row, report_data)
+
+    def getHostMetaRows(self, host_group_id=''):
+        hostM = jh.M('host')
+        if host_group_id != '' and host_group_id != '-1':
+            hostM.where('host_group_id=?', (host_group_id,))
+        data = hostM.field(self.host_meta_field).order('id desc').select()
+        if isinstance(data, str) or data is None:
+            return []
+        return data
+
+    def mergeHostRowWithDetail(self, host_row, host_detail):
+        detail = host_detail or host_status_mapper_utils.buildHostDetailFromStatusDoc(host_row, None)
+        row = dict(host_row)
+        row.update({
+            'host_status': detail.get('host_status', 'Stopped'),
+            'host_info': detail.get('host_info', '{}'),
+            'cpu_info': detail.get('cpu_info', '{}'),
+            'mem_info': detail.get('mem_info', '{}'),
+            'disk_info': detail.get('disk_info', '[]'),
+            'net_info': detail.get('net_info', '{}'),
+            'load_avg': detail.get('load_avg', '{}'),
+            'firewall_info': detail.get('firewall_info', '{}'),
+            'port_info': detail.get('port_info', '{}'),
+            'backup_info': detail.get('backup_info', '{}'),
+            'temperature_info': detail.get('temperature_info', '{}'),
+            'ssh_user_list': detail.get('ssh_user_list', '[]'),
+            'detail_addtime': detail.get('addtime', 0),
+            'detail_last_update': detail.get('last_update', '')
+        })
+        return row
+
+    def _formatHistoryRows(self, rows, fields):
+        data = []
+        for row in rows:
+            item = {}
+            for field in fields:
+                item[field] = row.get(field)
+            item['addtime'] = time.strftime('%m/%d %H:%M', time.localtime(float(row.get('addtime', 0) or 0)))
+            data.append(item)
+        return data
 
     def listApi(self):
         limit = request.form.get('limit', '100')
@@ -159,16 +201,13 @@ class host_api:
         host_group_id = request.form.get('host_group_id', '')
         start = (int(p) - 1) * (int(limit))
         try:
-            hostM = jh.M('view01_host')
-            
-            if host_group_id != '' and host_group_id != '-1':
-                hostM.where('host_group_id=?', (host_group_id,))
-
-            _list = hostM.field(self.host_field).limit(
-                (str(start)) + ',' + limit).order('id desc').select()
-
-            if type(_list) == str:
-                return jh.returnJson(False, '获取失败!' + _list)
+            host_rows = self.getHostMetaRows(host_group_id)
+            count = len(host_rows)
+            _list = host_rows[start:start + int(limit)]
+            host_detail_map = host_status_service_utils.getLatestHostDetailMap(
+                _list,
+                host_status_indexes=self.host_status_indexes
+            )
 
             panel_report = self.getPanelReportFromES(_list)
             pve_report = self.getPVEReportFromES(_list)
@@ -182,17 +221,20 @@ class host_api:
 
             # 循环转换详情数据
             for i in range(len(_list)):
+                _list[i] = self.mergeHostRowWithDetail(
+                    _list[i], host_detail_map.get(_list[i].get('host_id', ''))
+                )
                 is_jhpanel = _list[i].get('is_jhpanel')
-                is_jhpanel = is_jhpanel in (1, True, "1", "true", "True", "yes", "YES")
+                is_jhpanel = value_utils.safeBool(is_jhpanel)
                 if True or is_jhpanel:
-                  if panel_report:
-                    _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
+                    if panel_report:
+                        _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
                 
                 is_pve = _list[i].get('is_pve')
-                is_pve = is_pve in (1, True, "1", "true", "True", "yes", "YES")
+                is_pve = value_utils.safeBool(is_pve)
                 if is_pve:
-                  if pve_report:
-                    _list[i]['pve_report'] = pve_report.get(_list[i]['ip'], '{}')
+                    if pve_report:
+                        _list[i]['pve_report'] = pve_report.get(_list[i]['ip'], '{}')
                 
                 host_id = _list[i].get('host_id')
                 host_report_enabled = bool(host_id and report_enabled and host_id in report_host_id_set)
@@ -204,7 +246,6 @@ class host_api:
             _ret = {}
             _ret['data'] = _list
 
-            count = hostM.count()
             _page = {}
             _page['count'] = count
             _page['tojs'] = 'getWeb'
@@ -304,8 +345,13 @@ class host_api:
 
     def detailApi(self):
         host_id = request.form.get('host_id', '')
-        host_detail = jh.M('view01_host').where('host_id=?', (host_id,)).field(self.host_field).find()
-        if host_detail:
+        host_rows = jh.M('host').where('host_id=?', (host_id,)).field(self.host_meta_field).select()
+        if host_rows:
+            host_detail_map = host_status_service_utils.getLatestHostDetailMap(
+                host_rows,
+                host_status_indexes=self.host_status_indexes
+            )
+            host_detail = self.mergeHostRowWithDetail(host_rows[0], host_detail_map.get(host_id))
             host_detail = self.parseDetailJSONValue(host_detail)
             from config_api import config_api
             dispatch_config = config_api().getReportDispatchConfigData()
@@ -392,7 +438,7 @@ class host_api:
         print(start, end)
         data = self.getAllHostChartData(start, end)
         
-        return jh.getJson(self.lessenData(data))
+        return jh.getJson(data)
 
     def getHostLoadAverageApi(self):
         host_id = request.form.get('host_id', '')
@@ -431,12 +477,13 @@ class host_api:
     
     def getAllHostChartData(self, start, end):
         # 取所有主机的数据
-        data = jh.M('host_detail').where("addtime>=? AND addtime<=?", (start, end)).field(
-            'id,host_id,host_name,cpu_info,mem_info,disk_info,net_info,load_avg,addtime'
-        ).order('addtime asc').select()
-        for i in range(len(data)):
-            data[i]['addtime'] = time.strftime(
-                '%m/%d %H:%M', time.localtime(float(data[i]['addtime'])))
+        data = host_status_service_utils.getHostStatusHistory(
+            '',
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        data = self._formatHistoryRows(data, ['id', 'host_id', 'host_name', 'cpu_info', 'mem_info', 'disk_info', 'net_info', 'load_avg'])
         
         # 按host_id分组
         host_data = {}
@@ -453,43 +500,52 @@ class host_api:
 
     def getHostNetWorkIoData(self, host_id, start, end):
         # 取指定时间段的网络Io
-        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            # 'id,up,down,total_up,total_down,down_packets,up_packets,addtime'
-            'id,net_info,addtime'
-        ).order('addtime asc').select()
-        
-        return self.toAddtime(data)
+        data = host_status_service_utils.getHostStatusHistory(
+            host_id,
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        return self._formatHistoryRows(data, ['id', 'net_info'])
 
     def getHostDiskIoData(self, host_id, start, end):
         # 取指定时间段的磁盘Io
-        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            # 'id,read_count,write_count,read_bytes,write_bytes,read_time,write_time,addtime'
-            'id,disk_info,addtime'
-        ).order('id asc').select()
-        return self.toAddtime(data)
+        data = host_status_service_utils.getHostStatusHistory(
+            host_id,
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        return self._formatHistoryRows(data, ['id', 'disk_info'])
 
     def getHostCpuIoData(self, host_id, start, end):
         # 取指定时间段的CpuIo
-        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            # 'id,pro,mem,addtime'
-            'id,cpu_info,mem_info,addtime'
-        ).order('id asc').select()
-        return self.toAddtime(data, False)
+        data = host_status_service_utils.getHostStatusHistory(
+            host_id,
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        return self._formatHistoryRows(data, ['id', 'cpu_info', 'mem_info'])
 
     def getHostMemIoData(self, host_id, start, end):
         # 取指定时间段的内存Io
-        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", (host_id, start, end)).field(
-            # 'id,pro,mem,addtime'
-            'id,mem_info,addtime'
-        ).order('id asc').select()
-        return self.toAddtime(data, True)
+        data = host_status_service_utils.getHostStatusHistory(
+            host_id,
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        return self._formatHistoryRows(data, ['id', 'mem_info'])
 
     def getHostLoadAverageData(self, host_id, start, end):
-        data = jh.M('host_detail').where("host_id=? AND addtime>=? AND addtime<=?", ( host_id, start, end)).field(
-            # 'id,pro,one,five,fifteen,addtime'
-            'id,load_avg,cpu_info,addtime'
-        ).order('id asc').select()
-        return self.toAddtime(data)
+        data = host_status_service_utils.getHostStatusHistory(
+            host_id,
+            start,
+            end,
+            host_status_indexes=self.host_status_indexes
+        )
+        return self._formatHistoryRows(data, ['id', 'load_avg', 'cpu_info'])
     
     # 格式化addtime列
     def toAddtime(self, data, tomem=False):
@@ -544,7 +600,7 @@ class host_api:
       rows = []
       for row in host_rows:
         is_jhpanel = row.get('is_jhpanel')
-        is_jhpanel = is_jhpanel in (1, True, "1", "true", "True", "yes", "YES")
+        is_jhpanel = value_utils.safeBool(is_jhpanel)
         if True or is_jhpanel:
           rows.append(row)
 
@@ -558,7 +614,7 @@ class host_api:
       rows = []
       for row in host_rows:
         is_pve = row.get('is_pve')
-        is_pve = is_pve in (1, True, "1", "true", "True", "yes", "YES")
+        is_pve = value_utils.safeBool(is_pve)
         if is_pve:
           rows.append(row)
 
@@ -574,63 +630,8 @@ class host_api:
         msearch_body = []
         for row in host_rows:
           host_ip = row.get('ip')
-          if not host_ip:
-            msearch_body.append({"index": "filebeat-*"})
-            msearch_body.append({"size": 0, "query": {"match_none": {}}})
-            continue
-
-          msearch_body.append({"index": "filebeat-*"})
-          msearch_body.append({
-              "size": 1,
-              "query": {
-                  "bool": {
-                      "filter": [
-                          {
-                              "bool": {
-                                  "should": [
-                                      {
-                                          "term": {
-                                              "log.file.path.keyword": log_path
-                                          }
-                                      },
-                                      {
-                                          "term": {
-                                              "log.file.path": log_path
-                                          }
-                                      }
-                                  ],
-                                  "minimum_should_match": 1
-                              }
-                          },
-                          {
-                              "bool": {
-                                  "should": [
-                                      {
-                                          "term": {
-                                              "host.ip.keyword": host_ip
-                                          }
-                                      },
-                                      {
-                                          "term": {
-                                              "host.ip": host_ip
-                                          }
-                                      }
-                                  ],
-                                  "minimum_should_match": 1
-                              }
-                          }
-                      ]
-                  }
-              },
-              "sort": [
-                  {
-                      "@timestamp": {
-                          "order": "desc"
-                      }
-                  }
-              ],
-              "_source": ["message", "@timestamp", "host.ip"]
-          })
+          msearch_body.append({"index": host_query_utils.FILEBEAT_INDEXES})
+          msearch_body.append(host_query_utils.buildLatestReportSearchBody(host_ip, log_path))
 
         conn = es.getConn()
         response = conn.msearch(body=msearch_body)
@@ -659,43 +660,8 @@ class host_api:
     def getLogPathListFromES(self, host_ip):
       try:
         es = jh.getES()
-        query = {
-          "size": 0,
-          "query": {
-            "bool": {
-              "filter": [
-                { "term": { "host.ip": host_ip } }
-              ]
-            }
-          },
-          "aggs": {
-            "unique_paths": {
-              "terms": {
-                "field": "log.file.path", 
-                "size": 10000 
-              },
-              "aggs": {
-                "latest_update": {
-                  "top_hits": {
-                    "sort": [
-                      {
-                        "@timestamp": {
-                          "order": "desc"
-                        }
-                      }
-                    ],
-                    "_source": {
-                      "includes": ["@timestamp"]
-                    },
-                    "size": 1
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        response = es.search(index="filebeat-*", body=query)
+        query = host_query_utils.buildLogPathListSearchBody(host_ip)
+        response = es.search(index=host_query_utils.FILEBEAT_INDEXES, body=query)
         path_list = [] 
 
         for bucket in response["aggregations"]["unique_paths"]["buckets"]:
@@ -714,26 +680,8 @@ class host_api:
     def getLogDetailFromES(self, host_ip, log_file_path):
       try:
         es = jh.getES()
-        query = {
-          "size": 100,
-          "query": {
-            "bool": {
-              "filter": [
-                { "term": { "log.file.path": log_file_path } },
-                { "term": { "host.ip": host_ip } } 
-              ]
-            }
-          },
-          "sort": [
-            {
-              "@timestamp": {
-                "order": "desc"
-              }
-            }
-          ]
-        }
-
-        response = es.search(index="filebeat-*", body=query)
+        query = host_query_utils.buildLogDetailSearchBody(host_ip, log_file_path)
+        response = es.search(index=host_query_utils.FILEBEAT_INDEXES, body=query)
         log_details = {}
         log_details["log_content"] = []
 

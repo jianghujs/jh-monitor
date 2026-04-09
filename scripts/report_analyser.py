@@ -705,7 +705,7 @@ class HostReportAnalyser(object):
         return mysqlinfo_tips
 
     def _is_pve_host(self, host_row):
-        return host_row.get('is_pve') in (1, True, "1", "true", "True", "yes", "YES")
+        return value_tool.safeBool(host_row.get('is_pve'))
 
     def _format_pve_bytes(self, value):
         try:

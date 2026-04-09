@@ -35,9 +35,10 @@ import jh
 import db
 sys.path.append(os.getcwd() + "/scripts")
 sys.path.append(os.getcwd() + "/scripts/client")
-from run_script_batch import run_script_batch
+sys.path.append(os.getcwd() + "/class/es/service")
 from report_analyser import HostReportAnalyser
 from report_sender import HostReportSender
+import host_status_service as host_status_service_utils
 
 # print sys.path
 
@@ -233,122 +234,6 @@ def siteEdate():
         print(str(e))
 
 
-def clientTask():
-    # 系统监控任务
-    try:
-        import host_api
-        h_api = host_api.host_api()
-        sql = db.Sql()
-        count = 0
-        filename = 'data/control.conf'
-        
-        while True:
-            
-            # 获取配置的保留天数
-            day = 30
-            # try:
-            #     day = int(jh.readFile(filename))
-            #     if day < 1:
-            #         time.sleep(10)
-            #         continue
-            # except:
-            #     day = 30
-            addtime = int(time.time())
-            deltime = addtime - (day * 86400)
-            print(f"{Fore.BLUE}★ ========= [clientTask] STARTED -  开始时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(addtime))}{Style.RESET_ALL}")
-            # 预备主机数据
-            hostM = jh.M('view01_host')
-            host_list = hostM.field(h_api.host_field).select()
-
-            # 执行脚本
-            script_list = [
-                'get_host_info.py', 
-                'get_host_usage.py'
-            ]
-            batch_result = run_script_batch(script_list)
-
-            # 循环主机列表获取状态
-            for host in host_list:
-                ip = host['ip']
-                host_detail = {
-                    'host_id': host['host_id'],
-                    'host_name': host['host_name'],
-                    'host_status': 'Stopped',
-                    'uptime': '',
-                    'host_info': '{}',
-                    'cpu_info': '{}',
-                    'mem_info': '{}',
-                    'disk_info': '{}',
-                    'net_info': '{}',
-                    'load_avg': '{}',
-                    'firewall_info': {},
-                    'addtime': addtime
-                }
-                if batch_result.get(ip, None) is not None:
-                    ip_batch_result = batch_result[ip]
-                    if ip_batch_result:
-                        if ip_batch_result['status'] == 'ok':
-                            data = ip_batch_result.get('data', {}) 
-                            uptime = data.get('uptime', '')
-                            host_info = data.get('get_host_info.py', {})
-                            host_usage = data.get('get_host_usage.py', {})
-                            cpu_info = host_usage.get('cpu_info', {})
-                            mem_info = host_usage.get('mem_info', {})
-                            disk_info = host_usage.get('disk_info', [])
-                            net_info = host_usage.get('net_info', [])
-                            load_avg = host_usage.get('load_avg', {})
-                            firewall_info = host_usage.get('firewall_info', {})
-
-                            is_jhpanel_raw = host_info.get('isJHPanel')
-                            is_pve_raw = host_info.get('isPVE')
-                            if is_jhpanel_raw is not None or is_pve_raw is not None:
-                                is_jhpanel = is_jhpanel_raw in (1, True, "1", "true", "True", "yes", "YES")
-                                is_pve = is_pve_raw in (1, True, "1", "true", "True", "yes", "YES")
-                                sql.table('host').where('host_id=?', (host['host_id'],)).save(
-                                    'is_jhpanel,is_pve', (is_jhpanel, is_pve)
-                                )
-                            
-                            host_detail.update({
-                                'host_status': 'Running',
-                                'uptime': uptime,
-                                'host_info': json.dumps(host_info),
-                                'cpu_info': json.dumps(cpu_info),
-                                'mem_info': json.dumps(mem_info),
-                                'disk_info': json.dumps(disk_info),
-                                'net_info': json.dumps(net_info),
-                                'load_avg': json.dumps(load_avg),
-                                'firewall_info': json.dumps(firewall_info),
-                                # 'backup_info': json.dumps(backup_info),
-                                'addtime': addtime
-                            })
-
-                host_detail_keys = ','.join(list(host_detail.keys()))
-                host_detail_values = tuple(host_detail.values())
-
-                sql.table('host_detail').add(host_detail_keys, host_detail_values)
-                sql.table('host_detail').where("addtime<?", (deltime,)).delete()
-
-            endtime = int(time.time())
-          
-            print(f"{Fore.GREEN}★ ========= [clientTask] SUCCESS - 完成时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(endtime))} 用时: {str(endtime - addtime) + 's'} {Style.RESET_ALL}")
-          
-            time.sleep(5)
-            count += 1
-            del(batch_result)
-
-    except Exception as ex:
-        traceback.print_exc()
-        jh.writeFile('logs/sys_interrupt.pl', str(ex))
-        print(f"{Fore.RED}★ ========= [clientTask] ERROR：{str(ex)} {Style.RESET_ALL}")
-    
-        notify_msg = jh.generateCommonNotifyMessage("客户端监控异常：" + str(ex))
-        jh.notifyMessage(title='客户端异常通知', msg=notify_msg, stype='客户端监控', trigger_time=3600)
-
-        restartPanel()
-
-        time.sleep(30)
-        clientTask()
-
 def hostGrowthAlarmTask():
     """资源增长预测和告警"""
     try:
@@ -373,7 +258,7 @@ def hostGrowthAlarmTask():
             print(f"{Fore.BLUE}★ ========= [resourceGrowthAlarm] STARTED - 开始分析资源增长: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}{Style.RESET_ALL}")
             
             # 获取主机列表
-            host_list = jh.M('view01_host').field('host_id,host_name').select()
+            host_list = jh.M('host').field('host_id,host_name').select()
             
             for host in host_list:
                 host_id = host['host_id']
@@ -393,9 +278,14 @@ def hostGrowthAlarmTask():
 
                 print(f"|- 开始分析主机 [{host_name}] 资源增长...")
 
-                # 获取最新一条记录
-                latest_record = sql.table('host_detail').where('host_id=? AND host_status=?', 
-                                    (host_id, 'Running')).order('id desc').field('id,mem_info,disk_info,addtime').find()
+                history_start = current_time - (max(memory_scan_history_minutes, disk_scan_history_minutes) * 60)
+                status_history = host_status_service_utils.getHostStatusHistory(host_id, history_start, current_time)
+                running_history = [item for item in status_history if item.get('host_status') == 'Running']
+
+                if not running_history:
+                    continue
+
+                latest_record = running_history[-1]
 
                 # 如果没有最新记录，则跳过
                 if not latest_record:
@@ -408,8 +298,10 @@ def hostGrowthAlarmTask():
                 if enable_memory_monitor:
                     # 获取内存历史记录
                     memory_history_start = current_time - (memory_scan_history_minutes * 60)
-                    memory_history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
-                                        (host_id, memory_history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
+                    memory_history_records = [
+                        item for item in running_history
+                        if int(item.get('addtime', 0)) >= memory_history_start
+                    ]
                     
                     if memory_history_records and len(memory_history_records) >= 2:
                         memory_alarm = jh.analyze_resource_growth(
@@ -423,8 +315,10 @@ def hostGrowthAlarmTask():
                 if enable_disk_monitor:
                     # 获取磁盘历史记录
                     disk_history_start = current_time - (disk_scan_history_minutes * 60)
-                    disk_history_records = sql.table('host_detail').where('host_id=? AND addtime>?', 
-                                        (host_id, disk_history_start,)).order('id desc').field('id,mem_info,disk_info,addtime').select()
+                    disk_history_records = [
+                        item for item in running_history
+                        if int(item.get('addtime', 0)) >= disk_history_start
+                    ]
                     
                     if disk_history_records and len(disk_history_records) >= 2:
                         disk_alarm = jh.analyze_resource_growth(
@@ -624,12 +518,6 @@ def setDaemon(t):
     return t
 
 if __name__ == "__main__":
-   
-    # # client监控
-    # ct = threading.Thread(target=clientTask)
-    # ct = setDaemon(ct)
-    # ct.start()
-
     # # 资源增长告警
     # hga = threading.Thread(target=hostGrowthAlarmTask)
     # hga = setDaemon(hga)

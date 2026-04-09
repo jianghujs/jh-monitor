@@ -30,6 +30,12 @@ try:
 except ImportError:
     from urlparse import urlparse
 
+    
+from host_api import host_api
+h_api = host_api()
+sys.path.append(os.getcwd() + "/class/es/service")
+import host_status_service as host_status_service_utils
+
 
 class config_api:
 
@@ -163,20 +169,20 @@ class config_api:
         return host_ids
 
     def _getReportHostOptions(self):
-        data = jh.M('view01_host').field('host_id,host_name,ip,host_status').order('id desc').select()
-        if isinstance(data, str) or data is None:
-            return []
+        data = h_api.getHostMetaRows()
+        detail_map = host_status_service_utils.getLatestHostDetailMap(data)
 
         options = []
         for item in data:
             host_id = str(item.get('host_id', '')).strip()
             if host_id == '':
                 continue
+            host_status = detail_map.get(host_id, {}).get('host_status', 'Stopped')
             options.append({
                 'host_id': host_id,
                 'host_name': item.get('host_name', ''),
                 'ip': item.get('ip', ''),
-                'host_status': item.get('host_status', 0)
+                'host_status': host_status
             })
         return options
 
