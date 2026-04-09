@@ -30,36 +30,6 @@ filebeat.inputs:
     log_index: host-pve-system-status
 
 - type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-xtrabackup
-
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-xtrabackup-inc
-
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-backup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-backup-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-backup
-
-- type: log
 
   # Unique ID among all inputs, an ID is required.
   # id: my-filestream-id
@@ -194,15 +164,15 @@ output.elasticsearch:
     - index: "host-pve-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-pve-system-status"
-    - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
+    - index: "host-pve-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-xtrabackup"
-    - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
+        fields.log_index: "host-pve-xtrabackup"
+    - index: "host-pve-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-xtrabackup-inc"
-    - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
+        fields.log_index: "host-pve-xtrabackup-inc"
+    - index: "host-pve-<hostIdIndex>-backup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-backup"
+        fields.log_index: "host-pve-backup"
 
   # Performance preset - one of "balanced", "throughput", "scale",
   # "latency", or "custom".
