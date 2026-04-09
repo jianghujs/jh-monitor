@@ -98,12 +98,18 @@ else
 fi
 
 validate_filebeat_config() {
+  echo "开始校验 filebeat 配置: /etc/filebeat/filebeat.yml"
   if command -v filebeat >/dev/null 2>&1; then
+    echo "检测到 filebeat 命令，执行: filebeat test config -c /etc/filebeat/filebeat.yml"
     filebeat test config -c /etc/filebeat/filebeat.yml >/tmp/filebeat_test.log 2>&1 || {
+      echo "filebeat 配置校验失败，输出如下:"
       cat /tmp/filebeat_test.log
       echo "错误: filebeat 配置校验失败"
       exit 1
     }
+    echo "filebeat 配置校验通过"
+  else
+    echo "警告: 未找到 filebeat 命令，跳过配置校验"
   fi
 }
 
@@ -116,9 +122,12 @@ run_filebeat_setup() {
     return 0
   fi
 
-  echo "正在配置filebeat，日志写入: ${setup_log_file}"
+  echo "开始执行 filebeat setup，日志写入: ${setup_log_file}"
+  echo "执行命令: filebeat setup -e"
   : > "${setup_log_file}"
   if ! filebeat setup -e >"${setup_log_file}" 2>&1; then
+    echo "filebeat setup 失败，输出如下:"
+    cat "${setup_log_file}"
     echo "错误: filebeat setup 失败，请检查日志: ${setup_log_file}"
     return 1
   fi
