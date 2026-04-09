@@ -4,9 +4,9 @@ import os
 import sys
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(CURRENT_DIR)
-ES_DIR = os.path.join(ROOT_DIR, 'class', 'es')
-ES_MODEL_DIR = os.path.join(ROOT_DIR, 'class', 'es', 'model')
+ES_DIR = os.path.dirname(CURRENT_DIR)
+ROOT_DIR = os.path.dirname(os.path.dirname(ES_DIR))
+ES_MODEL_DIR = os.path.join(ES_DIR, 'model')
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 if ES_DIR not in sys.path:
