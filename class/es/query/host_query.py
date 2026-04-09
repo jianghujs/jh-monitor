@@ -3,6 +3,7 @@
 
 HOST_STATUS_INDEXES = 'host-system-status,host-*-system-status-*,*-host-system-status-*'
 FILEBEAT_INDEXES = 'filebeat-*'
+HOST_REPORT_SINGLE_INDEXES = 'host-report-single'
 
 HOST_STATUS_SOURCE_FIELDS = [
     "host",
@@ -132,6 +133,59 @@ def buildLatestReportSearchBody(host_ip, log_path):
             }
         ],
         "_source": REPORT_LOG_SOURCE_FIELDS
+    }
+
+
+def buildSingleHostReportQuery(host_ids, report_date=''):
+    host_ids = [str(item or '').strip() for item in (host_ids or []) if str(item or '').strip() != '']
+    report_date = str(report_date or '').strip()
+
+    if len(host_ids) == 0:
+        return {"match_none": {}}
+
+    filters = [
+        {
+            "bool": {
+                "should": [
+                    {"terms": {"host_id.keyword": host_ids}},
+                    {"terms": {"host_id": host_ids}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+    ]
+    if report_date != '':
+        filters.append({"term": {"report_date": report_date}})
+
+    return {"bool": {"filter": filters}}
+
+
+def buildSingleHostReportSearchBody(host_ids, report_date='', size=None):
+    if size is None:
+        size = len(host_ids or [])
+    if size <= 0:
+        size = 10
+
+    return {
+        "size": size,
+        "query": buildSingleHostReportQuery(host_ids, report_date),
+        "sort": [
+            {
+                "report_date": {
+                    "order": "desc",
+                    "unmapped_type": "date"
+                }
+            },
+            {
+                "report_time.keyword": {
+                    "order": "desc",
+                    "unmapped_type": "keyword"
+                }
+            }
+        ],
+        "collapse": {
+            "field": "host_id.keyword"
+        }
     }
 
 

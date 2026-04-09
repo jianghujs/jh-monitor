@@ -209,8 +209,7 @@ class host_api:
                 host_status_indexes=self.host_status_indexes
             )
 
-            panel_report = self.getPanelReportFromES(_list)
-            pve_report = self.getPVEReportFromES(_list)
+            host_report_map = self.getHostReportFromES(_list)
 
             from config_api import config_api
             dispatch_config = config_api().getReportDispatchConfigData()
@@ -224,19 +223,10 @@ class host_api:
                 _list[i] = self.mergeHostRowWithDetail(
                     _list[i], host_detail_map.get(_list[i].get('host_id', ''))
                 )
-                is_jhpanel = _list[i].get('is_jhpanel')
-                is_jhpanel = value_utils.safeBool(is_jhpanel)
-                if True or is_jhpanel:
-                    if panel_report:
-                        _list[i]['panel_report'] = panel_report.get(_list[i]['ip'], '{}')
-                
-                is_pve = _list[i].get('is_pve')
-                is_pve = value_utils.safeBool(is_pve)
-                if is_pve:
-                    if pve_report:
-                        _list[i]['pve_report'] = pve_report.get(_list[i]['ip'], '{}')
-                
                 host_id = _list[i].get('host_id')
+                _list[i]['host_report'] = '{}'
+                if host_report_map:
+                    _list[i]['host_report'] = host_report_map.get(host_id, '{}')
                 host_report_enabled = bool(host_id and report_enabled and host_id in report_host_id_set)
                 _list[i]['report_notify'] = host_report_enabled
                 _list[i]['report_cron'] = dict(default_report_cron)
@@ -352,6 +342,10 @@ class host_api:
                 host_status_indexes=self.host_status_indexes
             )
             host_detail = self.mergeHostRowWithDetail(host_rows[0], host_detail_map.get(host_id))
+            host_report_map = self.getHostReportFromES(host_rows)
+            host_detail['host_report'] = '{}'
+            if host_report_map:
+                host_detail['host_report'] = host_report_map.get(host_id, '{}')
             host_detail = self.parseDetailJSONValue(host_detail)
             from config_api import config_api
             dispatch_config = config_api().getReportDispatchConfigData()
@@ -426,8 +420,7 @@ class host_api:
             host_detail['port_info'] = json.loads(host_detail['port_info']) if host_detail.get('port_info') is not None else {}
             host_detail['backup_info'] = json.loads(host_detail['backup_info']) if host_detail.get('backup_info') is not None else {}
             host_detail['temperature_info'] = json.loads(host_detail['temperature_info']) if host_detail.get('temperature_info') is not None else {}    
-            host_detail['panel_report'] = json.loads(host_detail['panel_report']) if host_detail.get('panel_report') is not None else {}
-            host_detail['pve_report'] = json.loads(host_detail['pve_report']) if host_detail.get('pve_report') is not None else {}
+            host_detail['host_report'] = self.normalizeHostReportData(host_detail.get('host_report')) or {}
         except Exception as e:
             traceback.print_exc()
         return host_detail
@@ -592,66 +585,42 @@ class host_api:
             data = data[::step]
         return data
 
-    # 从ES获取面板报告
-    def getPanelReportFromES(self, host_rows):
-      if not host_rows:
-        return {}
-
-      rows = []
-      for row in host_rows:
-        is_jhpanel = row.get('is_jhpanel')
-        is_jhpanel = value_utils.safeBool(is_jhpanel)
-        if True or is_jhpanel:
-          rows.append(row)
-
-      return self._getReportFromES(rows, "/www/server/jh-panel/logs/report.log")
-
-    # 从ES获取PVE面板报告
-    def getPVEReportFromES(self, host_rows):
-      if not host_rows:
-        return {}
-
-      rows = []
-      for row in host_rows:
-        is_pve = row.get('is_pve')
-        is_pve = value_utils.safeBool(is_pve)
-        if is_pve:
-          rows.append(row)
-
-      return self._getReportFromES(rows, "/www/server/os_tool/pve/logs/report.log")
-
-    def _getReportFromES(self, host_rows, log_path):
+    # 从ES获取主机报告
+    def getHostReportFromES(self, host_rows):
       try:
         es = jh.getES()
-        panel_report = {}
+        host_report = {}
         if not host_rows:
-          return panel_report
+          return host_report
 
-        msearch_body = []
+        host_ids = []
         for row in host_rows:
-          host_ip = row.get('ip')
-          msearch_body.append({"index": host_query_utils.FILEBEAT_INDEXES})
-          msearch_body.append(host_query_utils.buildLatestReportSearchBody(host_ip, log_path))
-
-        conn = es.getConn()
-        response = conn.msearch(body=msearch_body)
-        if hasattr(response, "body"):
-          response = response.body
-        elif hasattr(response, "to_dict"):
-          response = response.to_dict()
-
-        responses = response.get("responses", [])
-        for idx, item in enumerate(responses):
-          if idx >= len(host_rows):
-            break
-          host_ip = host_rows[idx].get('ip')
-          if not host_ip:
+          host_id = str(row.get('host_id', '') or '').strip()
+          if not host_id:
             continue
-          hits = item.get("hits", {}).get("hits", [])
-          if hits:
-            panel_report[host_ip] = hits[0].get("_source", {}).get("message")
+          if host_id not in host_ids:
+            host_ids.append(host_id)
+
+        if not host_ids:
+          return host_report
+
+        response = es.search(
+          index=host_query_utils.HOST_REPORT_SINGLE_INDEXES,
+          body=host_query_utils.buildSingleHostReportSearchBody(
+            host_ids,
+            size=max(len(host_ids), 100)
+          )
+        )
+
+        hits = response.get('hits', {}).get('hits', []) if isinstance(response, dict) else []
+        for hit in hits:
+          doc = hit.get('_source', {}) if isinstance(hit, dict) else {}
+          host_id = str(doc.get('host_id', '') or '').strip()
+          if not host_id:
+            continue
+          host_report[host_id] = doc
         
-        return panel_report
+        return host_report
       except Exception as e:
         traceback.print_exc()
         return None

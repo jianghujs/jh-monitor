@@ -43,6 +43,16 @@ function renderHostReportTemplate(template, data) {
   return JHNunjucks.renderString(template, data);
 }
 
+function isPveHost(host) {
+  if (!host) {
+    return false;
+  }
+  if (host.is_pve === true || host.is_pve === 1 || host.is_pve === '1') {
+    return true;
+  }
+  return !!(host.host_info && host.host_info.isPVE);
+}
+
 function getReportItemColor(item, fallbackColor) {
   if (item.indexOf('color: red') !== -1 || item.indexOf('color:red') !== -1) {
     return 'red';
@@ -258,8 +268,7 @@ function getWeb(page, search, host_group_id) {
 
       // 报告概览
       let report_summary = '';
-      let is_pve = data.data[i].host_info && data.data[i].host_info.isPVE;
-      let report_data = is_pve ? data.data[i].pve_report : data.data[i].panel_report;
+      let report_data = data.data[i].host_report;
       let report_items = [];
       let report_notify = !!data.data[i].report_notify;
       let report_notify_icon = report_notify ? `<span class="report-mail-icon glyphicon glyphicon-envelope" title="已开启报告通知" style="margin-left: 6px; color: #20a53a;"></span>` : '';
@@ -854,7 +863,7 @@ function openHostDetail(host_id,host_name,endTime,addtime,event){
     { title: '基础监控', fun: `detailBaseMonitor('${host_id}')` },
     { title: '日志监控', fun: `detailLogMonitor('${host_id}')` },
     { title: '系统监控', fun: `detailSysMonitor('${host_name}')` },
-    { title: '面板报告', fun: `detailPanelReport('${host_id}')`, hidden: !(host && host.host_info && ((host.host_info.isJHPanel && host.panel_report) || (host.host_info.isPVE && host.pve_report))) },
+    { title: '主机报告', fun: `detailPanelReport('${host_id}')`, hidden: !(host && host.host_report && Object.keys(host.host_report).length > 0) },
   ]
 
 	layer.open({
@@ -1351,6 +1360,8 @@ function renderHostReportHtml(reportData, callback) {
       title: reportData.title || '',
       ip: reportData.ip || '',
       report_time: reportData.report_time || '',
+      start_time: reportData.start_time || reportData.start_date || '',
+      end_time: reportData.end_time || reportData.end_date || '',
       start_date: reportData.start_date || '',
       end_date: reportData.end_date || '',
       summary_tips: reportData.summary_tips || [],
@@ -1375,6 +1386,8 @@ function renderPVEReportHtml(reportData, callback) {
       title: reportData.title || '',
       ip: reportData.ip || '',
       report_time: reportData.report_time || '',
+      start_time: reportData.start_time || reportData.start_date || '',
+      end_time: reportData.end_time || reportData.end_date || '',
       start_date: reportData.start_date || '',
       end_date: reportData.end_date || '',
       summary_tips: reportData.summary_tips || [],
@@ -1396,16 +1409,20 @@ function renderPVEReportHtml(reportData, callback) {
  */
 function detailPanelReport(host_id) {
   let host = hostList.find(item => item.host_id == host_id);
-  let is_pve = host && host.host_info && host.host_info.isPVE;
-  let report_data = is_pve ? host.pve_report : host.panel_report;
+  let is_pve = isPveHost(host);
+  let report_data = host ? host.host_report : null;
   let bodyHtml = '';
   if (report_data && report_data.title) {
     $("#hostdetail-con").html(buildEmptyHostReportHtml());
     var renderer = is_pve ? renderPVEReportHtml : renderHostReportHtml;
     renderer(report_data, function(html) {
-      bodyHtml = html || buildEmptyHostReportHtml();
+      bodyHtml = html || report_data.html_content || buildEmptyHostReportHtml();
       $("#hostdetail-con").html(bodyHtml);
     });
+    return;
+  }
+  if (report_data && report_data.html_content) {
+    $("#hostdetail-con").html(report_data.html_content);
     return;
   } else {
     bodyHtml = buildEmptyHostReportHtml();
