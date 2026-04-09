@@ -372,8 +372,58 @@ REPORT_INDEXES = {
 }
 
 
+REPORT_INDEX_TEMPLATES = {
+    'host-pve-system-status-template': {
+        'index_patterns': ['host-pve-*-system-status-*'],
+        'priority': 500,
+        'template': {
+            'settings': {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            },
+            'mappings': {
+                'dynamic': True,
+                'properties': {
+                    'host': {
+                        'dynamic': True,
+                        'properties': {
+                            'host_id': {'type': 'keyword'},
+                            'host_name': {'type': 'keyword'},
+                            'host_ip': {'type': 'ip'},
+                            'host_group': {'type': 'keyword'},
+                            'host_status': {'type': 'keyword'},
+                            'system_type': {'type': 'keyword'}
+                        }
+                    },
+                    'system': {
+                        'dynamic': True,
+                        'properties': {
+                            'cpu': {'type': 'float'},
+                            'memory': {'type': 'float'},
+                            'load': {'type': 'object', 'enabled': False},
+                            'disks': {'type': 'object', 'enabled': False}
+                        }
+                    },
+                    'pve': {'type': 'object', 'enabled': False},
+                    'collector': {
+                        'dynamic': True,
+                        'properties': {
+                            'source': {'type': 'keyword'},
+                            'version': {'type': 'keyword'}
+                        }
+                    },
+                    'add_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'add_timestamp': {'type': 'double'}
+                }
+            }
+        }
+    }
+}
+
+
 __all__ = [
     'DATE_TIME_FORMAT',
     'DATE_ONLY_FORMAT',
     'REPORT_INDEXES',
+    'REPORT_INDEX_TEMPLATES',
 ]

@@ -89,39 +89,8 @@ setup.template.settings:
 
 setup.template.name: "host-pve-<hostIdIndex>-logs"
 setup.template.pattern: "host-pve-<hostIdIndex>-*"
-setup.template.enabled: true
+setup.template.enabled: false
 setup.template.overwrite: true
-setup.template.append_fields:
-  # PVE 指标里这几类字段容易出现 int/float 混用，显式固定成 float。
-  - { name: system.cpu, type: float }
-  - { name: system.memory, type: float }
-  - { name: system.load.pro, type: float }
-  - { name: system.load.one, type: float }
-  - { name: system.load.five, type: float }
-  - { name: system.load.fifteen, type: float }
-  - { name: pve.data.cpu.usage, type: float }
-  - { name: pve.data.cpu.load, type: float }
-  - { name: pve.data.cpu.top_processes.cpu, type: float }
-  - { name: pve.data.cpu.top_processes.mem, type: float }
-  - { name: pve.data.memory.usage_percent, type: float }
-  - { name: pve.data.disk.filesystems.use_percent, type: float }
-  - { name: pve.data.disk.large_disks.use_percent, type: float }
-  - { name: pve.data.sensors.temperatures.value, type: float }
-  - { name: pve.data.sensors.fans.value, type: float }
-  - { name: pve.data.sensors.voltages.value, type: float }
-  - { name: pve.data.io.devices.rrqm_s, type: float }
-  - { name: pve.data.io.devices.wrqm_s, type: float }
-  - { name: pve.data.io.devices.r_s, type: float }
-  - { name: pve.data.io.devices.w_s, type: float }
-  - { name: pve.data.io.devices.rkB_s, type: float }
-  - { name: pve.data.io.devices.wkB_s, type: float }
-  - { name: pve.data.io.devices.avgrq_sz, type: float }
-  - { name: pve.data.io.devices.avgqu_sz, type: float }
-  - { name: pve.data.io.devices.await, type: float }
-  - { name: pve.data.io.devices.r_await, type: float }
-  - { name: pve.data.io.devices.w_await, type: float }
-  - { name: pve.data.io.devices.svctm, type: float }
-  - { name: pve.data.io.devices.util, type: float }
 
 
 # ================================== General ===================================

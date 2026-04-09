@@ -164,6 +164,20 @@ class ES:
             self._err = ex
             return None
 
+    def indexTemplateExists(self, name):
+        try:
+            return bool(self.getConn().indices.exists_index_template(name=name))
+        except Exception as ex:
+            self._err = ex
+            return False
+
+    def putIndexTemplate(self, name, body):
+        try:
+            return self.getConn().indices.put_index_template(name=name, body=body)
+        except Exception as ex:
+            self._err = ex
+            return None
+
     def searchAll(self, index, body, source_fields=None, page_size=500, scroll='1m'):
         results = []
         scroll_id = None

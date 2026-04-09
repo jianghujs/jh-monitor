@@ -31,6 +31,14 @@ class IndexManager(object):
                 results.append({'index': index_name, 'action': 'created'})
         return results
 
+    def ensure_index_templates(self, template_definitions):
+        results = []
+        for template_name, template_body in template_definitions.items():
+            exists = self.es.indexTemplateExists(template_name)
+            self.es.putIndexTemplate(template_name, template_body)
+            results.append({'template': template_name, 'action': 'updated' if exists else 'created'})
+        return results
+
 
 __all__ = [
     'IndexManager',

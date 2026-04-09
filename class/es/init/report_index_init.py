@@ -15,11 +15,15 @@ if ES_MODEL_DIR not in sys.path:
     sys.path.insert(0, ES_MODEL_DIR)
 
 from index_manager import IndexManager
-from report_schema import REPORT_INDEXES
+from report_schema import REPORT_INDEXES, REPORT_INDEX_TEMPLATES
 
 
 def main():
-    results = IndexManager().ensure_indices(REPORT_INDEXES)
+    manager = IndexManager()
+    results = {
+        'indices': manager.ensure_indices(REPORT_INDEXES),
+        'templates': manager.ensure_index_templates(REPORT_INDEX_TEMPLATES),
+    }
     print(json.dumps(results, ensure_ascii=False, indent=2))
     return 0
 
