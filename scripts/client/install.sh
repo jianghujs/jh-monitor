@@ -144,17 +144,7 @@ EOF
 }
 
 config_run_env() {
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    local local_script="${script_dir}/install/ensure_run_env.sh"
-    if [ -f "$local_script" ]; then
-        if ! bash "$local_script" "$net_env_cn"; then
-            show_error "Python 环境初始化失败"
-            exit 1
-        fi
-        return
-    fi
-
+    echo "开始下载最新 Python 环境初始化脚本..."
     if ! wget -O /tmp/install_ensure_run_env.sh "${RAW_BASE}/scripts/client/install/ensure_run_env.sh"; then
         show_error "下载 Python 环境初始化脚本失败"
         exit 1
@@ -198,14 +188,7 @@ add_server_ssh_cert(){
 
 config_filebeat() {
     export JH_MONITOR_HOST_ID_FILE="$HOST_ID_FILE"
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    local local_script="${script_dir}/install/filebeat/install.sh"
-    if [ -f "$local_script" ]; then
-        bash "$local_script" "$net_env_cn"
-        return $?
-    fi
-
+    echo "开始下载最新 filebeat 安装脚本..."
     if wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh"; then
         bash /tmp/install_filebeat.sh "$net_env_cn"
         return $?
@@ -264,14 +247,7 @@ install_report_collector() {
     export REPORT_COLLECTOR_USERNAME="$USERNAME"
     export MONITOR_RAW_BASE="$RAW_BASE"
 
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    local local_script="${script_dir}/install/debian.sh"
-    if [ -f "$local_script" ]; then
-        bash "$local_script" update
-        return $?
-    fi
-
+    echo "开始下载最新 report collector 安装脚本..."
     if wget -O /tmp/install_report_collector.sh "${RAW_BASE}/scripts/client/install/debian.sh"; then
         REPORT_COLLECTOR_USERNAME="$USERNAME" MONITOR_RAW_BASE="$RAW_BASE" bash /tmp/install_report_collector.sh update
         return $?

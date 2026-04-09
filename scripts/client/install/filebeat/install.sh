@@ -64,12 +64,8 @@ if [ -d /etc/pve ]; then
   config_type="pve"
 fi
 
-LOCAL_CONFIG_PATH="$(cd "$(dirname "$0")" && pwd)/config/filebeat.${config_type}.yml"
-if [ -f "$LOCAL_CONFIG_PATH" ]; then
-  cp "$LOCAL_CONFIG_PATH" /tmp/filebeat.yml
-else
-  wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/config/filebeat.${config_type}.yml"
-fi
+echo "开始下载最新 filebeat 配置: filebeat.${config_type}.yml"
+wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/config/filebeat.${config_type}.yml"
 if [ ! -s /tmp/filebeat.yml ]; then
   echo "错误: 下载 filebeat 配置失败 (${config_type})"
   exit 1

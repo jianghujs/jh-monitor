@@ -9,8 +9,6 @@ ACTION="${1:-install}"
 USERNAME="${REPORT_COLLECTOR_USERNAME:-ansible_user}"
 RAW_BASE="${MONITOR_RAW_BASE:-https://raw.githubusercontent.com/jianghujs/jh-monitor/master}"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLIENT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_HOME="/home/${USERNAME}/jh-monitor-scripts"
 DATA_HOME="/home/${USERNAME}/jh-monitor-data"
 LOG_DIR="/home/${USERNAME}/jh-monitor-logs"
@@ -53,12 +51,10 @@ prepare_dirs() {
 
 fetch_or_copy() {
   local name="$1"
-  local local_file="${CLIENT_DIR}/${name}"
   local target_file="${SCRIPT_HOME}/${name}"
 
-  if [ -f "$local_file" ]; then
-    cp "$local_file" "$target_file"
-  elif ! wget -O "$target_file" "${RAW_BASE}/scripts/client/${name}"; then
+  log "下载最新脚本: ${name}"
+  if ! wget -O "$target_file" "${RAW_BASE}/scripts/client/${name}"; then
     fail "下载 ${name} 失败"
   fi
 
@@ -69,11 +65,9 @@ fetch_or_copy() {
 run_cron_installer() {
   local cron_action="${1:-update}"
   local cron_script="/tmp/${CRON_HELPER_NAME}"
-  local local_script="${SCRIPT_DIR}/${CRON_HELPER_NAME}"
 
-  if [ -f "$local_script" ]; then
-    cron_script="$local_script"
-  elif ! wget -O "$cron_script" "${RAW_BASE}/scripts/client/install/${CRON_HELPER_NAME}"; then
+  log "下载最新定时任务安装脚本: ${CRON_HELPER_NAME}"
+  if ! wget -O "$cron_script" "${RAW_BASE}/scripts/client/install/${CRON_HELPER_NAME}"; then
     fail "下载 ${CRON_HELPER_NAME} 失败"
   fi
 
