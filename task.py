@@ -526,17 +526,19 @@ def hostReportPipelineTask():
                 host_report_logger = lambda message: print(f"{Fore.CYAN}★ ========= [hostReportPipelineTask] {message}{Style.RESET_ALL}")
                 analyser = HostReportAnalyser(now_ts=now_ts, logger=host_report_logger)
                 sender = HostReportSender(now_ts=now_ts, logger=host_report_logger, es_client=analyser._es)
+                report_date = time.strftime('%Y-%m-%d', time.localtime(now_ts))
+                report_window = analyser.get_report_window(report_date)
                 report_config, enabled_rows, due_rows = analyser.get_schedule_state()
                 if not enabled_rows or not due_rows:
                     time.sleep(31)
                     continue
                 
-                print(f"{Fore.BLUE}★ ========= [hostReportPipelineTask] STARTED - 待分析主机数: {len(enabled_rows)} 触发主机数: {len(due_rows)}{Style.RESET_ALL}")
+                print(f"{Fore.BLUE}★ ========= [hostReportPipelineTask] STARTED - 报告日期: {report_window.get('report_date')} 待分析主机数: {len(enabled_rows)} 触发主机数: {len(due_rows)}{Style.RESET_ALL}")
 
-                analysis_result = analyser.run_analysis(enabled_rows)
+                analysis_result = analyser.run_analysis(enabled_rows, report_date=report_date)
                 print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] ANALYSIS - 日期: {analysis_result.get('report_date')} ready={analysis_result.get('single_ready')}/{analysis_result.get('single_total')} abnormal={analysis_result.get('single_abnormal')} overview_ready={analysis_result.get('overview_ready')}{Style.RESET_ALL}")
 
-                result = sender.run_delivery(due_rows, report_config, enabled_rows=enabled_rows)
+                result = sender.run_delivery(due_rows, report_config, report_date=report_date, enabled_rows=enabled_rows)
                 status = result.get('status')
                 if status == 'ok':
                     print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] SUCCESS - 日期: {result.get('report_date')} overview={result.get('overview_sent')} single_success={result.get('single_success')} single_skipped={result.get('single_skipped')}{Style.RESET_ALL}")

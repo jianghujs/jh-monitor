@@ -12,6 +12,7 @@ ROOT_DIR = os.path.dirname(CURRENT_DIR)
 CORE_DIR = os.path.join(ROOT_DIR, 'class', 'core')
 PLUGIN_DIR = os.path.join(ROOT_DIR, 'class', 'plugin')
 ES_MODEL_DIR = os.path.join(ROOT_DIR, 'class', 'es', 'model')
+CLIENT_DIR = os.path.join(ROOT_DIR, 'scripts', 'client')
 
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
@@ -21,6 +22,8 @@ if PLUGIN_DIR not in sys.path:
     sys.path.insert(0, PLUGIN_DIR)
 if ES_MODEL_DIR not in sys.path:
     sys.path.insert(0, ES_MODEL_DIR)
+if CLIENT_DIR not in sys.path:
+    sys.path.insert(0, CLIENT_DIR)
 
 import jh
 import value_tool
@@ -329,6 +332,16 @@ class HostReportAnalyser(object):
             scroll='1m'
         )
         backup_docs = [doc for doc in backup_docs if self._is_doc_in_window(doc, window)]
+        self.log(
+            '[report-analysis] raw docs loaded report_date={0} status_index={1} status={2} xtrabackup={3} xtrabackup_inc={4} backup={5}'.format(
+                window['report_date'],
+                RAW_STATUS_INDEX,
+                len(status_docs),
+                len(xtrabackup_docs),
+                len(xtrabackup_inc_docs),
+                len(backup_docs)
+            )
+        )
 
         grouped = {}
         for row in host_rows:
@@ -341,7 +354,7 @@ class HostReportAnalyser(object):
             }
 
         for doc in status_docs:
-            host_id = value_tool.getNested(doc, ['host', 'host_id'], '')
+            host_id = value_tool.getNested(doc, ['host', 'host_id'], '') or doc.get('host_id', '')
             if host_id in grouped:
                 grouped[host_id]['status'].append(doc)
 
@@ -359,6 +372,21 @@ class HostReportAnalyser(object):
             host_id = doc.get('host_id', '')
             if host_id in grouped:
                 grouped[host_id]['backup'].append(doc)
+
+        for row in host_rows:
+            host_id = row.get('host_id')
+            current_group = grouped.get(host_id, {})
+            self.log(
+                '[report-analysis] raw docs grouped report_date={0} host_id={1} host_name={2} status={3} xtrabackup={4} xtrabackup_inc={5} backup={6}'.format(
+                    window['report_date'],
+                    host_id,
+                    row.get('host_name', ''),
+                    len(current_group.get('status', []) or []),
+                    len(current_group.get('xtrabackup', []) or []),
+                    len(current_group.get('xtrabackup_inc', []) or []),
+                    len(current_group.get('backup', []) or [])
+                )
+            )
 
         return grouped
 
