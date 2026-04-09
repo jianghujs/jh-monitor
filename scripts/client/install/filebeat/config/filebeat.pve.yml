@@ -164,15 +164,6 @@ output.elasticsearch:
     - index: "host-pve-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-pve-system-status"
-    - index: "host-pve-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-pve-xtrabackup"
-    - index: "host-pve-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-pve-xtrabackup-inc"
-    - index: "host-pve-<hostIdIndex>-backup-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-pve-backup"
 
   # Performance preset - one of "balanced", "throughput", "scale",
   # "latency", or "custom".
