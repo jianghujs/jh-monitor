@@ -456,6 +456,66 @@ class config_api:
         except Exception as e:
             return False, 'ES连接失败: ' + str(e), None
 
+    def _getReportScriptsDir(self):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(os.path.dirname(current_dir))
+        return os.path.join(root_dir, 'scripts')
+
+    def _buildTestReportHostRows(self, raw_host_ids=None):
+        if raw_host_ids is None:
+            dispatch_config = self.getReportDispatchConfigData() or {}
+            report_host_ids = self._normalizeReportHostIds(dispatch_config.get('report_host_ids', []))
+        else:
+            host_options = self._getReportHostOptions()
+            valid_host_ids = set(item['host_id'] for item in host_options)
+            report_host_ids = self._normalizeReportHostIds(raw_host_ids, valid_host_ids)
+        if len(report_host_ids) == 0:
+            return False, '请先在服务器报告配置中选择报告主机!', None, None
+
+        host_rows = jh.M('view01_host').field(h_api.host_field).select()
+        if isinstance(host_rows, str) or host_rows is None:
+            host_rows = []
+
+        host_row_map = {}
+        for row in host_rows:
+            host_id = str(row.get('host_id', '')).strip()
+            if host_id != '':
+                host_row_map[host_id] = row
+
+        selected_rows = []
+        missing_host_ids = []
+        for host_id in report_host_ids:
+            if host_id in host_row_map:
+                selected_rows.append(host_row_map[host_id])
+            else:
+                missing_host_ids.append(host_id)
+
+        if len(selected_rows) == 0:
+            return False, '选中的报告主机不存在或已被删除，请重新选择!', None, None
+        return True, 'ok', selected_rows, missing_host_ids
+
+    def _isEmailNotifyReady(self):
+        recipients = []
+        enabled = False
+        try:
+            notify_data = jh.getNotifyData(True)
+            if isinstance(notify_data, dict):
+                email_data = notify_data.get('email', {}) or {}
+                enabled = bool(email_data.get('enable'))
+                config_data = email_data.get('data', {}) if isinstance(email_data, dict) else {}
+                raw_recipients = config_data.get('to_mail_addr', '')
+                if isinstance(raw_recipients, list):
+                    recipients = [str(item).strip() for item in raw_recipients if str(item).strip() != '']
+                else:
+                    for item in str(raw_recipients).replace(';', ',').split(','):
+                        item = item.strip()
+                        if item != '':
+                            recipients.append(item)
+        except Exception:
+            enabled = False
+            recipients = []
+        return enabled, recipients
+
     ##### ----- start ----- ###
 
     # 取面板列表
@@ -718,6 +778,100 @@ class config_api:
         report_config.update(default_report_config)
         self._writeJsonConfig(self.__report_config_addr, report_config)
         return jh.returnJson(True, '服务器报告阈值已重置为默认配置!', default_report_config)
+
+    def testSendReportMailApi(self):
+        email_enabled, recipients = self._isEmailNotifyReady()
+        if not email_enabled:
+            return jh.returnJson(False, '请先开启邮件通知后再测试发送服务器报告!')
+        if len(recipients) == 0:
+            return jh.returnJson(False, '请先在邮件通知中配置至少一个收件人后再测试发送!')
+
+        report_host_ids = request.form.getlist('report_host_ids[]')
+        if len(report_host_ids) == 0:
+            report_host_ids = request.form.getlist('report_host_ids')
+        if len(report_host_ids) == 0:
+            report_host_ids = request.form.get('report_host_ids', None)
+
+        ok, msg, host_rows, missing_host_ids = self._buildTestReportHostRows(report_host_ids)
+        if not ok:
+            return jh.returnJson(False, msg)
+
+        threshold_form = {
+            'cpu': request.form.get('cpu', '').strip(),
+            'memory': request.form.get('memory', '').strip(),
+            'disk': request.form.get('disk', '').strip(),
+            'ssl_cert': request.form.get('ssl_cert', '').strip(),
+        }
+        if threshold_form['cpu'] == '' and threshold_form['memory'] == '' and threshold_form['disk'] == '' and threshold_form['ssl_cert'] == '':
+            threshold_config = self._getReportConfigData()
+        else:
+            ok, msg, threshold_config = self._normalizeReportConfig(threshold_form)
+            if not ok:
+                return jh.returnJson(False, msg)
+
+        scripts_dir = self._getReportScriptsDir()
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+
+        try:
+            from report_analyser import HostReportAnalyser
+            from report_sender import HostReportSender
+
+            now_ts = int(time.time())
+            logger = lambda message: print('[config.testSendReportMailApi] {0}'.format(message))
+            analyser = HostReportAnalyser(now_ts=now_ts, logger=logger)
+            analyser.thresholds = dict(threshold_config)
+            sender = HostReportSender(now_ts=now_ts, logger=logger, es_client=analyser._es)
+            sender.thresholds = dict(threshold_config)
+            report_date = time.strftime('%Y-%m-%d', time.localtime(now_ts))
+            report_config = {}
+            dispatch_config = self.getReportDispatchConfigData() or {}
+            for row in host_rows:
+                host_id = row.get('host_id')
+                report_config[host_id] = {
+                    'enabled': True,
+                    'cron': dispatch_config.get('cron', self.getDefaultReportCronData())
+                }
+
+            analysis_result = analyser.run_analysis(host_rows=host_rows, report_date=report_date)
+            delivery_result = sender.run_delivery(
+                due_rows=host_rows,
+                report_config=report_config,
+                report_date=report_date,
+                enabled_rows=host_rows
+            )
+        except Exception as ex:
+            return jh.returnJson(False, '测试发送服务器报告失败: ' + str(ex))
+
+        delivery_status = delivery_result.get('status')
+        if delivery_status not in ('ok', 'partial'):
+            error_msg = delivery_result.get('error') or delivery_result.get('reason') or 'unknown'
+            return jh.returnJson(
+                False,
+                '报告已生成，但发送失败: {0}'.format(error_msg),
+                {
+                    'analysis_result': analysis_result,
+                    'delivery_result': delivery_result,
+                    'missing_host_ids': missing_host_ids,
+                    'recipients': recipients
+                }
+            )
+
+        message = '测试发送完成! 报告日期: {0}，概览发送: {1}，异常单机发送成功: {2}，跳过: {3}'.format(
+            delivery_result.get('report_date', ''),
+            '是' if delivery_result.get('overview_sent') else '否',
+            delivery_result.get('single_success', 0),
+            delivery_result.get('single_skipped', 0)
+        )
+        if len(missing_host_ids) > 0:
+            message += '；以下主机未找到，已跳过: {0}'.format(', '.join(missing_host_ids))
+
+        return jh.returnJson(True, message, {
+            'analysis_result': analysis_result,
+            'delivery_result': delivery_result,
+            'missing_host_ids': missing_host_ids,
+            'recipients': recipients
+        })
 
     def setBasicAuthApi(self):
         basic_user = request.form.get('basic_user', '').strip()

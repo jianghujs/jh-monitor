@@ -387,6 +387,21 @@ $('.btn_save_report_schedule').click(function(){
 	}, 'json');
 });
 
+$('.btn_test_send_report_mail').click(function(){
+	layer.confirm('确定立即生成一份最新的服务器报告，并按当前邮件通知配置发送测试邮件吗？', {title:'测试发送服务器报告', icon:13}, function(index){
+		layer.close(index);
+		var loadT = layer.msg('正在生成报告并发送测试邮件...', {icon:16,time:0,shade:[0.3, '#000']});
+		$.post('/config/test_send_report_mail', getReportSchedulePayload(), function(rdata){
+			layer.close(loadT);
+			showMsg(rdata.msg, function(){
+				if (rdata.status){
+					loadReportConfig();
+				}
+			}, {icon:rdata.status?1:2}, 3500);
+		}, 'json');
+	});
+});
+
 $(function(){
 	loadReportConfig();
 });
