@@ -256,6 +256,10 @@ class HostReportAnalyser(object):
         except Exception:
             return raw_text.replace(' ', 'T')
 
+    def _format_es_datetime(self, time_text):
+        """将本地时间字符串转成带时区的 ES 日期时间字段。"""
+        return self._format_data_stream_timestamp(time_text)
+
     def _build_data_stream_document(self, document, report_run_id):
         """把普通索引文档转换为可写入数据流的事件文档。"""
         ds_document = copy.deepcopy(document)
@@ -1196,9 +1200,12 @@ class HostReportAnalyser(object):
                 'PVE硬件健康报告' if self._is_pve_host(host_row) else '服务器运行报告'
             ),
             'report_date': window['report_date'],
-            'report_time': window['report_time'],
-            'start_time': window['start_time'],
-            'end_time': window['end_time'],
+            'report_time': self._format_es_datetime(window['report_time']),
+            'report_time_text': window['report_time'],
+            'start_time': self._format_es_datetime(window['start_time']),
+            'start_time_text': window['start_time'],
+            'end_time': self._format_es_datetime(window['end_time']),
+            'end_time_text': window['end_time'],
             'start_date': window['start_date'],
             'end_date': window['end_date'],
             'host_id': host_id,
@@ -1369,9 +1376,12 @@ class HostReportAnalyser(object):
             'report_type': 'overview',
             'title': title,
             'report_date': window['report_date'],
-            'report_time': window['report_time'],
-            'start_time': window['start_time'],
-            'end_time': window['end_time'],
+            'report_time': self._format_es_datetime(window['report_time']),
+            'report_time_text': window['report_time'],
+            'start_time': self._format_es_datetime(window['start_time']),
+            'start_time_text': window['start_time'],
+            'end_time': self._format_es_datetime(window['end_time']),
+            'end_time_text': window['end_time'],
             'html_content': html_content,
             'host_overview_info': overview_payload['host_overview_info'],
             'host_overview_tips': host_overview_tips,

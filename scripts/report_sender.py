@@ -99,7 +99,7 @@ class HostReportSender(HostReportAnalyser):
     def _build_delivery_title(self, document, title_prefix=''):
         """统一拼装带时间的邮件标题。"""
         title = title_prefix or document.get('title', '服务器报告')
-        report_time = str(document.get('report_time', '')).strip()
+        report_time = str(document.get('report_time_text', document.get('report_time', ''))).strip()
         if report_time != '' and report_time not in title:
             return '{0} {1}'.format(title, report_time)
         return title
