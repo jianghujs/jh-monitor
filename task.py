@@ -518,10 +518,10 @@ def setDaemon(t):
     return t
 
 if __name__ == "__main__":
-    # # 资源增长告警
-    # hga = threading.Thread(target=hostGrowthAlarmTask)
-    # hga = setDaemon(hga)
-    # hga.start()
+    # 资源增长告警
+    hga = threading.Thread(target=hostGrowthAlarmTask)
+    hga = setDaemon(hga)
+    hga.start()
 
     # 主机报告流水线
     hrp = threading.Thread(target=hostReportPipelineTask)
