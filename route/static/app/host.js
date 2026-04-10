@@ -471,7 +471,7 @@ function getWeb(page, search, host_group_id) {
       `;
       
 
-			body = "<tr data-host-row-id='" + data.data[i].id + "'><td class='text-center'><span class='host-sort-handle glyphicon glyphicon-sort'></span></td>\
+			body = "<tr data-host-row-id='" + data.data[i].id + "'><td class='text-center'><span class='host-sort-handle' aria-hidden='true'><i></i><i></i><i></i></span></td>\
 					<td><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\

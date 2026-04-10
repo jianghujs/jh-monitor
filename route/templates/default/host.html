@@ -125,14 +125,28 @@ setTimeout(function(){
     filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
  }
  .host-sort-handle {
-    color: #999;
     cursor: move;
-    display: inline-block;
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
     width: 16px;
+    height: 16px;
+    vertical-align: middle;
+ }
+ .host-sort-handle i {
+    display: block;
+    width: 14px;
+    height: 2px;
+    margin: 0 auto;
+    border-radius: 999px;
+    background: #b8b8b8;
  }
  .host-sort-handle.disabled {
-    color: #d0d0d0;
     cursor: not-allowed;
+ }
+ .host-sort-handle.disabled i {
+    background: #dddddd;
  }
  .host-list-table {
     min-width: 1516px;
