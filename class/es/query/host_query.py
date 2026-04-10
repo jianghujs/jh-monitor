@@ -3,7 +3,7 @@
 
 HOST_STATUS_INDEXES = 'host-system-status,host-*-system-status-*,*-host-system-status-*'
 FILEBEAT_INDEXES = 'filebeat-*'
-HOST_REPORT_SINGLE_INDEXES = 'host-report-single'
+HOST_REPORT_SINGLE_INDEXES = 'host-report-single,host-report-single-*'
 
 HOST_STATUS_SOURCE_FIELDS = [
     "host",
@@ -177,9 +177,9 @@ def buildSingleHostReportSearchBody(host_ids, report_date='', size=None):
                 }
             },
             {
-                "report_time.keyword": {
+                "report_time": {
                     "order": "desc",
-                    "unmapped_type": "keyword"
+                    "unmapped_type": "date"
                 }
             }
         ],
