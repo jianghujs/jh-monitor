@@ -4,6 +4,7 @@ import datetime
 import os
 import sys
 import time
+import copy
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -63,6 +64,8 @@ RAW_XTRABACKUP_INC_INDEX = 'host-debian-xtrabackup-inc-*'
 RAW_BACKUP_INDEX = 'host-debian-backup-*'
 SINGLE_REPORT_INDEX = 'host-report-single'
 OVERVIEW_REPORT_INDEX = 'host-report-overview'
+SINGLE_REPORT_DATA_STREAM = 'host-report-single-ds'
+OVERVIEW_REPORT_DATA_STREAM = 'host-report-overview-ds'
 
 ANALYSIS_STALE_SECONDS = 15 * 60
 PAGE_SIZE = 500
@@ -217,6 +220,30 @@ class HostReportAnalyser(object):
             error_message = self._get_es_error_message() or 'document_not_found_after_index'
             raise RuntimeError('保存报告后回读失败 index={0} doc_id={1} error={2}'.format(index_name, doc_id, error_message))
         return saved_document
+
+    def _build_report_run_id(self, window):
+        """为同一次分析生成统一的运行ID，便于数据流关联单机与总览报告。"""
+        return '{0}-{1}-{2}'.format(window['report_date'], self.now_ts, os.getpid())
+
+    def _build_data_stream_document(self, document, report_run_id):
+        """把普通索引文档转换为可写入数据流的事件文档。"""
+        ds_document = copy.deepcopy(document)
+        ds_document['@timestamp'] = document.get('report_time') or datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ds_document['report_run_id'] = report_run_id
+        return ds_document
+
+    def _append_report_data_stream_document(self, data_stream_name, document, report_run_id):
+        """将报告事件追加写入数据流。"""
+        ds_document = self._build_data_stream_document(document, report_run_id)
+        result = self._es.appendDocument(data_stream_name, document=ds_document, refresh='wait_for')
+        if not result:
+            error_message = self._get_es_error_message() or 'unknown_es_append_error'
+            raise RuntimeError('保存报告到数据流失败 data_stream={0} report_run_id={1} error={2}'.format(
+                data_stream_name,
+                report_run_id,
+                error_message
+            ))
+        return ds_document
 
     def _analyze_series(self, docs, extractor, threshold):
         """统计监控序列的平均值、当前值和超阈次数。"""
@@ -1339,6 +1366,7 @@ class HostReportAnalyser(object):
             return {'status': 'skipped', 'reason': 'no_enabled_hosts', 'report_date': window['report_date']}
 
         self.log('[report-analysis] start report_date={0} host_total={1}'.format(window['report_date'], len(host_rows)))
+        report_run_id = self._build_report_run_id(window)
         raw_groups = self.load_raw_groups(host_rows, window)
         single_documents = []
         for row in host_rows:
@@ -1346,34 +1374,39 @@ class HostReportAnalyser(object):
             host_group = raw_groups.get(host_id, {'status': [], 'xtrabackup': [], 'xtrabackup_inc': [], 'backup': []})
             doc_id, document = self.build_single_host_report(row, host_group, window)
             self._save_report_document(SINGLE_REPORT_INDEX, doc_id, document)
+            self._append_report_data_stream_document(SINGLE_REPORT_DATA_STREAM, document, report_run_id)
             single_documents.append(document)
             self.log(
-                '[report-analysis] single report saved doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4}'.format(
+                '[report-analysis] single report saved doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4} report_run_id={5}'.format(
                     doc_id,
                     host_id,
                     value_tool.getNested(document, ['validation', 'status'], ''),
                     bool(document.get('is_abnormal')),
-                    value_tool.getNested(document, ['extra_info', 'raw_counts'], {})
+                    value_tool.getNested(document, ['extra_info', 'raw_counts'], {}),
+                    report_run_id
                 )
             )
 
         overview_doc_id, overview_document = self.build_overview_report(host_rows, single_documents, window)
         self._save_report_document(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_document)
+        self._append_report_data_stream_document(OVERVIEW_REPORT_DATA_STREAM, overview_document, report_run_id)
 
         ready_count = len([doc for doc in single_documents if value_tool.getNested(doc, ['validation', 'is_complete'], False)])
         abnormal_count = len([doc for doc in single_documents if doc.get('is_abnormal')])
         self.log(
-            '[report-analysis] overview saved doc_id={0} validation={1} host_total={2} ready={3} abnormal={4}'.format(
+            '[report-analysis] overview saved doc_id={0} validation={1} host_total={2} ready={3} abnormal={4} report_run_id={5}'.format(
                 overview_doc_id,
                 value_tool.getNested(overview_document, ['validation', 'status'], ''),
                 len(host_rows),
                 ready_count,
-                abnormal_count
+                abnormal_count,
+                report_run_id
             )
         )
         return {
             'status': 'ok',
             'report_date': window['report_date'],
+            'report_run_id': report_run_id,
             'single_total': len(single_documents),
             'single_ready': ready_count,
             'single_abnormal': abnormal_count,
@@ -1394,6 +1427,8 @@ __all__ = [
     'RAW_BACKUP_INDEX',
     'SINGLE_REPORT_INDEX',
     'OVERVIEW_REPORT_INDEX',
+    'SINGLE_REPORT_DATA_STREAM',
+    'OVERVIEW_REPORT_DATA_STREAM',
     'ANALYSIS_STALE_SECONDS',
     'PAGE_SIZE',
 ]

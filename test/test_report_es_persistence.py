@@ -27,7 +27,6 @@ from config_api import config_api
 from report_analyser import HostReportAnalyser, PAGE_SIZE, h_api
 from report_sender import HostReportSender
 
-
 def parse_csv_args(raw_items):
     values = []
     for item in raw_items or []:
@@ -53,15 +52,21 @@ def is_true(value):
 def configure_report_indices(use_live_index=True):
     single_index = 'host-report-single'
     overview_index = 'host-report-overview'
+    single_data_stream = 'host-report-single-ds'
+    overview_data_stream = 'host-report-overview-ds'
     if not use_live_index:
         single_index = 'host-report-single-test'
         overview_index = 'host-report-overview-test'
+        single_data_stream = 'host-report-single-ds-test'
+        overview_data_stream = 'host-report-overview-ds-test'
 
     report_analyser_module.SINGLE_REPORT_INDEX = single_index
     report_analyser_module.OVERVIEW_REPORT_INDEX = overview_index
+    report_analyser_module.SINGLE_REPORT_DATA_STREAM = single_data_stream
+    report_analyser_module.OVERVIEW_REPORT_DATA_STREAM = overview_data_stream
     report_sender_module.SINGLE_REPORT_INDEX = single_index
     report_sender_module.OVERVIEW_REPORT_INDEX = overview_index
-    return single_index, overview_index
+    return single_index, overview_index, single_data_stream, overview_data_stream
 
 
 def load_target_hosts(host_ids=None, host_ips=None, scheduled_only=False):
@@ -196,6 +201,40 @@ def search_single_docs(es_client, sender, index_name, host_ids, report_date):
     )
 
 
+def search_latest_data_stream_doc(es_client, index_name, report_date, host_id=''):
+    filters = [{'term': {'report_date': report_date}}]
+    if host_id:
+        filters.append({
+            'bool': {
+                'should': [
+                    {'term': {'host_id.keyword': host_id}},
+                    {'term': {'host_id': host_id}}
+                ],
+                'minimum_should_match': 1
+            }
+        })
+    response = es_client.search(
+        index=index_name,
+        body={
+            'size': 1,
+            'query': {
+                'bool': {
+                    'filter': filters
+                }
+            },
+            'sort': [
+                {'@timestamp': {'order': 'desc'}},
+                {'report_time': {'order': 'desc'}}
+            ]
+        }
+    )
+    response = normalize_response(response)
+    hits = ((response.get('hits') or {}).get('hits') or [])
+    if len(hits) == 0:
+        return None
+    return hits[0].get('_source', {})
+
+
 def build_args():
     parser = argparse.ArgumentParser(description='检查服务器报告写入 ES 后是否真实存在')
     parser.add_argument('--report-date', default='', help='报告日期，格式 YYYY-MM-DD，默认取当前窗口日期')
@@ -213,7 +252,7 @@ def build_args():
 def main():
     args = build_args()
     use_live_index = not args.use_test_index
-    single_index, overview_index = configure_report_indices(use_live_index=use_live_index)
+    single_index, overview_index, single_data_stream, overview_data_stream = configure_report_indices(use_live_index=use_live_index)
 
     host_ids = parse_csv_args(args.host_id)
     host_ips = parse_csv_args(args.host_ip)
@@ -259,6 +298,8 @@ def main():
         'indexes': {
             'single': single_index,
             'overview': overview_index,
+            'single_data_stream': single_data_stream,
+            'overview_data_stream': overview_data_stream,
             'mode': 'live' if use_live_index else 'test'
         },
         'es_config': {
@@ -302,11 +343,19 @@ def main():
         single_doc_summaries.append(build_single_doc_summary(single_doc, doc_id))
 
     searched_single_docs = search_single_docs(analyser._es, sender, single_index, selected_host_ids, report_date)
+    overview_ds_doc = search_latest_data_stream_doc(analyser._es, overview_data_stream, report_date)
+    single_ds_doc_summaries = []
+    for host_id in selected_host_ids:
+        single_ds_doc = search_latest_data_stream_doc(analyser._es, single_data_stream, report_date, host_id=host_id)
+        single_ds_doc_summaries.append(build_single_doc_summary(single_ds_doc, '{0}:{1}'.format(report_date, host_id)))
 
     result['es_checks'] = {
         'overview': build_overview_doc_summary(overview_doc, overview_doc_id),
+        'overview_data_stream': build_overview_doc_summary(overview_ds_doc, overview_doc_id),
         'single_docs_by_get': single_doc_summaries,
+        'single_docs_in_data_stream': single_ds_doc_summaries,
         'single_doc_get_found_count': len([item for item in single_doc_summaries if item.get('exists')]),
+        'single_doc_data_stream_found_count': len([item for item in single_ds_doc_summaries if item.get('exists')]),
         'single_doc_search_found_count': len(searched_single_docs),
         'single_doc_search_host_ids': [doc.get('host_id', '') for doc in searched_single_docs],
         'es_last_error': str(analyser._es.getError()) if analyser._es.getError() else '',
@@ -352,6 +401,10 @@ def main():
         return 4
     if result['es_checks']['single_doc_get_found_count'] != len(selected_host_ids):
         return 5
+    if not result['es_checks']['overview_data_stream'].get('exists'):
+        return 6
+    if result['es_checks']['single_doc_data_stream_found_count'] != len(selected_host_ids):
+        return 7
     return 0
 
 

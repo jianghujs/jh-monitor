@@ -135,6 +135,27 @@ class ES:
             self._err = ex
             return None
 
+    def appendDocument(self, index, document=None, body=None, refresh=None):
+        try:
+            kwargs = {'index': index, 'op_type': 'create'}
+            if document is not None:
+                kwargs['document'] = document
+            elif body is not None:
+                kwargs['body'] = body
+            else:
+                kwargs['body'] = {}
+            if refresh is not None:
+                kwargs['refresh'] = refresh
+            try:
+                return self.getConn().index(**kwargs)
+            except TypeError:
+                if 'document' in kwargs:
+                    kwargs['body'] = kwargs.pop('document')
+                return self.getConn().index(**kwargs)
+        except Exception as ex:
+            self._err = ex
+            return None
+
     def scroll(self, scroll_id, scroll='1m'):
         try:
             return self.normalizeResponse(self.getConn().scroll(scroll_id=scroll_id, scroll=scroll))
@@ -180,6 +201,22 @@ class ES:
     def putIndexTemplate(self, name, body):
         try:
             return self.getConn().indices.put_index_template(name=name, body=body)
+        except Exception as ex:
+            self._err = ex
+            return None
+
+    def dataStreamExists(self, name):
+        try:
+            response = self.getConn().indices.get_data_stream(name=name)
+            response = self.normalizeResponse(response)
+            return len(response.get('data_streams', []) or []) > 0
+        except Exception as ex:
+            self._err = ex
+            return False
+
+    def createDataStream(self, name):
+        try:
+            return self.getConn().indices.create_data_stream(name=name)
         except Exception as ex:
             self._err = ex
             return None

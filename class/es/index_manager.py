@@ -49,6 +49,22 @@ class IndexManager(object):
             results.append({'template': template_name, 'action': 'updated' if exists else 'created'})
         return results
 
+    def ensure_data_streams(self, data_stream_names):
+        results = []
+        for data_stream_name in data_stream_names:
+            exists = self.es.dataStreamExists(data_stream_name)
+            if exists:
+                results.append({'data_stream': data_stream_name, 'action': 'exists'})
+                continue
+            response = self.es.createDataStream(data_stream_name)
+            if response is None:
+                raise Exception('failed to ensure data stream {0}: {1}'.format(
+                    data_stream_name,
+                    self.es.getError()
+                ))
+            results.append({'data_stream': data_stream_name, 'action': 'created'})
+        return results
+
 
 __all__ = [
     'IndexManager',

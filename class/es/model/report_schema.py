@@ -371,6 +371,11 @@ REPORT_INDEXES = {
     }
 }
 
+REPORT_DATA_STREAMS = {
+    'single': 'host-report-single-ds',
+    'overview': 'host-report-overview-ds',
+}
+
 
 REPORT_INDEX_TEMPLATES = {
     'host-debian-system-status-template': {
@@ -520,6 +525,102 @@ REPORT_INDEX_TEMPLATES = {
             }
         },
         'data_stream': {}
+    },
+    'host-report-single-ds-template': {
+        'index_patterns': ['host-report-single-ds*'],
+        'priority': 600,
+        'template': {
+            'settings': {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            },
+            'mappings': {
+                'dynamic': True,
+                'properties': {
+                    '@timestamp': {'type': 'date'},
+                    'report_run_id': {'type': 'keyword'},
+                    'report_type': {'type': 'keyword'},
+                    'report_date': {'type': 'date', 'format': DATE_ONLY_FORMAT},
+                    'report_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'start_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'end_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'start_date': {'type': 'date', 'format': DATE_ONLY_FORMAT},
+                    'end_date': {'type': 'date', 'format': DATE_ONLY_FORMAT},
+                    'host_id': {'type': 'keyword'},
+                    'host_name': {'type': 'keyword'},
+                    'host_ip': {'type': 'ip'},
+                    'title': {'type': 'text'},
+                    'is_abnormal': {'type': 'boolean'},
+                    'summary_tips': {'type': 'text'},
+                    'error_tips': {'type': 'text'},
+                    'html_content': {'type': 'text'},
+                    'validation': {
+                        'properties': {
+                            'is_complete': {'type': 'boolean'},
+                            'status': {'type': 'keyword'},
+                            'errors': {'type': 'keyword'}
+                        }
+                    },
+                    'delivery': {
+                        'properties': {
+                            'status': {'type': 'keyword'},
+                            'last_sent_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                            'recipients': {'type': 'keyword'},
+                            'retry_count': {'type': 'integer'},
+                            'last_error': {'type': 'text'}
+                        }
+                    },
+                    'extra_info': {'type': 'object', 'enabled': False}
+                }
+            }
+        },
+        'data_stream': {}
+    },
+    'host-report-overview-ds-template': {
+        'index_patterns': ['host-report-overview-ds*'],
+        'priority': 600,
+        'template': {
+            'settings': {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            },
+            'mappings': {
+                'dynamic': True,
+                'properties': {
+                    '@timestamp': {'type': 'date'},
+                    'report_run_id': {'type': 'keyword'},
+                    'report_type': {'type': 'keyword'},
+                    'report_date': {'type': 'date', 'format': DATE_ONLY_FORMAT},
+                    'report_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'start_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'end_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'title': {'type': 'text'},
+                    'html_content': {'type': 'text'},
+                    'host_overview_info': {'type': 'object', 'dynamic': True},
+                    'host_overview_tips': {'type': 'nested'},
+                    'exception_host_summary_tips': {'type': 'nested'},
+                    'single_host_report_list': {'type': 'nested'},
+                    'validation': {
+                        'properties': {
+                            'is_complete': {'type': 'boolean'},
+                            'status': {'type': 'keyword'},
+                            'errors': {'type': 'keyword'}
+                        }
+                    },
+                    'delivery': {
+                        'properties': {
+                            'status': {'type': 'keyword'},
+                            'last_sent_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                            'recipients': {'type': 'keyword'},
+                            'retry_count': {'type': 'integer'},
+                            'last_error': {'type': 'text'}
+                        }
+                    },
+                    'extra_info': {'type': 'object', 'enabled': False}
+                }
+            }
+        },
+        'data_stream': {}
     }
 }
 
@@ -528,5 +629,6 @@ __all__ = [
     'DATE_TIME_FORMAT',
     'DATE_ONLY_FORMAT',
     'REPORT_INDEXES',
+    'REPORT_DATA_STREAMS',
     'REPORT_INDEX_TEMPLATES',
 ]
