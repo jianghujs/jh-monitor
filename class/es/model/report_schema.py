@@ -472,7 +472,8 @@ REPORT_INDEX_TEMPLATES = {
                     'add_timestamp': {'type': 'double'}
                 }
             }
-        }
+        },
+        'data_stream': {}
     },
     'host-pve-system-status-template': {
         'index_patterns': ['host-pve-*-system-status-*'],
@@ -517,7 +518,8 @@ REPORT_INDEX_TEMPLATES = {
                     'add_timestamp': {'type': 'double'}
                 }
             }
-        }
+        },
+        'data_stream': {}
     }
 }
 

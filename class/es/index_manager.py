@@ -24,18 +24,28 @@ class IndexManager(object):
         for index_name, index_body in index_definitions.items():
             exists = self.es.indexExists(index_name)
             if exists:
-                self.es.putMapping(index_name, index_body.get('mappings', {}))
+                response = self.es.putMapping(index_name, index_body.get('mappings', {}))
                 results.append({'index': index_name, 'action': 'updated'})
             else:
-                self.es.createIndex(index_name, index_body)
+                response = self.es.createIndex(index_name, index_body)
                 results.append({'index': index_name, 'action': 'created'})
+            if response is None:
+                raise Exception('failed to ensure index {0}: {1}'.format(
+                    index_name,
+                    self.es.getError()
+                ))
         return results
 
     def ensure_index_templates(self, template_definitions):
         results = []
         for template_name, template_body in template_definitions.items():
             exists = self.es.indexTemplateExists(template_name)
-            self.es.putIndexTemplate(template_name, template_body)
+            response = self.es.putIndexTemplate(template_name, template_body)
+            if response is None:
+                raise Exception('failed to ensure index template {0}: {1}'.format(
+                    template_name,
+                    self.es.getError()
+                ))
             results.append({'template': template_name, 'action': 'updated' if exists else 'created'})
         return results
 
