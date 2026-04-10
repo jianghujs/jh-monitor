@@ -240,15 +240,19 @@ class HostReportAnalyser(object):
 
     def _format_data_stream_timestamp(self, time_text):
         """将面板常用时间字符串转成 ES 数据流可接受的 ISO 时间。"""
+        local_tz = datetime.datetime.now().astimezone().tzinfo
         if isinstance(time_text, datetime.datetime):
+            if time_text.tzinfo is None:
+                time_text = time_text.replace(tzinfo=local_tz)
             return time_text.isoformat()
 
         raw_text = str(time_text or '').strip()
         if raw_text == '':
-            return datetime.datetime.now().isoformat()
+            return datetime.datetime.now(local_tz).isoformat()
 
         try:
-            return datetime.datetime.strptime(raw_text, '%Y-%m-%d %H:%M:%S').isoformat()
+            parsed_time = datetime.datetime.strptime(raw_text, '%Y-%m-%d %H:%M:%S')
+            return parsed_time.replace(tzinfo=local_tz).isoformat()
         except Exception:
             return raw_text.replace(' ', 'T')
 
