@@ -414,7 +414,7 @@ class host_api:
             host_detail['cpu_info'] = json.loads(host_detail['cpu_info']) if host_detail.get('cpu_info') is not None else {}
             host_detail['mem_info'] = json.loads(host_detail['mem_info']) if host_detail.get('mem_info') is not None else {}
             host_detail['disk_info'] = json.loads(host_detail['disk_info']) if host_detail.get('disk_info') is not None else []
-            host_detail['net_info'] = json.loads(host_detail['net_info']) if host_detail.get('net_info') is not None else []
+            host_detail['net_info'] = json.loads(host_detail['net_info']) if host_detail.get('net_info') is not None else {}
             host_detail['load_avg'] = json.loads(host_detail['load_avg']) if host_detail.get('load_avg') is not None else {}
             host_detail['firewall_info'] = json.loads(host_detail['firewall_info']) if host_detail.get('firewall_info') is not None else {}
             host_detail['port_info'] = json.loads(host_detail['port_info']) if host_detail.get('port_info') is not None else {}

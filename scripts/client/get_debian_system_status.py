@@ -16,7 +16,7 @@ if PANEL_CORE_DIR not in sys.path:
     sys.path.insert(0, PANEL_CORE_DIR)
 
 from get_host_info import get_host_ip
-from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info
+from get_host_usage import get_cpu_info, get_disk_info, get_load_avg, get_mem_info, get_net_info
 
 _original_cwd = os.getcwd()
 try:
@@ -83,6 +83,8 @@ def format_disks(disk_info):
         used = int(disk.get('used', 0))
         free = int(disk.get('free', 0))
         used_percent = disk.get('usedPercent', 0)
+        read_speed = float(disk.get('readSpeed', 0) or 0)
+        write_speed = float(disk.get('writeSpeed', 0) or 0)
         disks.append({
             'path': disk.get('mountpoint', ''),
             'size': [
@@ -93,9 +95,38 @@ def format_disks(disk_info):
             ],
             'inodes': ['', '', '', ''],
             'fstype': disk.get('fstype', ''),
-            'device': disk.get('name', '')
+            'device': disk.get('name', ''),
+            'read_speed_bytes': read_speed,
+            'write_speed_bytes': write_speed
         })
     return disks
+
+
+def summarize_disk_io(disk_info):
+    read_bytes = 0.0
+    write_bytes = 0.0
+    for disk in disk_info or []:
+        try:
+            read_bytes += float(disk.get('readSpeed', 0) or 0)
+        except Exception:
+            pass
+        try:
+            write_bytes += float(disk.get('writeSpeed', 0) or 0)
+        except Exception:
+            pass
+    return {
+        'read_bytes': int(round(read_bytes)),
+        'write_bytes': int(round(write_bytes))
+    }
+
+
+def enrich_network_info(net_info):
+    network = dict(net_info or {})
+    up_kb = float(network.get('up', 0) or 0)
+    down_kb = float(network.get('down', 0) or 0)
+    network['upBytes'] = int(round(up_kb * 1024))
+    network['downBytes'] = int(round(down_kb * 1024))
+    return network
 
 
 def parse_datetime_to_timestamp(raw_value):
@@ -552,6 +583,7 @@ def build_system_status(host_meta=None):
     mem_info = get_mem_info()
     load_avg = get_load_avg()
     disk_info = get_disk_info()
+    net_info = enrich_network_info(get_net_info())
     runtime = load_panel_runtime_info()
 
     cpu_cores = cpu_info.get('cpuCount', 1) or 1
@@ -576,6 +608,8 @@ def build_system_status(host_meta=None):
                 'five': round(float(load_avg.get('5min', 0)), 2),
                 'fifteen': round(float(load_avg.get('15min', 0)), 2)
             },
+            'network': net_info,
+            'disk_io': summarize_disk_io(disk_info),
             'disks': format_disks(disk_info)
         },
         'site': runtime.get('site', []),

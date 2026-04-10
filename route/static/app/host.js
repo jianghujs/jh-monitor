@@ -74,6 +74,25 @@ function buildReportItemsHtml(items, fallbackColor) {
   }).join('');
 }
 
+function normalizeNetInfoPayload(value) {
+  if (!value) {
+    return {};
+  }
+  return Array.isArray(value) ? (value[0] || {}) : value;
+}
+
+function getNetRateBytes(value, bytesField, kbField) {
+  var rateBytes = toNumber(value && value[bytesField], null);
+  if (rateBytes !== null) {
+    return rateBytes;
+  }
+  var rateKb = toNumber(value && value[kbField], null);
+  if (rateKb !== null) {
+    return rateKb * 1024;
+  }
+  return null;
+}
+
 /**
  * 主机数据列表
  * @param {Number} page   当前页
@@ -218,8 +237,10 @@ function getWeb(page, search, host_group_id) {
       let net_speed = '';
       let net_total = '';
       if (net_info) {
-        net_speed += "<div>" + formatRateValue(net_info.up) + "</div>";
-        net_speed += "<div>" + formatRateValue(net_info.down) + "</div>";
+        let netUpRateBytes = getNetRateBytes(net_info, 'upBytes', 'up');
+        let netDownRateBytes = getNetRateBytes(net_info, 'downBytes', 'down');
+        net_speed += "<div>" + formatRateValue(netUpRateBytes) + "</div>";
+        net_speed += "<div>" + formatRateValue(netDownRateBytes) + "</div>";
         net_total += "<div>" + formatSizeValue(net_info.upTotal) + "</div>";
         net_total += "<div>" + formatSizeValue(net_info.downTotal) + "</div>";
       } else {
@@ -2621,16 +2642,15 @@ function initDetailHostBaseMonitorNetIoChart() {
 function updateDetailHostBaseMonitorNetIoChartData(s, e) {
   $.post('/host/get_host_network_io', 'host_id=' + detailHostId + '&start='+s+'&end='+e,function(rdata){
     let net_io_history = rdata.map(item => {
-      let itemNetIoList = JSON.parse(item['net_info'] || '[]');
-      let itemNetIo = itemNetIoList[0] || {};
+      let itemNetIo = normalizeNetInfoPayload(JSON.parse(item['net_info'] || '{}'));
       return {
         id: item.id,
-        up: itemNetIo.sent_per_second,
-        down: itemNetIo.recv_per_second,
-        total_up: itemNetIo.sent,
-        total_down: itemNetIo.recv,
-        down_packets: itemNetIo.recv_packets,
-        up_packets: itemNetIo.sent_packets,
+        up: toNumber(itemNetIo.up, toNumber(itemNetIo.sent_per_second, 0)),
+        down: toNumber(itemNetIo.down, toNumber(itemNetIo.recv_per_second, 0)),
+        total_up: toNumber(itemNetIo.upTotal, toNumber(itemNetIo.sent, 0)),
+        total_down: toNumber(itemNetIo.downTotal, toNumber(itemNetIo.recv, 0)),
+        down_packets: toNumber(itemNetIo.downPackets, toNumber(itemNetIo.recv_packets, 0)),
+        up_packets: toNumber(itemNetIo.upPackets, toNumber(itemNetIo.sent_packets, 0)),
         addtime: item.addtime
       }
     });

@@ -11,6 +11,7 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 from get_host_info import get_host_ip, is_pve_machine
+from get_host_usage import get_net_info
 from get_pve_hardware_report import DEFAULT_THRESHOLDS, HardwareReporter
 
 DEFAULT_OUTPUT_DIR = os.environ.get(
@@ -48,7 +49,10 @@ def export_system_status(output_dir, payload):
     return output_path
 
 
-def format_pve_disks(filesystems):
+def format_pve_disks(filesystems, disk_io=None):
+    disk_io = disk_io or {}
+    read_bytes = int(float(disk_io.get('read_bytes', 0) or 0))
+    write_bytes = int(float(disk_io.get('write_bytes', 0) or 0))
     disks = []
     for fs in filesystems or []:
         disks.append({
@@ -61,9 +65,43 @@ def format_pve_disks(filesystems):
             ],
             'inodes': ['', '', '', ''],
             'fstype': '',
-            'device': fs.get('filesystem', '')
+            'device': fs.get('filesystem', ''),
+            'read_speed_bytes': read_bytes,
+            'write_speed_bytes': write_bytes
         })
     return disks
+
+
+def enrich_network_info(net_info):
+    network = dict(net_info or {})
+    up_kb = float(network.get('up', 0) or 0)
+    down_kb = float(network.get('down', 0) or 0)
+    network['upBytes'] = int(round(up_kb * 1024))
+    network['downBytes'] = int(round(down_kb * 1024))
+    return network
+
+
+def summarize_pve_disk_io(pve_data):
+    io_devices = {}
+    if isinstance(pve_data, dict):
+        io_devices = (pve_data.get('io') or {}).get('devices', []) or []
+
+    read_bytes = 0.0
+    write_bytes = 0.0
+    for item in io_devices:
+        try:
+            read_bytes += float(item.get('rkB_s', 0) or 0) * 1024.0
+        except Exception:
+            pass
+        try:
+            write_bytes += float(item.get('wkB_s', 0) or 0) * 1024.0
+        except Exception:
+            pass
+
+    return {
+        'read_bytes': int(round(read_bytes)),
+        'write_bytes': int(round(write_bytes))
+    }
 
 
 def build_system_status(host_meta=None):
@@ -99,6 +137,8 @@ def build_system_status(host_meta=None):
     cpu_data = pve_data.get('cpu', {}) if isinstance(pve_data, dict) else {}
     memory_data = pve_data.get('memory', {}) if isinstance(pve_data, dict) else {}
     disk_data = pve_data.get('disk', {}) if isinstance(pve_data, dict) else {}
+    net_info = enrich_network_info(get_net_info())
+    disk_io = summarize_pve_disk_io(pve_data)
     load_data = cpu_data.get('load', [0.0, 0.0, 0.0]) or [0.0, 0.0, 0.0]
     while len(load_data) < 3:
         load_data.append(0.0)
@@ -123,7 +163,9 @@ def build_system_status(host_meta=None):
                 'five': round(float(load_data[1] or 0), 2),
                 'fifteen': round(float(load_data[2] or 0), 2)
             },
-            'disks': format_pve_disks(disk_data.get('filesystems', []))
+            'network': net_info,
+            'disk_io': disk_io,
+            'disks': format_pve_disks(disk_data.get('filesystems', []), disk_io)
         },
         'pve': {
             'data': pve_data,

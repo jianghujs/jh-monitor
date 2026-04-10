@@ -95,15 +95,30 @@ def buildMemInfoFromStatus(status_doc):
 
 def buildDiskInfoFromStatus(status_doc):
     system_doc = value_utils.getNested(status_doc or {}, ['system'], {})
+    disk_io_doc = system_doc.get('disk_io') or {}
+    fallback_read_speed = value_utils.safeFloat(disk_io_doc.get('read_bytes'), 0)
+    fallback_write_speed = value_utils.safeFloat(disk_io_doc.get('write_bytes'), 0)
     disk_rows = []
-    for disk in system_doc.get('disks', []) or []:
+    for index, disk in enumerate(system_doc.get('disks', []) or []):
         size_list = disk.get('size') or []
         total = value_utils.parseSizeToBytes(size_list[0] if len(size_list) > 0 else 0)
         used = value_utils.parseSizeToBytes(size_list[1] if len(size_list) > 1 else 0)
         free = value_utils.parseSizeToBytes(size_list[2] if len(size_list) > 2 else 0)
         used_percent = value_utils.parsePercent(size_list[3] if len(size_list) > 3 else 0)
+        read_speed = value_utils.safeFloat(
+            disk.get('read_speed_bytes', disk.get('readSpeed')),
+            0
+        )
+        write_speed = value_utils.safeFloat(
+            disk.get('write_speed_bytes', disk.get('writeSpeed')),
+            0
+        )
         if used_percent <= 0 and total > 0 and used > 0:
             used_percent = round((float(used) / float(total)) * 100, 2)
+        if index == 0 and read_speed <= 0 and fallback_read_speed > 0:
+            read_speed = fallback_read_speed
+        if index == 0 and write_speed <= 0 and fallback_write_speed > 0:
+            write_speed = fallback_write_speed
 
         disk_rows.append({
             'total': total,
@@ -113,8 +128,8 @@ def buildDiskInfoFromStatus(status_doc):
             'fstype': disk.get('fstype', ''),
             'name': disk.get('device', ''),
             'mountpoint': disk.get('path', ''),
-            'readSpeed': 0,
-            'writeSpeed': 0
+            'readSpeed': int(round(read_speed)),
+            'writeSpeed': int(round(write_speed))
         })
     return disk_rows
 
@@ -132,14 +147,46 @@ def buildLoadAvgFromStatus(status_doc):
     }
 
 
-def buildNetInfoFromStatus():
+def buildNetInfoFromStatus(status_doc):
+    system_doc = value_utils.getNested(status_doc or {}, ['system'], {})
+    network_doc = system_doc.get('network') or {}
+    pve_network_doc = value_utils.getNested(status_doc or {}, ['pve', 'data', 'network'], {})
+
+    up_total = value_utils.safeInt(network_doc.get('upTotal'), 0)
+    down_total = value_utils.safeInt(network_doc.get('downTotal'), 0)
+    up_packets = value_utils.safeInt(network_doc.get('upPackets'), 0)
+    down_packets = value_utils.safeInt(network_doc.get('downPackets'), 0)
+
+    if up_total <= 0 and isinstance(pve_network_doc, dict):
+        for iface in pve_network_doc.get('interfaces', []) or []:
+            up_total += value_utils.safeInt(iface.get('tx_bytes'), 0)
+            down_total += value_utils.safeInt(iface.get('rx_bytes'), 0)
+            up_packets += value_utils.safeInt(iface.get('tx_packets'), 0)
+            down_packets += value_utils.safeInt(iface.get('rx_packets'), 0)
+
+    up_kb = value_utils.safeFloat(network_doc.get('up'), 0)
+    down_kb = value_utils.safeFloat(network_doc.get('down'), 0)
+    up_bytes = value_utils.safeInt(network_doc.get('upBytes'), 0)
+    down_bytes = value_utils.safeInt(network_doc.get('downBytes'), 0)
+
+    if up_bytes <= 0 and up_kb > 0:
+        up_bytes = int(round(up_kb * 1024))
+    if down_bytes <= 0 and down_kb > 0:
+        down_bytes = int(round(down_kb * 1024))
+    if up_kb <= 0 and up_bytes > 0:
+        up_kb = round(float(up_bytes) / 1024.0, 2)
+    if down_kb <= 0 and down_bytes > 0:
+        down_kb = round(float(down_bytes) / 1024.0, 2)
+
     return {
-        'upTotal': 0,
-        'downTotal': 0,
-        'up': 0,
-        'down': 0,
-        'downPackets': 0,
-        'upPackets': 0
+        'upTotal': up_total,
+        'downTotal': down_total,
+        'up': round(up_kb, 2),
+        'down': round(down_kb, 2),
+        'upBytes': up_bytes,
+        'downBytes': down_bytes,
+        'downPackets': down_packets,
+        'upPackets': up_packets
     }
 
 
@@ -222,7 +269,7 @@ def buildHostDetailFromStatusDoc(host_row, status_doc):
         'cpu_info': value_utils.safeJsonText(buildCpuInfoFromStatus(host_row, status_doc), {}),
         'mem_info': value_utils.safeJsonText(buildMemInfoFromStatus(status_doc), {}),
         'disk_info': value_utils.safeJsonText(buildDiskInfoFromStatus(status_doc), []),
-        'net_info': value_utils.safeJsonText(buildNetInfoFromStatus(), {}),
+        'net_info': value_utils.safeJsonText(buildNetInfoFromStatus(status_doc), {}),
         'load_avg': value_utils.safeJsonText(buildLoadAvgFromStatus(status_doc), {}),
         'firewall_info': value_utils.safeJsonText({}, {}),
         'port_info': value_utils.safeJsonText({}, {}),
