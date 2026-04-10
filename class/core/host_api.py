@@ -211,13 +211,6 @@ class host_api:
 
             host_report_map = host_status_service_utils.getLatestHostReportMap(_list)
 
-            from config_api import config_api
-            dispatch_config = config_api().getReportDispatchConfigData()
-            report_enabled = bool(dispatch_config.get('enabled'))
-            report_host_ids = dispatch_config.get('report_host_ids', []) or []
-            report_host_id_set = set(report_host_ids)
-            default_report_cron = dispatch_config.get('cron', config_api().getDefaultReportCronData())
-
             # 循环转换详情数据
             for i in range(len(_list)):
                 _list[i] = self.mergeHostRowWithDetail(
@@ -227,9 +220,6 @@ class host_api:
                 _list[i]['host_report'] = '{}'
                 if host_report_map:
                     _list[i]['host_report'] = host_report_map.get(host_id, '{}')
-                host_report_enabled = bool(host_id and report_enabled and host_id in report_host_id_set)
-                _list[i]['report_notify'] = host_report_enabled
-                _list[i]['report_cron'] = dict(default_report_cron)
 
                 _list[i] = self.parseDetailJSONValue(_list[i])
 
@@ -347,13 +337,6 @@ class host_api:
             if host_report_map:
                 host_detail['host_report'] = host_report_map.get(host_id, '{}')
             host_detail = self.parseDetailJSONValue(host_detail)
-            from config_api import config_api
-            dispatch_config = config_api().getReportDispatchConfigData()
-            report_enabled = bool(dispatch_config.get('enabled'))
-            report_host_ids = dispatch_config.get('report_host_ids', []) or []
-            default_report_cron = dispatch_config.get('cron', config_api().getDefaultReportCronData())
-            host_detail['report_notify'] = bool(host_id and report_enabled and host_id in report_host_ids)
-            host_detail['report_cron'] = dict(default_report_cron)
             return jh.returnJson(True, 'ok',  host_detail)
         return jh.returnJson(False, '获取为空', {})
 

@@ -130,8 +130,11 @@ function getWeb(page, search, host_group_id) {
       const hostIp = normalizeText(data.data[i].ip);
       const hostIpDisplay = displayText(hostIp);
       const hostGroupName = displayText(data.data[i].host_group_name);
+      const hostStatus = normalizeText(data.data[i].host_status);
       const hostEdate = normalizeText(data.data[i].edate);
       const hostAddtime = normalizeText(data.data[i].addtime);
+      const detailAddtime = toNumber(data.data[i].detail_addtime, 0);
+      const detailAddtimeDisplay = detailAddtime > 0 ? displayText(toTime(detailAddtime)) : '--';
       // 主机名称
       let name = '';
       name += `
@@ -146,7 +149,9 @@ function getWeb(page, search, host_group_id) {
       `
 
 			// 当前主机状态
-			if (data.data[i].host_status == 'Running') {
+			if (detailAddtime <= 0) {
+				var status = "<span>--</span>";
+			} else if (hostStatus == 'Running') {
 				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";
 			} else {
 				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:red'>已停止</span><span style='color:rgb(255, 0, 0);' class='glyphicon glyphicon-pause'></span></a>";
@@ -169,7 +174,9 @@ function getWeb(page, search, host_group_id) {
 
       // 负载
       let load_status = '';
-      if (avg !== null) {
+      if (detailAddtime <= 0) {
+        load_status = "<span>--</span>";
+      } else if (avg !== null) {
         occupy = Math.round((avg / max) * 100);
         if (occupy > 100) occupy = 100;
         if (occupy < 0) occupy = 0;
@@ -194,7 +201,9 @@ function getWeb(page, search, host_group_id) {
       // CPU使用率
       let cpu_status = '';
       let cpu_percent = toNumber(data.data[i].cpu_info && data.data[i].cpu_info.percent, null);
-      if (cpu_percent !== null) {
+      if (detailAddtime <= 0) {
+        cpu_status = "<span>--</span>";
+      } else if (cpu_percent !== null) {
         cpu_status = `<div class="cpu-usage" title="${cpu_percent}%">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
@@ -215,7 +224,9 @@ function getWeb(page, search, host_group_id) {
       // 内存使用率
       let mem_status = '';
       let mem_percent = toNumber(data.data[i].mem_info && data.data[i].mem_info.usedPercent, null);
-      if (mem_percent !== null) {
+      if (detailAddtime <= 0) {
+        mem_status = "<span>--</span>";
+      } else if (mem_percent !== null) {
         mem_status = `<div class="mem-usage" title="${mem_percent}%">
           <div class="d-flex flex-column">
             <div class="progress relative" style="margin-bottom: 0;height: 20px;">
@@ -236,7 +247,12 @@ function getWeb(page, search, host_group_id) {
       // 流量
       let net_speed = '';
       let net_total = '';
-      if (net_info) {
+      if (detailAddtime <= 0) {
+        net_speed += "<div>--</div>";
+        net_speed += "<div>--</div>";
+        net_total += "<div>--</div>";
+        net_total += "<div>--</div>";
+      } else if (net_info) {
         let netUpRateBytes = getNetRateBytes(net_info, 'upBytes', 'up');
         let netDownRateBytes = getNetRateBytes(net_info, 'downBytes', 'down');
         net_speed += "<div>" + formatRateValue(netUpRateBytes) + "</div>";
@@ -284,6 +300,8 @@ function getWeb(page, search, host_group_id) {
         </div>`;
         }
       } else {
+        disk_speed += "<div>--</div>";
+        disk_speed += "<div>--</div>";
         disk_status = "<span>--</span>";
       }
 
@@ -291,8 +309,6 @@ function getWeb(page, search, host_group_id) {
       let report_summary = '';
       let report_data = data.data[i].host_report;
       let report_items = [];
-      let report_notify = !!data.data[i].report_notify;
-      let report_notify_icon = report_notify ? `<span class="report-mail-icon glyphicon glyphicon-envelope" title="已开启报告通知" style="margin-left: 6px; color: #20a53a;"></span>` : '';
       let has_report = report_data && typeof report_data === 'object' && Object.keys(report_data).length > 0;
       let severity = 'normal';
       let summary_html = '';
@@ -327,9 +343,9 @@ function getWeb(page, search, host_group_id) {
           report_items_html = buildReportItemsHtml(report_items, itemFallback);
         }
         let data_attr = report_items_html ? ` data-report-full="${encodeURIComponent(report_items_html)}" data-report-severity="${severity}"` : '';
-        report_summary = `<div class="report-summary"${data_attr} style="color: ${status_color};">${status_text}${report_notify_icon}</div>`;
+        report_summary = `<div class="report-summary"${data_attr} style="color: ${status_color};">${status_text}</div>`;
       } else {
-        report_summary = `<div class="report-summary" style="color: #cecece;">暂无${report_notify_icon}</div>`;
+        report_summary = `<div class="report-summary" style="color: #cecece;">暂无</div>`;
       }
 
 
@@ -364,7 +380,7 @@ function getWeb(page, search, host_group_id) {
 					<td>" + disk_speed + "</td>\
 					<td>" + disk_status + "</td>\
 					<td>" + report_summary + "</td>\
-					<td>" + toTime(data.data[i]['detail_addtime']) + "</td>\
+					<td>" + detailAddtimeDisplay + "</td>\
 					<td style='text-align:right; color:#bbb'>" + opt + "</td>\
         </tr>"
 			
