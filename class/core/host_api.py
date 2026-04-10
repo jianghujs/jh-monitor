@@ -588,39 +588,7 @@ class host_api:
     # 从ES获取主机报告
     def getHostReportFromES(self, host_rows):
       try:
-        es = jh.getES()
-        host_report = {}
-        if not host_rows:
-          return host_report
-
-        host_ids = []
-        for row in host_rows:
-          host_id = str(row.get('host_id', '') or '').strip()
-          if not host_id:
-            continue
-          if host_id not in host_ids:
-            host_ids.append(host_id)
-
-        if not host_ids:
-          return host_report
-
-        response = es.search(
-          index=host_query_utils.HOST_REPORT_SINGLE_INDEXES,
-          body=host_query_utils.buildSingleHostReportSearchBody(
-            host_ids,
-            size=max(len(host_ids), 100)
-          )
-        )
-
-        hits = response.get('hits', {}).get('hits', []) if isinstance(response, dict) else []
-        for hit in hits:
-          doc = hit.get('_source', {}) if isinstance(hit, dict) else {}
-          host_id = str(doc.get('host_id', '') or '').strip()
-          if not host_id:
-            continue
-          host_report[host_id] = doc
-        
-        return host_report
+        return host_status_service_utils.getLatestHostReportMap(host_rows)
       except Exception as e:
         traceback.print_exc()
         return None

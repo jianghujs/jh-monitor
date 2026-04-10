@@ -167,3 +167,77 @@ def getHostStatusHistory(host_id='', start=None, end=None, debug_fn=None, host_s
         })
         traceback.print_exc()
         return []
+
+
+def getLatestHostReportMap(host_rows, debug_fn=None, report_single_indexes=None, report_data_stream_indexes=None):
+    try:
+        if report_single_indexes is None:
+            report_single_indexes = host_query_utils.HOST_REPORT_SINGLE_INDEXES
+        if report_data_stream_indexes is None:
+            report_data_stream_indexes = host_query_utils.HOST_REPORT_SINGLE_DATA_STREAM_INDEXES
+
+        host_report = {}
+        if not host_rows:
+            _debug(debug_fn, 'getLatestHostReportMap.empty_host_rows', {})
+            return host_report
+
+        host_ids = []
+        for row in host_rows:
+            host_id = str(row.get('host_id', '') or '').strip()
+            if host_id != '' and host_id not in host_ids:
+                host_ids.append(host_id)
+
+        if len(host_ids) == 0:
+            _debug(debug_fn, 'getLatestHostReportMap.empty_host_ids', {})
+            return host_report
+
+        es = jh.getES()
+
+        def search_hits(index_name, body):
+            response = es.search(index=index_name, body=body)
+            if not isinstance(response, dict):
+                return []
+            return response.get('hits', {}).get('hits', []) or []
+
+        def append_latest_docs(hits):
+            for hit in hits:
+                doc = hit.get('_source', {}) if isinstance(hit, dict) else {}
+                host_id = str(doc.get('host_id', '') or '').strip()
+                if host_id == '' or host_id in host_report:
+                    continue
+                host_report[host_id] = doc
+
+        _debug(debug_fn, 'getLatestHostReportMap.start', {
+            'host_count': len(host_rows),
+            'host_ids': host_ids[:10],
+            'report_single_indexes': report_single_indexes,
+            'report_data_stream_indexes': report_data_stream_indexes
+        })
+
+        data_stream_hits = search_hits(
+            report_data_stream_indexes,
+            host_query_utils.buildLatestSingleHostReportDataStreamSearchBody(host_ids)
+        )
+        append_latest_docs(data_stream_hits)
+
+        if len(host_report) < len(host_ids):
+            legacy_hits = search_hits(
+                report_single_indexes,
+                host_query_utils.buildLatestSingleHostReportLegacySearchBody(host_ids)
+            )
+            append_latest_docs(legacy_hits)
+
+        _debug(debug_fn, 'getLatestHostReportMap.result', {
+            'host_ids_requested': host_ids,
+            'host_ids_found': list(host_report.keys()),
+            'data_stream_hit_count': len(data_stream_hits),
+            'legacy_hit_count': len(legacy_hits) if 'legacy_hits' in locals() else 0,
+        })
+        return host_report
+    except Exception as ex:
+        _debug(debug_fn, 'getLatestHostReportMap.exception', {
+            'error': str(ex),
+            'traceback': traceback.format_exc()
+        })
+        traceback.print_exc()
+        return {}

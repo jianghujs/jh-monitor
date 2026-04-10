@@ -3,7 +3,10 @@
 
 HOST_STATUS_INDEXES = 'host-system-status,host-*-system-status-*,*-host-system-status-*'
 FILEBEAT_INDEXES = 'filebeat-*'
-HOST_REPORT_SINGLE_INDEXES = 'host-report-single,host-report-single-*'
+HOST_REPORT_SINGLE_INDEXES = 'host-report-single,host-report-single-test'
+HOST_REPORT_SINGLE_DATA_STREAM_PREFIX = 'host-report-single'
+HOST_REPORT_TEST_SINGLE_DATA_STREAM_PREFIX = 'host-report-test-single'
+HOST_REPORT_SINGLE_DATA_STREAM_INDEXES = 'host-report-single-*'
 
 HOST_STATUS_SOURCE_FIELDS = [
     "host",
@@ -175,18 +178,47 @@ def buildSingleHostReportSearchBody(host_ids, report_date='', size=None):
                     "order": "desc",
                     "unmapped_type": "date"
                 }
+            }
+        ]
+    }
+
+
+def buildLatestSingleHostReportDataStreamSearchBody(host_ids, size=None):
+    if size is None:
+        size = len(host_ids or []) * 10
+    if size <= 0:
+        size = 100
+    if size < 100:
+        size = 100
+
+    return {
+        "size": size,
+        "query": buildSingleHostReportQuery(host_ids, ''),
+        "sort": [
+            {
+                "@timestamp": {
+                    "order": "desc",
+                    "unmapped_type": "date"
+                }
             },
             {
-                "report_time": {
+                "report_date": {
                     "order": "desc",
                     "unmapped_type": "date"
                 }
             }
-        ],
-        "collapse": {
-            "field": "host_id.keyword"
-        }
+        ]
     }
+
+
+def buildLatestSingleHostReportLegacySearchBody(host_ids, size=None):
+    if size is None:
+        size = len(host_ids or []) * 5
+    if size <= 0:
+        size = 100
+    if size < 100:
+        size = 100
+    return buildSingleHostReportSearchBody(host_ids, size=size)
 
 
 def buildLogPathListSearchBody(host_ip):
