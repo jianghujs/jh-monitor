@@ -225,10 +225,24 @@ class HostReportAnalyser(object):
         """为同一次分析生成统一的运行ID，便于数据流关联单机与总览报告。"""
         return '{0}-{1}-{2}'.format(window['report_date'], self.now_ts, os.getpid())
 
+    def _format_data_stream_timestamp(self, time_text):
+        """将面板常用时间字符串转成 ES 数据流可接受的 ISO 时间。"""
+        if isinstance(time_text, datetime.datetime):
+            return time_text.isoformat()
+
+        raw_text = str(time_text or '').strip()
+        if raw_text == '':
+            return datetime.datetime.now().isoformat()
+
+        try:
+            return datetime.datetime.strptime(raw_text, '%Y-%m-%d %H:%M:%S').isoformat()
+        except Exception:
+            return raw_text.replace(' ', 'T')
+
     def _build_data_stream_document(self, document, report_run_id):
         """把普通索引文档转换为可写入数据流的事件文档。"""
         ds_document = copy.deepcopy(document)
-        ds_document['@timestamp'] = document.get('report_time') or datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ds_document['@timestamp'] = self._format_data_stream_timestamp(document.get('report_time'))
         ds_document['report_run_id'] = report_run_id
         return ds_document
 
