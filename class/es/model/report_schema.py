@@ -373,6 +373,107 @@ REPORT_INDEXES = {
 
 
 REPORT_INDEX_TEMPLATES = {
+    'host-debian-system-status-template': {
+        'index_patterns': ['host-debian-*-system-status-*'],
+        'priority': 500,
+        'template': {
+            'settings': {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            },
+            'mappings': {
+                'dynamic': True,
+                'dynamic_templates': [
+                    {
+                        'size_bytes_as_double': {
+                            'path_match': '*.size_bytes',
+                            'match_mapping_type': 'long',
+                            'mapping': {'type': 'double'}
+                        }
+                    },
+                    {
+                        'total_size_bytes_as_double': {
+                            'path_match': '*.total_size_bytes',
+                            'match_mapping_type': 'long',
+                            'mapping': {'type': 'double'}
+                        }
+                    },
+                    {
+                        'last_backup_size_bytes_as_double': {
+                            'path_match': '*.last_backup_size_bytes',
+                            'match_mapping_type': 'long',
+                            'mapping': {'type': 'double'}
+                        }
+                    }
+                ],
+                'properties': {
+                    'host': {
+                        'dynamic': True,
+                        'properties': {
+                            'host_id': {'type': 'keyword'},
+                            'host_name': {'type': 'keyword'},
+                            'host_ip': {'type': 'ip'},
+                            'host_group': {'type': 'keyword'},
+                            'host_status': {'type': 'keyword'},
+                            'system_type': {'type': 'keyword'}
+                        }
+                    },
+                    'system': {
+                        'dynamic': True,
+                        'properties': {
+                            'cpu': {'type': 'float'},
+                            'memory': {'type': 'float'},
+                            'load': {
+                                'dynamic': True,
+                                'properties': {
+                                    'pro': {'type': 'float'},
+                                    'one': {'type': 'float'},
+                                    'five': {'type': 'float'},
+                                    'fifteen': {'type': 'float'}
+                                }
+                            },
+                            'disks': {'type': 'nested'}
+                        }
+                    },
+                    'site': {'type': 'nested'},
+                    'jianghujs': {'type': 'nested'},
+                    'docker': {'type': 'nested'},
+                    'mysql': {
+                        'type': 'object',
+                        'dynamic': True,
+                        'properties': {
+                            'total_size_bytes': {'type': 'double'},
+                            'tables': {
+                                'type': 'object',
+                                'dynamic': True,
+                                'properties': {
+                                    'size_bytes': {'type': 'double'}
+                                }
+                            }
+                        }
+                    },
+                    'backup': {
+                        'type': 'object',
+                        'dynamic': True
+                    },
+                    'lsync': {
+                        'type': 'object',
+                        'dynamic': True
+                    },
+                    'rsync': {'type': 'nested'},
+                    'collector': {
+                        'dynamic': True,
+                        'properties': {
+                            'source': {'type': 'keyword'},
+                            'version': {'type': 'keyword'}
+                        }
+                    },
+                    'add_time': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    'add_timestamp': {'type': 'double'}
+                }
+            }
+        }
+    },
     'host-pve-system-status-template': {
         'index_patterns': ['host-pve-*-system-status-*'],
         'priority': 500,
