@@ -8,6 +8,7 @@ from report_analyser import (
     PAGE_SIZE,
     SINGLE_REPORT_INDEX,
     build_delivery_state,
+    normalize_delivery_state,
     jh,
     value_tool,
 )
@@ -106,7 +107,7 @@ class HostReportSender(HostReportAnalyser):
     def _send_report_document(self, index_name, doc_id, document, title_prefix=''):
         """发送单份报告，并回写发送结果。"""
         recipients = self._get_email_recipients()
-        delivery = document.get('delivery', {}) or build_delivery_state()
+        delivery = normalize_delivery_state(document.get('delivery', {}))
         retry_count = value_tool.safeInt(delivery.get('retry_count', 0))
         title = self._build_delivery_title(document, title_prefix)
         self.log(
@@ -146,7 +147,7 @@ class HostReportSender(HostReportAnalyser):
 
         document['delivery'] = build_delivery_state(
             status='failed',
-            last_sent_time=delivery.get('last_sent_time', ''),
+            last_sent_time=delivery.get('last_sent_time'),
             recipients=recipients,
             retry_count=retry_count + 1,
             last_error=error_message
@@ -158,10 +159,10 @@ class HostReportSender(HostReportAnalyser):
 
     def _mark_report_skipped(self, index_name, doc_id, document, error_message):
         """将不满足发送条件的报告标记为 skipped。"""
-        delivery = document.get('delivery', {}) or build_delivery_state()
+        delivery = normalize_delivery_state(document.get('delivery', {}))
         document['delivery'] = build_delivery_state(
             status='skipped',
-            last_sent_time=delivery.get('last_sent_time', ''),
+            last_sent_time=delivery.get('last_sent_time'),
             recipients=delivery.get('recipients', []),
             retry_count=value_tool.safeInt(delivery.get('retry_count', 0)),
             last_error=error_message

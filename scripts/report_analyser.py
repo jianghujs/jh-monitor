@@ -42,7 +42,7 @@ from get_pve_hardware_report import (
     to_int,
 )
 from host_api import host_api
-from report_state import build_delivery_state, build_validation_state
+from report_state import build_delivery_state, build_validation_state, normalize_delivery_state
 
 h_api = host_api()
 c_api = config_api()
@@ -1128,7 +1128,7 @@ class HostReportAnalyser(object):
         existing_doc = self._es.get(SINGLE_REPORT_INDEX, doc_id)
         if isinstance(existing_doc, dict):
             existing_doc = existing_doc.get('_source', {})
-        delivery_state = existing_doc.get('delivery') if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
+        delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
         document = {
             'report_type': 'single',
@@ -1305,7 +1305,7 @@ class HostReportAnalyser(object):
         existing_doc = self._es.get(OVERVIEW_REPORT_INDEX, doc_id)
         if isinstance(existing_doc, dict):
             existing_doc = existing_doc.get('_source', {})
-        delivery_state = existing_doc.get('delivery') if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
+        delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
         document = {
             'report_type': 'overview',
