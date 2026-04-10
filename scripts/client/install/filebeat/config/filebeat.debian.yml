@@ -26,156 +26,156 @@ filebeat.inputs:
   fields:
     log_index: host-debian-system-status
 
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-xtrabackup
+# - type: log
+#   enabled: true
+#   paths:
+#     - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
+#     - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
+#   json.keys_under_root: true
+#   json.add_error_key: true
+#   fields:
+#     log_index: host-debian-xtrabackup
 
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-xtrabackup-inc
+# - type: log
+#   enabled: true
+#   paths:
+#     - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
+#     - /home/ansible/jh-monitor-data/host-debian-xtrabackup-inc-*.ndjson
+#   json.keys_under_root: true
+#   json.add_error_key: true
+#   fields:
+#     log_index: host-debian-xtrabackup-inc
 
-- type: log
-  enabled: true
-  paths:
-    - /home/ansible_user/jh-monitor-data/host-debian-backup-*.ndjson
-    - /home/ansible/jh-monitor-data/host-debian-backup-*.ndjson
-  json.keys_under_root: true
-  json.add_error_key: true
-  fields:
-    log_index: host-debian-backup
+# - type: log
+#   enabled: true
+#   paths:
+#     - /home/ansible_user/jh-monitor-data/host-debian-backup-*.ndjson
+#     - /home/ansible/jh-monitor-data/host-debian-backup-*.ndjson
+#   json.keys_under_root: true
+#   json.add_error_key: true
+#   fields:
+#     log_index: host-debian-backup
 
-# Common
-- type: log
-  enabled: true
-  paths:
-    - /var/log/*.log
-    - /www/wwwlogs/*.log
-    - /www/server/mysql-apt/data/*.log
-    - /www/server/jh-panel/logs/report.log
-  exclude_files:
-    - '^/www/wwwlogs/.*'
-    - '^/www/server/mysql-apt/data/error\.log$'
-    - '^/www/server/mysql-apt/data/mysql-slow\.log$'
-    - '^/www/server/jh-panel/logs/report\.log$'
-  fields:
-    log_type: common
+# # Common
+# - type: log
+#   enabled: true
+#   paths:
+#     - /var/log/*.log
+#     - /www/wwwlogs/*.log
+#     - /www/server/mysql-apt/data/*.log
+#     - /www/server/jh-panel/logs/report.log
+#   exclude_files:
+#     - '^/www/wwwlogs/.*'
+#     - '^/www/server/mysql-apt/data/error\.log$'
+#     - '^/www/server/mysql-apt/data/mysql-slow\.log$'
+#     - '^/www/server/jh-panel/logs/report\.log$'
+#   fields:
+#     log_type: common
 
-# Syslog Logs
-- type: filestream
-  id: syslog
-  enabled: true
-  paths:
-    - /var/log/syslog
-  exclude_files: ['\.gz$']
-  fields:
-    log_type: syslog
-  fields_under_root: true
-  parsers:
-    - syslog:
-        format: auto
+# # Syslog Logs
+# - type: filestream
+#   id: syslog
+#   enabled: true
+#   paths:
+#     - /var/log/syslog
+#   exclude_files: ['\.gz$']
+#   fields:
+#     log_type: syslog
+#   fields_under_root: true
+#   parsers:
+#     - syslog:
+#         format: auto
 
-# Nginx Logs
-- type: filestream
-  id: nginx-access
-  enabled: true
-  paths:
-    - /www/wwwlogs/*.log
-  exclude_files: ['\.error\.log$', '\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
-  fields:
-    log_type: nginx
-    nginx_log_kind: access
-  fields_under_root: true
+# # Nginx Logs
+# - type: filestream
+#   id: nginx-access
+#   enabled: true
+#   paths:
+#     - /www/wwwlogs/*.log
+#   exclude_files: ['\.error\.log$', '\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
+#   fields:
+#     log_type: nginx
+#     nginx_log_kind: access
+#   fields_under_root: true
 
-- type: filestream
-  id: nginx-error
-  enabled: true
-  paths:
-    - /www/wwwlogs/*.error.log
-    - /www/server/openresty/nginx/logs/error.log
-  fields:
-    log_type: nginx
-    nginx_log_kind: error
-  fields_under_root: true
+# - type: filestream
+#   id: nginx-error
+#   enabled: true
+#   paths:
+#     - /www/wwwlogs/*.error.log
+#     - /www/server/openresty/nginx/logs/error.log
+#   fields:
+#     log_type: nginx
+#     nginx_log_kind: error
+#   fields_under_root: true
 
-# MySQL Logs
-- type: filestream
-  id: mysql-error
-  enabled: true
-  paths:
-    - /www/server/mysql-apt/data/error.log
-  fields:
-    log_type: mysql
-    mysql_log_type: error
-  fields_under_root: true
-  prospector.scanner.check_interval: 10s
-  close_inactive: 5m
-  parsers:
-    - multiline:
-        type: pattern
-        pattern: '^\d{4}-\d{2}-\d{2}'
-        negate: true
-        match: after
+# # MySQL Logs
+# - type: filestream
+#   id: mysql-error
+#   enabled: true
+#   paths:
+#     - /www/server/mysql-apt/data/error.log
+#   fields:
+#     log_type: mysql
+#     mysql_log_type: error
+#   fields_under_root: true
+#   prospector.scanner.check_interval: 10s
+#   close_inactive: 5m
+#   parsers:
+#     - multiline:
+#         type: pattern
+#         pattern: '^\d{4}-\d{2}-\d{2}'
+#         negate: true
+#         match: after
 
-- type: filestream
-  id: mysql-slow
-  enabled: true
-  paths:
-    - /www/server/mysql-apt/data/mysql-slow.log
-  fields:
-    log_type: mysql
-    mysql_log_type: slow
-  fields_under_root: true
-  prospector.scanner.check_interval: 10s
-  close_inactive: 5m
-  parsers:
-    - multiline:
-        type: pattern
-        pattern: '^(# Time:)'
-        negate: true
-        match: after
+# - type: filestream
+#   id: mysql-slow
+#   enabled: true
+#   paths:
+#     - /www/server/mysql-apt/data/mysql-slow.log
+#   fields:
+#     log_type: mysql
+#     mysql_log_type: slow
+#   fields_under_root: true
+#   prospector.scanner.check_interval: 10s
+#   close_inactive: 5m
+#   parsers:
+#     - multiline:
+#         type: pattern
+#         pattern: '^(# Time:)'
+#         negate: true
+#         match: after
 
-# EggJS Logs
-- type: filestream
-  id: eggjs
-  enabled: true
-  paths:
-    - /www/wwwroot/*/logs/egg-web.log
-    - /www/wwwroot/*/logs/egg-schedule.log
-    - /www/wwwroot/*/logs/*-web.log
-    - /www/wwwroot/*/logs/*.resource.log
-  exclude_files: ['.gz$', '.tar$', '.json.log$']
-  fields:
-    log_type: eggjs
-    app_type: nodejs
-  fields_under_root: true
-  parsers:
-    - multiline:
-        type: pattern
-        pattern: '^\[\d{4}-\d{2}-\d{2}|^\d{4}-\d{2}-\d{2}'
-        negate: true
-        match: after
+# # EggJS Logs
+# - type: filestream
+#   id: eggjs
+#   enabled: true
+#   paths:
+#     - /www/wwwroot/*/logs/egg-web.log
+#     - /www/wwwroot/*/logs/egg-schedule.log
+#     - /www/wwwroot/*/logs/*-web.log
+#     - /www/wwwroot/*/logs/*.resource.log
+#   exclude_files: ['.gz$', '.tar$', '.json.log$']
+#   fields:
+#     log_type: eggjs
+#     app_type: nodejs
+#   fields_under_root: true
+#   parsers:
+#     - multiline:
+#         type: pattern
+#         pattern: '^\[\d{4}-\d{2}-\d{2}|^\d{4}-\d{2}-\d{2}'
+#         negate: true
+#         match: after
 
-# JHPanel Logs
-- type: filestream
-  id: jh-panel
-  enabled: true
-  paths:
-    - /www/server/jh-panel/logs/report.log
-  fields:
-    log_type: jh-panel
-  fields_under_root: true
+# # JHPanel Logs
+# - type: filestream
+#   id: jh-panel
+#   enabled: true
+#   paths:
+#     - /www/server/jh-panel/logs/report.log
+#   fields:
+#     log_type: jh-panel
+#   fields_under_root: true
 
 # ============================== Filebeat modules ==============================
 
@@ -243,30 +243,30 @@ output.elasticsearch:
     - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
         fields.log_index: "host-debian-system-status"
-    - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-debian-xtrabackup"
-    - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-debian-xtrabackup-inc"
-    - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-debian-backup"
-    - index: "host-debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
-      when.equals:
-        log_type: "syslog"
-    - index: "host-debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
-      when.equals:
-        log_type: "nginx"
-    - index: "host-debian-<hostIdIndex>-eggjs-%{+yyyy.MM}"
-      when.equals:
-        log_type: "eggjs"
-    - index: "host-debian-<hostIdIndex>-mysql-%{+yyyy.MM}"
-      when.equals:
-        log_type: "mysql"
-    - index: "host-debian-<hostIdIndex>-jh-panel-%{+yyyy.MM}"
-      when.equals:
-        log_type: "jh-panel"
+    # - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
+    #   when.equals:
+    #     fields.log_index: "host-debian-xtrabackup"
+    # - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
+    #   when.equals:
+    #     fields.log_index: "host-debian-xtrabackup-inc"
+    # - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
+    #   when.equals:
+    #     fields.log_index: "host-debian-backup"
+    # - index: "host-debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
+    #   when.equals:
+    #     log_type: "syslog"
+    # - index: "host-debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
+    #   when.equals:
+    #     log_type: "nginx"
+    # - index: "host-debian-<hostIdIndex>-eggjs-%{+yyyy.MM}"
+    #   when.equals:
+    #     log_type: "eggjs"
+    # - index: "host-debian-<hostIdIndex>-mysql-%{+yyyy.MM}"
+    #   when.equals:
+    #     log_type: "mysql"
+    # - index: "host-debian-<hostIdIndex>-jh-panel-%{+yyyy.MM}"
+    #   when.equals:
+    #     log_type: "jh-panel"
   pipelines:
     - pipeline: "nginx-pipeline"
       when.equals:
