@@ -209,7 +209,7 @@ class host_api:
                 host_status_indexes=self.host_status_indexes
             )
 
-            host_report_map = self.getHostReportFromES(_list)
+            host_report_map = host_status_service_utils.getLatestHostReportMap(_list)
 
             from config_api import config_api
             dispatch_config = config_api().getReportDispatchConfigData()
@@ -342,7 +342,7 @@ class host_api:
                 host_status_indexes=self.host_status_indexes
             )
             host_detail = self.mergeHostRowWithDetail(host_rows[0], host_detail_map.get(host_id))
-            host_report_map = self.getHostReportFromES(host_rows)
+            host_report_map = host_status_service_utils.getLatestHostReportMap(host_rows)
             host_detail['host_report'] = '{}'
             if host_report_map:
                 host_detail['host_report'] = host_report_map.get(host_id, '{}')
@@ -585,14 +585,6 @@ class host_api:
             data = data[::step]
         return data
 
-    # 从ES获取主机报告
-    def getHostReportFromES(self, host_rows):
-      try:
-        return host_status_service_utils.getLatestHostReportMap(host_rows)
-      except Exception as e:
-        traceback.print_exc()
-        return None
-      
     # 从ES获取面板报告
     def getLogPathListFromES(self, host_ip):
       try:
