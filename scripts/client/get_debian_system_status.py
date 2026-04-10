@@ -382,14 +382,14 @@ def load_panel_runtime_info():
         try:
             mysql_info = system_api_obj.getMysqlInfo()
             runtime['mysql']['total_size'] = mysql_info.get('total_size', '0B')
-            runtime['mysql']['total_size_bytes'] = mysql_info.get('total_bytes', 0)
+            runtime['mysql']['total_size_bytes'] = float(mysql_info.get('total_bytes', 0) or 0)
             for table in mysql_info.get('database_list', []):
                 runtime['mysql']['tables'].append({
                     'id': table.get('id'),
                     'pid': table.get('pid', 0),
                     'table_name': table.get('name', ''),
                     'size': table.get('size', '0B'),
-                    'size_bytes': table.get('size_bytes', 0)
+                    'size_bytes': float(table.get('size_bytes', 0) or 0)
                 })
         except Exception:
             pass
