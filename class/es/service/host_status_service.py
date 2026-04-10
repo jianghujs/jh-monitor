@@ -177,6 +177,7 @@ def getLatestHostReportMap(host_rows, debug_fn=None, report_single_indexes=None,
             report_data_stream_indexes = host_query_utils.HOST_REPORT_SINGLE_DATA_STREAM_INDEXES
 
         host_report = {}
+        host_report_sort_key_map = {}
         if not host_rows:
             _debug(debug_fn, 'getLatestHostReportMap.empty_host_rows', {})
             return host_report
@@ -193,19 +194,65 @@ def getLatestHostReportMap(host_rows, debug_fn=None, report_single_indexes=None,
 
         es = jh.getES()
 
-        def search_hits(index_name, body):
-            response = es.search(index=index_name, body=body)
-            if not isinstance(response, dict):
-                return []
-            return response.get('hits', {}).get('hits', []) or []
+        def normalize_report_sort_text(value):
+            raw_text = str(value or '').strip()
+            if raw_text == '':
+                return ''
+            if len(raw_text) == 10 and raw_text.count('-') == 2:
+                return raw_text + 'T00:00:00'
+            if ' ' in raw_text and 'T' not in raw_text:
+                return raw_text.replace(' ', 'T')
+            return raw_text
 
-        def append_latest_docs(hits):
+        def build_report_sort_key(hit, doc, source_name):
+            hit_sort_values = []
+            for item in (hit.get('sort', []) if isinstance(hit, dict) else []):
+                if isinstance(item, (int, float)):
+                    hit_sort_values.append(str(item).rjust(20, '0'))
+                else:
+                    hit_sort_values.append(normalize_report_sort_text(item))
+
+            report_time = normalize_report_sort_text(
+                doc.get('report_time') or doc.get('report_time_text') or doc.get('@timestamp')
+            )
+            event_time = normalize_report_sort_text(doc.get('@timestamp') or doc.get('report_time'))
+            report_date = normalize_report_sort_text(doc.get('report_date'))
+            source_priority = 2 if source_name == 'data_stream' else 1
+
+            return (
+                report_time,
+                event_time,
+                report_date,
+                source_priority,
+                tuple(hit_sort_values)
+            )
+
+        def search_hits(index_name, body, source_name):
+            try:
+                response = es.search(index=index_name, body=body)
+                if not isinstance(response, dict):
+                    return []
+                return response.get('hits', {}).get('hits', []) or []
+            except Exception as ex:
+                _debug(debug_fn, 'getLatestHostReportMap.search_exception', {
+                    'source_name': source_name,
+                    'index_name': index_name,
+                    'error': str(ex)
+                })
+                return []
+
+        def append_latest_docs(hits, source_name):
             for hit in hits:
                 doc = hit.get('_source', {}) if isinstance(hit, dict) else {}
                 host_id = str(doc.get('host_id', '') or '').strip()
-                if host_id == '' or host_id in host_report:
+                if host_id == '':
+                    continue
+                report_sort_key = build_report_sort_key(hit, doc, source_name)
+                current_sort_key = host_report_sort_key_map.get(host_id)
+                if current_sort_key is not None and report_sort_key <= current_sort_key:
                     continue
                 host_report[host_id] = doc
+                host_report_sort_key_map[host_id] = report_sort_key
 
         _debug(debug_fn, 'getLatestHostReportMap.start', {
             'host_count': len(host_rows),
@@ -216,22 +263,23 @@ def getLatestHostReportMap(host_rows, debug_fn=None, report_single_indexes=None,
 
         data_stream_hits = search_hits(
             report_data_stream_indexes,
-            host_query_utils.buildLatestSingleHostReportDataStreamSearchBody(host_ids)
+            host_query_utils.buildLatestSingleHostReportDataStreamSearchBody(host_ids),
+            'data_stream'
         )
-        append_latest_docs(data_stream_hits)
+        append_latest_docs(data_stream_hits, 'data_stream')
 
-        if len(host_report) < len(host_ids):
-            legacy_hits = search_hits(
-                report_single_indexes,
-                host_query_utils.buildLatestSingleHostReportLegacySearchBody(host_ids)
-            )
-            append_latest_docs(legacy_hits)
+        legacy_hits = search_hits(
+            report_single_indexes,
+            host_query_utils.buildLatestSingleHostReportLegacySearchBody(host_ids),
+            'legacy'
+        )
+        append_latest_docs(legacy_hits, 'legacy')
 
         _debug(debug_fn, 'getLatestHostReportMap.result', {
             'host_ids_requested': host_ids,
             'host_ids_found': list(host_report.keys()),
             'data_stream_hit_count': len(data_stream_hits),
-            'legacy_hit_count': len(legacy_hits) if 'legacy_hits' in locals() else 0,
+            'legacy_hit_count': len(legacy_hits),
         })
         return host_report
     except Exception as ex:

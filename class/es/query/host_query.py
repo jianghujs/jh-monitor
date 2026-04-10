@@ -174,6 +174,12 @@ def buildSingleHostReportSearchBody(host_ids, report_date='', size=None):
         "query": buildSingleHostReportQuery(host_ids, report_date),
         "sort": [
             {
+                "report_time": {
+                    "order": "desc",
+                    "unmapped_type": "date"
+                }
+            },
+            {
                 "report_date": {
                     "order": "desc",
                     "unmapped_type": "date"
@@ -195,6 +201,12 @@ def buildLatestSingleHostReportDataStreamSearchBody(host_ids, size=None):
         "size": size,
         "query": buildSingleHostReportQuery(host_ids, ''),
         "sort": [
+            {
+                "report_time": {
+                    "order": "desc",
+                    "unmapped_type": "date"
+                }
+            },
             {
                 "@timestamp": {
                     "order": "desc",
