@@ -194,6 +194,30 @@ class HostReportAnalyser(object):
         self._es.index(index_name, doc_id, document=document, refresh='wait_for')
         return True
 
+    def _get_es_error_message(self):
+        """提取 ES 客户端最近一次错误，便于向上层返回准确原因。"""
+        try:
+            if hasattr(self._es, 'getError'):
+                error = self._es.getError()
+                if error:
+                    return str(error)
+        except Exception:
+            pass
+        return ''
+
+    def _save_report_document(self, index_name, doc_id, document):
+        """保存报告文档，并立即回读确认已经成功写入 ES。"""
+        result = self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+        if not result:
+            error_message = self._get_es_error_message() or 'unknown_es_index_error'
+            raise RuntimeError('保存报告到ES失败 index={0} doc_id={1} error={2}'.format(index_name, doc_id, error_message))
+
+        saved_document = self._get_doc(index_name, doc_id)
+        if not isinstance(saved_document, dict):
+            error_message = self._get_es_error_message() or 'document_not_found_after_index'
+            raise RuntimeError('保存报告后回读失败 index={0} doc_id={1} error={2}'.format(index_name, doc_id, error_message))
+        return saved_document
+
     def _analyze_series(self, docs, extractor, threshold):
         """统计监控序列的平均值、当前值和超阈次数。"""
         values = []
@@ -1321,7 +1345,7 @@ class HostReportAnalyser(object):
             host_id = row.get('host_id')
             host_group = raw_groups.get(host_id, {'status': [], 'xtrabackup': [], 'xtrabackup_inc': [], 'backup': []})
             doc_id, document = self.build_single_host_report(row, host_group, window)
-            self._es.index(SINGLE_REPORT_INDEX, doc_id, document=document, refresh='wait_for')
+            self._save_report_document(SINGLE_REPORT_INDEX, doc_id, document)
             single_documents.append(document)
             self.log(
                 '[report-analysis] single report saved doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4}'.format(
@@ -1334,7 +1358,7 @@ class HostReportAnalyser(object):
             )
 
         overview_doc_id, overview_document = self.build_overview_report(host_rows, single_documents, window)
-        self._es.index(OVERVIEW_REPORT_INDEX, overview_doc_id, document=overview_document, refresh='wait_for')
+        self._save_report_document(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_document)
 
         ready_count = len([doc for doc in single_documents if value_tool.getNested(doc, ['validation', 'is_complete'], False)])
         abnormal_count = len([doc for doc in single_documents if doc.get('is_abnormal')])

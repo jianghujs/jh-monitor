@@ -846,9 +846,12 @@ class config_api:
         delivery_status = delivery_result.get('status')
         if delivery_status not in ('ok', 'partial'):
             error_msg = delivery_result.get('error') or delivery_result.get('reason') or 'unknown'
+            retained_message = '报告数据已生成并保留'
+            if analysis_result.get('status') != 'ok':
+                retained_message = '报告生成未完成'
             return jh.returnJson(
                 False,
-                '报告已生成，但发送失败: {0}'.format(error_msg),
+                '{0}，但发送失败: {1}'.format(retained_message, error_msg),
                 {
                     'analysis_result': analysis_result,
                     'delivery_result': delivery_result,
