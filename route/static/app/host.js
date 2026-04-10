@@ -1,7 +1,11 @@
 var refreshTimer = null;
-var refreshInterval = 5000; // 默认5秒
+var refreshInterval = 60000; // 默认1分钟
 var loadT = layer.load();
 var hostList = [];
+var currentHostSearch = '';
+var currentHostGroupId = '-1';
+var hostSortSaving = false;
+var hostSortResumeRefresh = false;
 var hostReportTemplates = { panel: null, pve: null };
 var hostReportTemplateQueue = { panel: [], pve: [] };
 
@@ -93,6 +97,103 @@ function getNetRateBytes(value, bytesField, kbField) {
   return null;
 }
 
+function canDragSortHostList() {
+  var search = normalizeText(currentHostSearch).trim();
+  var hostGroupId = normalizeText(currentHostGroupId);
+  return search === '' && (hostGroupId === '' || hostGroupId === '-1');
+}
+
+function updateHostSortHandleState(enabled, title) {
+  var handleTitle = title || (enabled ? '拖动排序' : '仅全部主机列表支持拖动排序');
+  $('#webBody .host-sort-handle').toggleClass('disabled', !enabled).attr('title', handleTitle);
+}
+
+function bindHostSortPointerEvents() {
+  $('#webBody').off('mousedown.hostSort', '.host-sort-handle').on('mousedown.hostSort', '.host-sort-handle', function() {
+    if ($(this).hasClass('disabled')) {
+      return false;
+    }
+    hostSortResumeRefresh = !!refreshTimer;
+    if (hostSortResumeRefresh) {
+      stopAutoRefresh();
+    }
+  });
+
+  $(document).off('mouseup.hostSort').on('mouseup.hostSort', function() {
+    if (hostSortResumeRefresh && !hostSortSaving) {
+      hostSortResumeRefresh = false;
+      startAutoRefresh();
+    }
+  });
+}
+
+function saveHostListSort() {
+  if (!canDragSortHostList()) {
+    return;
+  }
+  var rowIds = $('#webBody tr').map(function() {
+    return $(this).attr('data-host-row-id');
+  }).get().filter(function(item) {
+    return !!item;
+  });
+  if (rowIds.length <= 1) {
+    if (hostSortResumeRefresh) {
+      hostSortResumeRefresh = false;
+      startAutoRefresh();
+    }
+    return;
+  }
+
+  hostSortSaving = true;
+  var sortLoading = layer.msg('正在保存排序!', {icon: 16, time: 0, shade: [0.3, "#000"]});
+  $.post('/host/save_list_sort', { row_ids: rowIds }, function(rdata) {
+    layer.close(sortLoading);
+    layer.msg(rdata.msg, {icon: rdata.status ? 1 : 2});
+    if (rdata.status) {
+      getWeb(1, currentHostSearch, currentHostGroupId);
+    }
+  }, 'json').fail(function() {
+    layer.close(sortLoading);
+    layer.msg('排序保存失败!', {icon: 2});
+  }).always(function() {
+    hostSortSaving = false;
+    if (hostSortResumeRefresh) {
+      hostSortResumeRefresh = false;
+      startAutoRefresh();
+    }
+  });
+}
+
+function initHostDragSort() {
+  var hostBody = $('#webBody');
+  hostBody.trigger('dragsort-uninit');
+  bindHostSortPointerEvents();
+
+  if (typeof hostBody.dragsort !== 'function') {
+    updateHostSortHandleState(false, '拖动组件未加载');
+    return;
+  }
+
+  if (!canDragSortHostList()) {
+    updateHostSortHandleState(false, '仅全部主机列表支持拖动排序');
+    return;
+  }
+
+  if (hostBody.children('tr').length <= 1) {
+    updateHostSortHandleState(false, '至少需要两台主机才能拖动排序');
+    return;
+  }
+
+  updateHostSortHandleState(true, '拖动排序');
+  hostBody.dragsort({
+    itemSelector: 'tr',
+    dragSelector: '.host-sort-handle',
+    dragEnd: function() {
+      saveHostListSort();
+    }
+  });
+}
+
 /**
  * 主机数据列表
  * @param {Number} page   当前页
@@ -101,6 +202,8 @@ function getNetRateBytes(value, bytesField, kbField) {
 function getWeb(page, search, host_group_id) {
 	search = $("#SearchValue").prop("value");
 	page = page == undefined ? '1':page;
+  currentHostSearch = search;
+  currentHostGroupId = typeof(host_group_id) != 'undefined' ? host_group_id : ($('.host_group_list > select').val() || '-1');
 	var order = getCookie('order');
 	if(order){
 		order = '&order=' + order;
@@ -368,7 +471,8 @@ function getWeb(page, search, host_group_id) {
       `;
       
 
-			body = "<tr><td><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
+			body = "<tr data-host-row-id='" + data.data[i].id + "'><td class='text-center'><span class='host-sort-handle glyphicon glyphicon-sort'></span></td>\
+					<td><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
 					<td>" + name + "</td>\
 					<td>" + status + "</td>\
 					<td>" + host_group + "</td>\
@@ -425,7 +529,7 @@ function getWeb(page, search, host_group_id) {
             });
 		}
 		if(body.length < 10){
-			body = "<tr><td colspan='9'>当前没有主机数据</td></tr>";
+			body = "<tr><td colspan='15'>当前没有主机数据</td></tr>";
 			// $(".dataTables_paginate").hide();
 			$("#webBody").html(body);
 		}
@@ -437,6 +541,7 @@ function getWeb(page, search, host_group_id) {
 		});
 
     bindReportSummaryTips();
+    initHostDragSort();
 		//输出分页
 		// $("#webPage").html(data.page);
 		// $("#webPage").html('<div class="site_type"><span>主机分组:</span><select class="bt-input-text mr5" style="width:100px"><option value="-1">全部分组</option><option value="0">默认分组</option></select></div>');

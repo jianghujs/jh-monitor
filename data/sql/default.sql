@@ -164,7 +164,8 @@ CREATE TABLE IF NOT EXISTS `host` (
   `backup_host_id` INTEGER,
   `backup_host_name` TEXT,
   `backup_ip` TEXT,
-  `addtime` TEXT
+  `addtime` TEXT,
+  `sort_id` INTEGER DEFAULT 0
 );
 
 -- 主机分组

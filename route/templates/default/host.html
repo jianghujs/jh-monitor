@@ -18,12 +18,20 @@
 				<div class="safe bgw mtb15 pd15">
 					<div class="flex align-center">
 						<button onclick="openHostAdd()" class="btn btn-success btn-sm btn-title" type="button">添加主机</button>&nbsp;
-						<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title" type="button">分组管理</button>
 						
-						<div id="refreshControl" class="ml-4">
+						
+						<div class="host_group_list ml-6">
+							<span>主机分组:</span>
+							<select class="bt-input-text">
+							</select>
+						</div>
+						<button onclick="openHostGroupManage();" class="btn btn-default btn-sm btn-title ml-2" type="button">分组管理</button>
+						
+            
+            <div id="refreshControl" class="ml-4">
 							<div class="btn-group">
 								<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
-									刷新间隔: <span id="currentInterval">5</span>秒
+									刷新间隔: <span id="currentInterval">60</span>秒
 									<span class="caret"></span>
 								</button>
 								<ul class="dropdown-menu">
@@ -38,7 +46,7 @@
 								<span>停止刷新</span>
 							</button>
 						</div>
-						
+
 						<span>
 							<button  batch="true" style="float: right; margin-left: 10px;display: none;" onclick="batchDelete();" class="btn btn-default btn-sm">删除选中</button>
 						</span>
@@ -48,6 +56,7 @@
 						<table class="table table-hover" style="min-width: 900px;border: 0 none;">
 							<thead>
 								<tr>
+									<th class="text-center" width="36" title="拖动排序"></th>
 									<th width="30"><input type="checkbox" onclick="checkSelect();" id="setBox"></th>
 									<th class="cursor: pointer text-center" width="120">主机名称/IP</th>
 									<th class="cursor: pointer text-center" width="80">状态</th>
@@ -69,14 +78,6 @@
 						</div>
 						<div class="dataTables_paginate paging_bootstrap pagination">
 							<ul id="webPage" class="page"></ul>
-						</div>
-
-						<div class="host_group_list">
-							<span>主机分组:</span>
-							<select class="bt-input-text mr5" style="width:100px">
-								<!-- <option value="-1">全部分类</option>
-								<option value="0">默认分类</option> -->
-							</select>
 						</div>
 					</div>
 				</div>
@@ -105,6 +106,26 @@ setTimeout(function(){
  .drop-shadow {
     --tw-drop-shadow: drop-shadow(1px 0px 0.1px rgb(0 0 0 / 75%)) drop-shadow(1px 1px 0.1px rgb(0 0 0 / 0.6));
     filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+ }
+ .host-sort-handle {
+    color: #999;
+    cursor: move;
+ }
+ .host-sort-handle.disabled {
+    color: #d0d0d0;
+    cursor: not-allowed;
+ }
+ .host-sort-placeholder td {
+    background: #f7f7f7 !important;
+ }
+ .host_group_list {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+ }
+ .host_group_list span {
+    color: #666;
+    margin-bottom: 0;
  }
 </style>
 {% endblock %}

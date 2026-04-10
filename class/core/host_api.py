@@ -41,6 +41,26 @@ class host_api:
     host_alarm_field = "id,host_id,host_name,alarm_type,alarm_level,alarm_content,addtime"
     host_status_indexes = host_query_utils.HOST_STATUS_INDEXES
 
+    def ensureHostSortSchema(self):
+        host_db = jh.M('host')
+        host_columns = host_db.originExecute("PRAGMA table_info(host)").fetchall()
+        sort_exists = any(column[1] == 'sort_id' for column in host_columns)
+        if not sort_exists:
+            host_db.originExecute("ALTER TABLE host ADD COLUMN sort_id INTEGER DEFAULT 0")
+
+        sort_count_row = host_db.originExecute(
+            "SELECT COUNT(*) FROM host WHERE sort_id IS NOT NULL AND sort_id > 0"
+        ).fetchone()
+        sort_count = sort_count_row[0] if sort_count_row else 0
+        if sort_count > 0:
+            return
+
+        sort_rows = host_db.originExecute("SELECT id FROM host ORDER BY id DESC").fetchall()
+        sort_value = 1
+        for row in sort_rows:
+            host_db.execute("UPDATE host SET sort_id=? WHERE id=?", (sort_value, row[0]))
+            sort_value += 1
+
     def normalizeHostReportData(self, report_raw):
         if report_raw is None:
             return None
@@ -156,10 +176,11 @@ class host_api:
         return self.renderHostReportHtml(host_row, report_data)
 
     def getHostMetaRows(self, host_group_id=''):
+        self.ensureHostSortSchema()
         hostM = jh.M('host')
         if host_group_id != '' and host_group_id != '-1':
             hostM.where('host_group_id=?', (host_group_id,))
-        data = hostM.field(self.host_meta_field).order('id desc').select()
+        data = hostM.field(self.host_meta_field).order('sort_id asc,id desc').select()
         if isinstance(data, str) or data is None:
             return []
         return data
@@ -281,12 +302,16 @@ class host_api:
         return jh.returnJson(True, "修改成功!")
 
     def addApi(self):
+        self.ensureHostSortSchema()
         host_name = request.form.get('host_name', '10')
         ip = request.form.get('ip', '')
         with open('/etc/ansible/hosts', 'a') as f:
             f.write(f"{ip}\n")
 
-        jh.M('host').add("host_name,ip,addtime", (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S')))
+        jh.M('host').add(
+            "host_name,ip,addtime,sort_id",
+            (host_name, ip, time.strftime('%Y-%m-%d %H:%M:%S'), 0)
+        )
         try:
             host_id = jh.M('host').where('ip=?', (ip,)).order('id desc').getField('host_id')
             if host_id:
@@ -295,6 +320,32 @@ class host_api:
         except Exception:
             pass
         return jh.returnJson(True, '主机添加成功!')
+
+    def saveListSortApi(self):
+        self.ensureHostSortSchema()
+        row_ids = request.form.getlist('row_ids[]')
+        if len(row_ids) == 0:
+            row_ids = request.form.getlist('row_ids')
+        if len(row_ids) == 0:
+            row_ids_text = request.form.get('row_ids', '').strip()
+            if row_ids_text != '':
+                row_ids = row_ids_text.split(',')
+
+        normalized_ids = []
+        for row_id in row_ids:
+            try:
+                normalized_ids.append(int(str(row_id).strip()))
+            except Exception:
+                continue
+
+        if len(normalized_ids) == 0:
+            return jh.returnJson(False, '请先选择有效的主机排序数据!')
+
+        sort_value = 1
+        for row_id in normalized_ids:
+            jh.M('host').where('id=?', (row_id,)).setField('sort_id', sort_value)
+            sort_value += 1
+        return jh.returnJson(True, '主机排序已保存!')
 
     def updateHostNameApi(self):
         host_id = request.form.get('host_id', '')
