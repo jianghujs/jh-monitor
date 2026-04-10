@@ -121,7 +121,7 @@ curl_json() {
 }
 
 log "步骤1/4: 检查 ES 连通性"
-curl_json "/" | "$PYTHON_BIN" - <<'PY'
+curl_json "/" | "$PYTHON_BIN" -c '
 import json
 import sys
 
@@ -131,11 +131,11 @@ print(json.dumps({
     "cluster_name": data.get("cluster_name"),
     "version": (data.get("version") or {}).get("number"),
 }, ensure_ascii=False, indent=2))
-PY
+'
 
 log "步骤2/4: 检查模板 host-debian-system-status-template"
 TEMPLATE_JSON="$(curl_json "/_index_template/host-debian-system-status-template")"
-printf '%s' "$TEMPLATE_JSON" | "$PYTHON_BIN" - <<'PY'
+printf '%s' "$TEMPLATE_JSON" | "$PYTHON_BIN" -c '
 import json
 import sys
 
@@ -163,11 +163,11 @@ print(json.dumps({
     "mysql.tables.size_bytes": (tables_props.get("size_bytes") or {}).get("type"),
     "dynamic_templates": dynamic_templates,
 }, ensure_ascii=False, indent=2))
-PY
+'
 
 log "步骤3/4: 检查数据流 pattern=${DATA_STREAM_PATTERN}"
 DATA_STREAM_JSON="$(curl_json "/_data_stream/${DATA_STREAM_PATTERN}")"
-printf '%s' "$DATA_STREAM_JSON" | "$PYTHON_BIN" - <<'PY'
+printf '%s' "$DATA_STREAM_JSON" | "$PYTHON_BIN" -c '
 import json
 import sys
 
@@ -195,10 +195,10 @@ print(json.dumps({
     "data_stream_count": len(streams),
     "data_streams": summary,
 }, ensure_ascii=False, indent=2))
-PY
+'
 
 log "步骤4/4: 检查字段映射和最新文档"
-printf '%s' "$DATA_STREAM_JSON" | "$PYTHON_BIN" - <<'PY' "$ES_ADDR" "$ES_USER" "$ES_PASS"
+printf '%s' "$DATA_STREAM_JSON" | "$PYTHON_BIN" -c '
 import json
 import subprocess
 import sys
@@ -293,7 +293,7 @@ for item in streams:
         }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
-PY
+' "$ES_ADDR" "$ES_USER" "$ES_PASS"
 
 log "检查完成"
 if [ -z "$HOST_ID_INDEX" ]; then
