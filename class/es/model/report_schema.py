@@ -372,8 +372,8 @@ REPORT_INDEXES = {
 }
 
 REPORT_DATA_STREAMS = {
-    'single': 'host-report-single-ds',
-    'overview': 'host-report-overview-ds',
+    'single_prefix': 'host-report-single',
+    'overview_prefix': 'host-report-overview',
 }
 
 
@@ -527,7 +527,7 @@ REPORT_INDEX_TEMPLATES = {
         'data_stream': {}
     },
     'host-report-single-ds-template': {
-        'index_patterns': ['host-report-single-ds*'],
+        'index_patterns': ['host-report-single-*'],
         'priority': 600,
         'template': {
             'settings': {
@@ -577,7 +577,7 @@ REPORT_INDEX_TEMPLATES = {
         'data_stream': {}
     },
     'host-report-overview-ds-template': {
-        'index_patterns': ['host-report-overview-ds*'],
+        'index_patterns': ['host-report-overview-*'],
         'priority': 600,
         'template': {
             'settings': {

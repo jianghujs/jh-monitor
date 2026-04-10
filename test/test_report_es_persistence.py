@@ -52,21 +52,26 @@ def is_true(value):
 def configure_report_indices(use_live_index=True):
     single_index = 'host-report-single'
     overview_index = 'host-report-overview'
-    single_data_stream = 'host-report-single-ds'
-    overview_data_stream = 'host-report-overview-ds'
+    single_data_stream_prefix = 'host-report-single'
+    overview_data_stream_prefix = 'host-report-overview'
     if not use_live_index:
         single_index = 'host-report-single-test'
         overview_index = 'host-report-overview-test'
-        single_data_stream = 'host-report-single-ds-test'
-        overview_data_stream = 'host-report-overview-ds-test'
+        single_data_stream_prefix = 'host-report-test-single'
+        overview_data_stream_prefix = 'host-report-test-overview'
 
     report_analyser_module.SINGLE_REPORT_INDEX = single_index
     report_analyser_module.OVERVIEW_REPORT_INDEX = overview_index
-    report_analyser_module.SINGLE_REPORT_DATA_STREAM = single_data_stream
-    report_analyser_module.OVERVIEW_REPORT_DATA_STREAM = overview_data_stream
+    report_analyser_module.SINGLE_REPORT_DATA_STREAM_PREFIX = single_data_stream_prefix
+    report_analyser_module.OVERVIEW_REPORT_DATA_STREAM_PREFIX = overview_data_stream_prefix
     report_sender_module.SINGLE_REPORT_INDEX = single_index
     report_sender_module.OVERVIEW_REPORT_INDEX = overview_index
-    return single_index, overview_index, single_data_stream, overview_data_stream
+    return single_index, overview_index, single_data_stream_prefix, overview_data_stream_prefix
+
+
+def build_monthly_data_stream_name(prefix, report_date):
+    month_text = str(report_date or '')[:7]
+    return '{0}-{1}'.format(prefix, month_text)
 
 
 def load_target_hosts(host_ids=None, host_ips=None, scheduled_only=False):
@@ -252,7 +257,7 @@ def build_args():
 def main():
     args = build_args()
     use_live_index = not args.use_test_index
-    single_index, overview_index, single_data_stream, overview_data_stream = configure_report_indices(use_live_index=use_live_index)
+    single_index, overview_index, single_data_stream_prefix, overview_data_stream_prefix = configure_report_indices(use_live_index=use_live_index)
 
     host_ids = parse_csv_args(args.host_id)
     host_ips = parse_csv_args(args.host_ip)
@@ -288,6 +293,8 @@ def main():
     analyser = HostReportAnalyser()
     sender = HostReportSender(es_client=analyser._es)
     report_date = analyser.get_report_window(args.report_date or None)['report_date']
+    single_data_stream = build_monthly_data_stream_name(single_data_stream_prefix, report_date)
+    overview_data_stream = build_monthly_data_stream_name(overview_data_stream_prefix, report_date)
     selected_host_ids = [row.get('host_id') for row in host_rows if row.get('host_id')]
     overview_doc_id = report_date
     single_doc_ids = ['{0}:{1}'.format(report_date, host_id) for host_id in selected_host_ids]

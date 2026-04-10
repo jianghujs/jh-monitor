@@ -3,6 +3,7 @@
 
 import argparse
 import copy
+import datetime
 import json
 import os
 import sys
@@ -28,6 +29,7 @@ def build_args():
     parser.add_argument('--check-only', action='store_true', help='只检查索引是否存在，不执行创建/更新')
     parser.add_argument('--all', action='store_true', help='同时初始化 REPORT_INDEXES 和 REPORT_INDEX_TEMPLATES 中的全部定义')
     parser.add_argument('--sync-existing-indices', action='store_true', help='同步更新已存在的报告普通索引 mapping，可能因历史字段类型冲突失败')
+    parser.add_argument('--month', default='', help='指定报告数据流月份，格式 YYYY-MM，默认当前月份')
     return parser.parse_args()
 
 
@@ -54,15 +56,26 @@ def build_report_data_stream_templates(use_test_index=False):
     for template_name in template_names:
         template_definition = copy.deepcopy(REPORT_INDEX_TEMPLATES[template_name])
         if use_test_index:
-            template_definition['index_patterns'] = [pattern + '-test' for pattern in template_definition.get('index_patterns', [])]
+            template_definition['index_patterns'] = [pattern.replace('host-report-', 'host-report-test-') for pattern in template_definition.get('index_patterns', [])]
         definitions[template_name + ('-test' if use_test_index else '')] = template_definition
     return definitions
 
 
-def build_report_data_stream_names(use_test_index=False):
-    names = [REPORT_DATA_STREAMS['single'], REPORT_DATA_STREAMS['overview']]
+def normalize_month(month_text=''):
+    raw_text = str(month_text or '').strip()
+    if raw_text == '':
+        return datetime.datetime.now().strftime('%Y-%m')
+    return datetime.datetime.strptime(raw_text, '%Y-%m').strftime('%Y-%m')
+
+
+def build_report_data_stream_names(use_test_index=False, month_text=''):
+    month_value = normalize_month(month_text)
+    names = [
+        '{0}-{1}'.format(REPORT_DATA_STREAMS['single_prefix'], month_value),
+        '{0}-{1}'.format(REPORT_DATA_STREAMS['overview_prefix'], month_value),
+    ]
     if use_test_index:
-        return [name + '-test' for name in names]
+        return [name.replace('host-report-', 'host-report-test-') for name in names]
     return names
 
 
@@ -139,12 +152,12 @@ def main():
         target_indices = list(index_definitions.keys())
         data_stream_templates = build_report_data_stream_templates(False)
         template_definitions.update(data_stream_templates)
-        target_data_streams = build_report_data_stream_names(False)
+        target_data_streams = build_report_data_stream_names(False, args.month)
     else:
         index_definitions = build_report_index_definitions(use_test_index=args.use_test_index)
         template_definitions = build_report_data_stream_templates(use_test_index=args.use_test_index)
         target_indices = list(index_definitions.keys())
-        target_data_streams = build_report_data_stream_names(use_test_index=args.use_test_index)
+        target_data_streams = build_report_data_stream_names(use_test_index=args.use_test_index, month_text=args.month)
 
     results = {
         'es_config': {
@@ -155,6 +168,7 @@ def main():
         'target_indices': target_indices,
         'target_templates': list(template_definitions.keys()),
         'target_data_streams': target_data_streams,
+        'month': normalize_month(args.month),
         'mode': 'check_only' if args.check_only else 'ensure',
         'scope': 'all' if args.all else ('report_test' if args.use_test_index else 'report'),
     }
