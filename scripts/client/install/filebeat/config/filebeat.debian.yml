@@ -64,6 +64,11 @@ filebeat.inputs:
     - /www/wwwlogs/*.log
     - /www/server/mysql-apt/data/*.log
     - /www/server/jh-panel/logs/report.log
+  exclude_files:
+    - '^/www/wwwlogs/.*'
+    - '^/www/server/mysql-apt/data/error\.log$'
+    - '^/www/server/mysql-apt/data/mysql-slow\.log$'
+    - '^/www/server/jh-panel/logs/report\.log$'
   fields:
     log_type: common
 
@@ -83,15 +88,26 @@ filebeat.inputs:
 
 # Nginx Logs
 - type: filestream
-  id: nginx
+  id: nginx-access
   enabled: true
   paths:
     - /www/wwwlogs/*.log
+  exclude_files: ['\.error\.log$', '\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
+  fields:
+    log_type: nginx
+    nginx_log_kind: access
+  fields_under_root: true
+
+- type: filestream
+  id: nginx-error
+  enabled: true
+  paths:
+    - /www/wwwlogs/*.error.log
     - /www/server/openresty/nginx/logs/error.log
   fields:
     log_type: nginx
+    nginx_log_kind: error
   fields_under_root: true
-  exclude_files: ['\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
 
 # MySQL Logs
 - type: filestream
@@ -254,7 +270,7 @@ output.elasticsearch:
   pipelines:
     - pipeline: "nginx-pipeline"
       when.equals:
-        log_type: "nginx"
+        nginx_log_kind: "access"
   preset: balanced
 
   # Protocol - either `http` (default) or `https`.
