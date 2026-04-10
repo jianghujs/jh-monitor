@@ -59,7 +59,12 @@ def getLatestStatusDocs(host_rows, debug_fn=None, host_status_indexes=None):
         query_preview = []
         for row in host_rows:
             query_body = host_query_utils.buildLatestStatusQuery(row)
-            msearch_body.append({"index": host_status_indexes})
+            msearch_body.append({
+                "index": host_status_indexes,
+                "expand_wildcards": "all",
+                "ignore_unavailable": True,
+                "allow_no_indices": True
+            })
             msearch_body.append(host_query_utils.buildLatestStatusSearchBody(row))
             if len(query_preview) < 5:
                 query_preview.append({

@@ -93,7 +93,13 @@ class ES:
 
     def search(self, index, body, scroll=None):
         try:
-            kwargs = {'index': index, 'body': body}
+            kwargs = {
+                'index': index,
+                'body': body,
+                'expand_wildcards': 'all',
+                'ignore_unavailable': True,
+                'allow_no_indices': True,
+            }
             if scroll:
                 kwargs['scroll'] = scroll
             return self.normalizeResponse(self.getConn().search(**kwargs))
