@@ -177,5 +177,315 @@ setTimeout(function(){
     color: #666;
     margin-bottom: 0;
  }
+ .detail-log-monitor-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2%;
+    align-items: stretch;
+    height: 510px;
+  }
+ .detail-log-path-panel {
+    width: 30%;
+    height: 100%;
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 18px rgba(31, 35, 41, 0.04);
+  }
+ .detail-log-path-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    margin-bottom: 0;
+ }
+ .detail-log-path-toolbar {
+    padding: 12px 15px;
+    border-top: 1px solid #f0f2f5;
+    border-bottom: 1px solid #f0f2f5;
+    background: #fff;
+ }
+ .detail-log-path-toolbar .bt-input-text {
+    width: 100%;
+    height: 34px;
+    border-radius: 6px;
+ }
+ .detail-log-path-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background: #fafbfc;
+  }
+ .log-path-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+ }
+ .log-tree-dir,
+ .log-tree-children {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+ }
+ .log-tree-dir-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    color: #606266;
+    font-size: 13px;
+    font-weight: 600;
+    background: #f7f9fb;
+    border-bottom: 1px solid #eef1f5;
+    cursor: pointer;
+ }
+ .log-tree-dir.collapsed > .log-tree-children {
+    display: none;
+ }
+ .log-tree-caret {
+    font-size: 12px;
+    color: #909399;
+ }
+ .log-tree-dir-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+ }
+ .log-path-item,
+ .log-path-empty {
+    padding: 12px 18px;
+    border-bottom: 1px solid #f1f1f1;
+ }
+ .log-path-item {
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border-left: 3px solid transparent;
+    background: #fff;
+ }
+ .log-path-item:hover {
+    background: #f7faf7;
+ }
+ .log-path-item-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+ }
+ .log-path-item-main .glyphicon {
+    color: #8c8c8c;
+ }
+ .log-path-item-info {
+    min-width: 0;
+    flex: 1;
+ }
+ .log-path-item.active {
+    background: #f5fbf5;
+    border-left-color: #20a53a;
+ }
+ .log-path-item.active .log-path-text {
+    color: #20a53a;
+ }
+ .log-path-item.active .glyphicon {
+    color: #20a53a;
+ }
+ .log-path-text,
+ .detail-log-headline,
+  .detail-log-meta {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+ }
+ .log-path-text {
+    font-weight: 600;
+    color: #303133;
+ }
+ .log-path-highlight {
+    padding: 0 2px;
+    border-radius: 3px;
+    background: #fff2b3;
+    color: #8a5a00;
+ }
+ .log-path-meta,
+ .detail-log-label {
+    color: #999;
+ }
+ .log-path-meta {
+    margin-top: 4px;
+    font-size: 12px;
+ }
+ .log-path-empty {
+    color: #999;
+    text-align: center;
+    padding-top: 40px;
+ }
+ .detail-log-content-panel {
+    width: 68%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+ .detail-log-header-card {
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(31, 35, 41, 0.04);
+    flex: 0 0 auto;
+  }
+ .detail-log-headline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: #303133;
+ }
+ .detail-log-headline .path {
+    font-weight: 600;
+    color: #1f2329;
+ }
+ .detail-log-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 14px;
+ }
+ .detail-log-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #f5f7fa;
+    color: #606266;
+    max-width: 100%;
+ }
+ .detail-log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+    padding-top: 15px;
+    border-top: 1px dashed #ebeef5;
+ }
+ .detail-log-toolbar .bt-input-text {
+    flex: 1;
+    min-width: 220px;
+    height: 34px;
+    border-radius: 6px;
+ }
+ .detail-log-content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    background: #fcfcfd;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+ .detail-log-pagination {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0 4px;
+ }
+ .detail-log-empty {
+    color: #999;
+    text-align: center;
+    padding: 120px 0;
+ }
+ .detail-log-line {
+    padding: 14px 0;
+    border-bottom: 1px solid #f1f1f1;
+  }
+ .detail-log-line:first-child {
+    padding-top: 0;
+ }
+ .detail-log-line:last-child {
+    border-bottom: 0 none;
+    padding-bottom: 0;
+ }
+ .detail-log-time {
+    color: #909399;
+    margin-bottom: 8px;
+    font-size: 12px;
+ }
+ .detail-log-text {
+    margin: 0;
+    padding: 0;
+    border: 0 none;
+    background: transparent;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 12px;
+    line-height: 1.7;
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    color: #303133;
+ }
+ .detail-log-label {
+    color: #909399;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+ }
+ .detail-log-summary-badge {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+ }
+ #detailLogPage > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+ }
+ #detailLogPage a,
+ #detailLogPage span {
+    margin: 0;
+ }
+ #detailLogPage .Pcurrent {
+    min-width: 30px;
+    height: 30px;
+    line-height: 30px;
+    text-align: center;
+    border-radius: 6px;
+    background: #20a53a;
+    color: #fff;
+ }
+ #detailLogPage .Pnum,
+ #detailLogPage .Pstart,
+ #detailLogPage .Ppren,
+ #detailLogPage .Pnext,
+ #detailLogPage .Pend {
+    min-width: 30px;
+    height: 30px;
+    line-height: 30px;
+    padding: 0 10px;
+    text-align: center;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    color: #606266;
+    background: #fff;
+ }
+ #detailLogPage .Pcount {
+    color: #909399;
+ }
+  @media (max-width: 991px) {
+    .detail-log-monitor-wrap {
+      height: auto;
+    }
+    .detail-log-path-panel,
+    .detail-log-content-panel {
+      width: 100%;
+    }
+    .detail-log-path-panel {
+      height: 260px;
+    }
+    .detail-log-content-panel {
+      height: auto;
+    }
+    .detail-log-content {
+      height: 360px;
+      flex: none;
+    }
+  }
 </style>
 {% endblock %}

@@ -8,6 +8,44 @@ var hostSortSaving = false;
 var hostSortResumeRefresh = false;
 var hostReportTemplates = { panel: null, pve: null };
 var hostReportTemplateQueue = { panel: [], pve: [] };
+var detailLogMonitorState = {
+  hostId: '',
+  hostIp: '',
+  logPath: '',
+  pathList: [],
+  pathFilter: '',
+  collapsedDirs: {},
+  keyword: '',
+  page: 1,
+  limit: 50
+};
+
+function escapeHtml(value) {
+  return $('<div/>').text(normalizeText(value)).html();
+}
+
+function escapeRegExp(value) {
+  return normalizeText(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightText(value, keyword) {
+  var text = normalizeText(value);
+  var search = normalizeText(keyword);
+  if (!search) {
+    return escapeHtml(text);
+  }
+
+  var regex = new RegExp('(' + escapeRegExp(search) + ')', 'ig');
+  return text.split(regex).map(function(part) {
+    if (!part) {
+      return '';
+    }
+    if (part.toLowerCase() === search.toLowerCase()) {
+      return '<span class="log-path-highlight">' + escapeHtml(part) + '</span>';
+    }
+    return escapeHtml(part);
+  }).join('');
+}
 
 function fetchHostReportTemplate(reportType, callback) {
   var type = reportType === 'pve' ? 'pve' : 'panel';
@@ -1004,7 +1042,7 @@ function openHostDetail(host_id,host_name,endTime,addtime,event){
     { title: '主机概览', fun: `detailHostSummary('${host_id}', '${host_name}')` },
     { title: '基础监控', fun: `detailBaseMonitor('${host_id}')` },
     { title: '日志监控', fun: `detailLogMonitor('${host_id}')` },
-    { title: '系统监控', fun: `detailSysMonitor('${host_name}')` },
+    // { title: '系统监控', fun: `detailSysMonitor('${host_name}')` },
     { title: '主机报告', fun: `detailPanelReport('${host_id}')`, hidden: !(host && host.host_report && Object.keys(host.host_report).length > 0) },
   ]
 
@@ -1166,61 +1204,6 @@ function detailHostSummary(host_id, name, msg, status) {
             </div>
             <div id="netImg" style="width: 100%; height:330px;"></div>
         </div>
-
-        
-        <!-- 告警事件 -->
-        <div class="server bgw mt-5">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">告警事件</h3>
-          </div>
-          <div class="mx-auto">
-            <div class="divtable m-5">
-              <div class="tablescroll">
-              <table class="table table-hover" style="border: 0 none;">
-                <thead>
-                  <tr>
-                    <th width="120">告警内容</th>
-                    <th width="40">告警时间</th>
-                    <th width="40">状态</th>
-                    <th width='40' class='text-right border-none'>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="alarmBody"></tbody>
-              </table>
-              </div>
-              <div class="dataTables_paginate paging_bootstrap pagination">
-                <ul id="webPage" class="page"></ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 在线的SSH用户 -->
-        <div class="server bgw mt-5">
-          <div class="title c6 f16 plr15">
-              <h3 class="c6 f16 pull-left">在线的SSH用户</h3>
-          </div>
-          <div class="mx-auto">
-            <div class="divtable m-5">
-              <div class="tablescroll">
-              <table class="table table-hover" style="border: 0 none;">
-                <thead>
-                  <tr>
-                    <th width="120">用户名</th>
-                    <th width="40">虚拟终端</th>
-                    <th width="40">登录时间</th>
-                    <th width="40">登录IP</th>
-                  </tr>
-                </thead>
-                <tbody id="sshUserBody"></tbody>
-              </table>
-              </div>
-              <div class="dataTables_paginate paging_bootstrap pagination">
-                <ul id="webPage" class="page"></ul>
-              </div>
-            </div>
-          </div>
-        </div>
         
       </div>
     </div>
@@ -1371,39 +1354,59 @@ function detailBaseMonitor(host_id, name, msg, status) {
 function detailLogMonitor(host_id, name, msg, status) {
   
   var bodyHtml = `
-    <div class="flex flex-wrap">
+    <div class="detail-log-monitor-wrap">
       <!-- 日志路径列表 --> 
-      <div class="bgw" style="width: 30%;height: 500px;">
-        <div class="server mb15">
+      <div class="bgw detail-log-path-panel">
+        <div class="server detail-log-path-card">
           <div class="title c6 f16 plr15">
               <h3 class="c6 f16 pull-left">日志路径列表</h3>
           </div>
-          <div class=" overflow-y-auto" style="height:460px">
-              <ul id="logFileBody" class="log-path-list" style="line-height: 35px;">
-                  <span>加载中...</span>
+          <div class="detail-log-path-toolbar">
+              <input type="text" id="detailLogPathSearch" class="bt-input-text" placeholder="搜索日志文件">
+          </div>
+          <div class="detail-log-path-body">
+              <ul id="logFileBody" class="log-path-list">
+                  <li class="log-path-empty">加载中...</li>
               </ul>
           </div>
         </div>
       </div>
-      <div style="width:68%;" id="logFileDetail">
-        <div class="mx-5 mb-5 p-5 bg-white">
-          <div class="title mt-2 flex">
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志路径: </span><span class="path"></span></div>
+      <div class="detail-log-content-panel" id="logFileDetail">
+        <div class="p-5 bg-white detail-log-header-card">
+          <div class="title mt-2">
+              <div class="detail-log-headline"><span class="detail-log-label">日志路径</span><span class="path"></span></div>
           </div>
-          <div class="mt-2 flex">
-              <!-- <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">日志大小:</span><span class="size"></span></div> -->
-              <!-- <div class="mr-5 overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">文件权限:</span><span class="permission"></span></div> -->
-              <div class="overflow-hidden whitespace-nowrap text-ellipsis"><span class="text-gray-400 inline-block w-32">修改时间:</span><span class="modifyTime"></span></div>
+          <div class="mt-2 detail-log-meta-row">
+              <div class="detail-log-meta"><span class="detail-log-label">最新时间</span><span class="modifyTime"></span></div>
+              <div class="detail-log-meta"><span class="detail-log-label">来源索引</span><span class="sourceIndex"></span></div>
+              <div class="detail-log-meta"><span class="detail-log-label">结果统计</span><span class="summary detail-log-summary-badge"></span></div>
+          </div>
+          <div class="detail-log-toolbar">
+              <input type="text" id="detailLogKeyword" class="bt-input-text" placeholder="输入关键字搜索日志">
+              <button type="button" class="btn btn-success btn-sm" onclick="submitDetailHostLogMonitorSearch()">搜索</button>
+              <button type="button" class="btn btn-default btn-sm" onclick="resetDetailHostLogMonitorSearch()">重置</button>
           </div>
         </div>
-        <div class="mx-5 p-5 bgw content overflow-auto" style="height: 390px;">
+        <div class="p-5 bgw content detail-log-content">
           日志内容为空
+        </div>
+        <div class="dataTables_paginate paging_bootstrap pagination detail-log-pagination">
+          <div id="detailLogPage"></div>
         </div>
       </div>
     </div>
   `;
 
   $("#hostdetail-con").html(bodyHtml);
+  $("#detailLogPathSearch").off('input').on('input', function() {
+    detailLogMonitorState.pathFilter = $.trim($(this).val());
+    renderDetailHostLogPathTree();
+  });
+  $("#detailLogKeyword").off('keydown').on('keydown', function(e) {
+    if (e.keyCode == 13) {
+      submitDetailHostLogMonitorSearch();
+    }
+  });
 
   getDetailHostLogMonitorData(host_id);
 
@@ -2782,66 +2785,257 @@ function updateDetailHostBaseMonitorNetIoChartData(s, e) {
 // 日志文件列表
 function getDetailHostLogMonitorData(host_id) {
   loadT = layer.load();
-  bodyHtml = '';
-
-  host = hostList.find(item => item.host_id == host_id);
+  var host = hostList.find(item => item.host_id == host_id);
   if (!host) {
+    renderDetailHostLogMonitorEmpty('未找到主机信息');
     layer.close(loadT);
     return;
   }
   const { ip } = host;
+  detailLogMonitorState.hostId = host_id;
+  detailLogMonitorState.hostIp = ip;
+  detailLogMonitorState.logPath = '';
+  detailLogMonitorState.pathList = [];
+  detailLogMonitorState.pathFilter = '';
+  detailLogMonitorState.collapsedDirs = {};
+  detailLogMonitorState.keyword = '';
+  detailLogMonitorState.page = 1;
+  $("#detailLogPathSearch").val('');
+  $("#detailLogKeyword").val('');
 
   $.post('/host/get_log_path_list', 'host_ip=' + ip,function(rdata){
-    
-    let logFileBody = '';
-    if (rdata.length == 0) {
-      logFileBody = `
-        <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis">暂无日志文件</li>
-      `;
+    detailLogMonitorState.pathList = Array.isArray(rdata) ? rdata : [];
+    if (detailLogMonitorState.pathList.length == 0) {
+      $("#logFileBody").html('<li class="log-path-empty">暂无日志文件</li>');
+      renderDetailHostLogMonitorEmpty('该主机暂无日志数据');
     } else {
-      for(let logFile of rdata) {
-        logFileBody += `
-          <li class="log-path-item px-5 log-path cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis"
-            title="${logFile.path}"
-          >${logFile.path}</li>  
-        `;
-      }
+      renderDetailHostLogPathTree();
     }
-    $("#logFileBody").html(logFileBody);
     layer.close(loadT);
-
-
-    $(".log-path-item").click(function() {
-      const logPath = $(this).text();
-      $(this).addClass('bg-slate-50 text-green-500').siblings().removeClass('bg-slate-50 text-green-500');
-      getDetailHostLogMonitorDetailData(ip, logPath);
-    });
-    
-    // 默认选中第一个
-    if ($(".log-path-item").length > 0) {
-      $(".log-path-item").eq(0).click();
-    }
-  }, 'json');
+  }, 'json').fail(function() {
+    $("#logFileBody").html('<li class="log-path-empty">日志路径加载失败</li>');
+    renderDetailHostLogMonitorEmpty('日志路径加载失败');
+    layer.close(loadT);
+  });
   
 
 }
 
+function getDetailLogPathName(logPath) {
+  var path = normalizeText(logPath);
+  if (!path) {
+    return '';
+  }
+  var parts = path.split('/').filter(function(item) {
+    return item !== '';
+  });
+  if (parts.length === 0) {
+    return path;
+  }
+  return parts[parts.length - 1];
+}
+
+function buildDetailLogPathTree(pathList) {
+  var root = { children: {}, files: [] };
+  (pathList || []).forEach(function(item) {
+    var logPath = normalizeText(item && item.path);
+    if (!logPath) {
+      return;
+    }
+    var segments = logPath.split('/').filter(function(segment) {
+      return segment !== '';
+    });
+    if (segments.length === 0) {
+      root.files.push(item);
+      return;
+    }
+    var cursor = root;
+    for (var i = 0; i < segments.length - 1; i++) {
+      var segment = segments[i];
+      if (!cursor.children[segment]) {
+        cursor.children[segment] = { name: segment, children: {}, files: [] };
+      }
+      cursor = cursor.children[segment];
+    }
+    cursor.files.push(item);
+  });
+  return root;
+}
+
+function isDetailLogDirCollapsed(dirPath) {
+  if (normalizeText(detailLogMonitorState.pathFilter) !== '') {
+    return false;
+  }
+  return !!detailLogMonitorState.collapsedDirs[dirPath];
+}
+
+function renderDetailLogPathTreeNode(node, depth, parentPath) {
+  var html = '';
+  var pathFilter = detailLogMonitorState.pathFilter;
+  var childNames = Object.keys(node.children || {}).sort();
+  childNames.forEach(function(name) {
+    var childPath = parentPath ? (parentPath + '/' + name) : ('/' + name);
+    var collapsed = isDetailLogDirCollapsed(childPath);
+    html += `
+      <li class="log-tree-dir${collapsed ? ' collapsed' : ''}">
+        <div class="log-tree-dir-title" style="padding-left:${12 + depth * 18}px;" title="${escapeHtml(childPath)}">
+          <span class="glyphicon log-tree-caret ${collapsed ? 'glyphicon-chevron-right' : 'glyphicon-chevron-down'}"></span>
+          <span class="glyphicon ${collapsed ? 'glyphicon-folder-close' : 'glyphicon-folder-open'}"></span>
+          <span class="log-tree-dir-name" data-dir-path="${escapeHtml(childPath)}">${highlightText(name, pathFilter)}</span>
+        </div>
+        <ul class="log-tree-children">
+          ${renderDetailLogPathTreeNode(node.children[name], depth + 1, childPath)}
+        </ul>
+      </li>
+    `;
+  });
+
+  (node.files || []).forEach(function(item) {
+    var logPath = normalizeText(item.path);
+    var fileName = getDetailLogPathName(logPath) || logPath;
+    var activeClass = detailLogMonitorState.logPath === logPath ? ' active' : '';
+    html += `
+      <li class="log-path-item${activeClass}" data-log-path="${escapeHtml(logPath)}" title="${escapeHtml(logPath)}" style="padding-left:${12 + depth * 18}px;">
+        <div class="log-path-item-main">
+          <span class="glyphicon glyphicon-file"></span>
+          <div class="log-path-item-info">
+            <div class="log-path-text">${highlightText(fileName, pathFilter)}</div>
+          </div>
+        </div>
+      </li>
+    `;
+  });
+  return html;
+}
+
+function bindDetailLogPathEvents() {
+  $("#logFileBody").off('click', '.log-tree-dir-title').on('click', '.log-tree-dir-title', function() {
+    var dirPath = $(this).find('.log-tree-dir-name').attr('data-dir-path');
+    if (!dirPath || normalizeText(detailLogMonitorState.pathFilter) !== '') {
+      return;
+    }
+    detailLogMonitorState.collapsedDirs[dirPath] = !detailLogMonitorState.collapsedDirs[dirPath];
+    renderDetailHostLogPathTree();
+  });
+
+  $("#logFileBody").off('click', '.log-path-item').on('click', '.log-path-item', function() {
+    var logPath = $(this).attr('data-log-path');
+    if (!logPath) {
+      return;
+    }
+    detailLogMonitorState.logPath = logPath;
+    detailLogMonitorState.page = 1;
+    $("#logFileBody .log-path-item").removeClass('active');
+    $(this).addClass('active');
+    getDetailHostLogMonitorPage(1);
+  });
+}
+
+function renderDetailHostLogPathTree() {
+  var pathFilter = normalizeText(detailLogMonitorState.pathFilter).toLowerCase();
+  var filteredList = (detailLogMonitorState.pathList || []).filter(function(item) {
+    var logPath = normalizeText(item && item.path).toLowerCase();
+    var fileName = getDetailLogPathName(item && item.path).toLowerCase();
+    if (!pathFilter) {
+      return true;
+    }
+    return logPath.indexOf(pathFilter) !== -1 || fileName.indexOf(pathFilter) !== -1;
+  });
+
+  if (filteredList.length === 0) {
+    $("#logFileBody").html('<li class="log-path-empty">没有匹配的日志文件</li>');
+    return;
+  }
+
+  var currentExists = filteredList.some(function(item) {
+    return normalizeText(item.path) === detailLogMonitorState.logPath;
+  });
+  var selectedChanged = false;
+  if (!currentExists) {
+    detailLogMonitorState.logPath = normalizeText(filteredList[0].path);
+    detailLogMonitorState.page = 1;
+    selectedChanged = true;
+  }
+
+  var tree = buildDetailLogPathTree(filteredList);
+  var treeHtml = renderDetailLogPathTreeNode(tree, 0, '');
+  $("#logFileBody").html(treeHtml || '<li class="log-path-empty">暂无日志文件</li>');
+  bindDetailLogPathEvents();
+
+  if (selectedChanged) {
+    getDetailHostLogMonitorPage(1);
+  }
+}
+
+function renderDetailHostLogMonitorEmpty(message) {
+  $("#logFileDetail .path").text(detailLogMonitorState.logPath || '暂无');
+  $("#logFileDetail .modifyTime").text('暂无');
+  $("#logFileDetail .sourceIndex").text('暂无');
+  $("#logFileDetail .summary").text(message || '');
+  $("#logFileDetail .content").html('<div class="detail-log-empty">' + escapeHtml(message || '日志内容为空') + '</div>');
+  $("#detailLogPage").html("<div><span class='Pcount'>共0条数据</span></div>");
+}
+
+function submitDetailHostLogMonitorSearch() {
+  detailLogMonitorState.keyword = $.trim($("#detailLogKeyword").val());
+  detailLogMonitorState.page = 1;
+  getDetailHostLogMonitorPage(1);
+}
+
+function resetDetailHostLogMonitorSearch() {
+  $("#detailLogKeyword").val('');
+  detailLogMonitorState.keyword = '';
+  detailLogMonitorState.page = 1;
+  getDetailHostLogMonitorPage(1);
+}
+
+function getDetailHostLogMonitorPage(page) {
+  if (!detailLogMonitorState.hostIp || !detailLogMonitorState.logPath) {
+    return;
+  }
+  detailLogMonitorState.page = page || 1;
+  getDetailHostLogMonitorDetailData(
+    detailLogMonitorState.hostIp,
+    detailLogMonitorState.logPath,
+    detailLogMonitorState.page
+  );
+}
+
 // 日志详情
-function getDetailHostLogMonitorDetailData(host_ip, logPath) {
+function getDetailHostLogMonitorDetailData(host_ip, logPath, page) {
   loadT = layer.load();
-  $.post('/host/get_log_detail', `host_ip=${host_ip}&log_path=${logPath}`,function(rdata){
-    let logFileDetail = JSON.parse(rdata);
+  $.post('/host/get_log_detail', {
+    host_ip: host_ip,
+    log_path: logPath,
+    keyword: detailLogMonitorState.keyword,
+    p: page || 1,
+    limit: detailLogMonitorState.limit
+  }, function(rdata){
+    let logFileDetail = rdata || {};
+    let logContent = Array.isArray(logFileDetail.log_content) ? logFileDetail.log_content : [];
     $("#logFileDetail .path").text(logPath);
-    // $("#logFileDetail .size").text(logFileDetail.size);
-    // $("#logFileDetail .permission").text(logFileDetail.permission);
     $("#logFileDetail .modifyTime").text(logFileDetail.last_updated || '暂无');
-    $("#logFileDetail .content").html(logFileDetail.log_content.length == 0? '日志内容为空': logFileDetail.log_content.map(item => `
-      <p>
-        <span class="text-gray-400">${item.create_time} - </span>
-        <span>${item.content}</span>
-      </p>
-      <hr class="my-4">
-    `));
+    $("#logFileDetail .sourceIndex").text(logFileDetail.source_index || '暂无');
+    $("#logFileDetail .summary").text('共 ' + (logFileDetail.total || 0) + ' 条');
+    $("#detailLogPage").html(logFileDetail.page || "<div><span class='Pcount'>共0条数据</span></div>");
+
+    if (logContent.length == 0) {
+      $("#logFileDetail .content").html('<div class="detail-log-empty">没有匹配的日志内容</div>');
+      layer.close(loadT);
+      return;
+    }
+
+    $("#logFileDetail .content").html(logContent.map(function(item) {
+      return `
+        <div class="detail-log-line">
+          <div class="detail-log-time">${escapeHtml(item.create_time || '--')}</div>
+          <pre class="detail-log-text">${escapeHtml(item.content || '')}</pre>
+        </div>
+      `;
+    }).join(''));
+    layer.close(loadT);
+  }, 'json').fail(function() {
+    renderDetailHostLogMonitorEmpty('日志获取失败');
     layer.close(loadT);
   });
 }

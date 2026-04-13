@@ -24,6 +24,7 @@ sys.path.append(os.getcwd() + "/class/es/service")
 import value_tool as value_utils
 import host_status_mapper as host_status_mapper_utils
 import host_query as host_query_utils
+import host_log_service as host_log_service_utils
 import host_status_service as host_status_service_utils
 import json
 import traceback
@@ -412,14 +413,23 @@ class host_api:
         return jh.returnJson(True, 'ok', {'template': template_source})
     
     def getLogPathListApi(self):
-        host_ip = request.form.get('host_ip', '')
-        path_list = self.getLogPathListFromES(host_ip)
+        host_ip = request.form.get('host_ip', '').strip()
+        path_list = host_log_service_utils.getLogPathList(host_ip)
         return jh.getJson(path_list)
 
     def getLogDetailApi(self):
-        host_ip = request.form.get('host_ip', '')
-        log_path = request.form.get('log_path', '')
-        log_detail = self.getLogDetailFromES(host_ip, log_path)
+        host_ip = request.form.get('host_ip', '').strip()
+        log_path = request.form.get('log_path', '').strip()
+        keyword = request.form.get('keyword', '').strip()
+        page = request.form.get('p', '1').strip()
+        limit = request.form.get('limit', '50').strip()
+        log_detail = host_log_service_utils.searchLogDetail(
+            host_ip,
+            log_path,
+            keyword=keyword,
+            page=page,
+            limit=limit
+        )
         return jh.getJson(log_detail)
 
     def getClientInstallShellLanApi(self):
@@ -618,47 +628,3 @@ class host_api:
             step = int(length / count)
             data = data[::step]
         return data
-
-    # 从ES获取面板报告
-    def getLogPathListFromES(self, host_ip):
-      try:
-        es = jh.getES()
-        query = host_query_utils.buildLogPathListSearchBody(host_ip)
-        response = es.search(index=host_query_utils.FILEBEAT_INDEXES, body=query)
-        path_list = [] 
-
-        for bucket in response["aggregations"]["unique_paths"]["buckets"]:
-            path = bucket["key"]
-            latest_update = bucket["latest_update"]["hits"]["hits"][0]["_source"]["@timestamp"]
-            path_list.append({
-                "path": path,
-                "lastest_update": latest_update
-            })
-        
-        return path_list
-      except Exception as e:
-        traceback.print_exc()
-        return None
-      
-    def getLogDetailFromES(self, host_ip, log_file_path):
-      try:
-        es = jh.getES()
-        query = host_query_utils.buildLogDetailSearchBody(host_ip, log_file_path)
-        response = es.search(index=host_query_utils.FILEBEAT_INDEXES, body=query)
-        log_details = {}
-        log_details["log_content"] = []
-
-        if response["hits"]["hits"]:
-            # 获取最新的一条日志记录
-            latest_log = response["hits"]["hits"][0]["_source"]
-            log_details["last_updated"] = jh.convertToLocalTime(latest_log.get("@timestamp"))
-            for hit in response["hits"]["hits"]:
-                log_details["log_content"].append({
-                    "create_time": jh.convertToLocalTime(hit["_source"]["@timestamp"]),
-                    "content": hit["_source"]["message"]
-                })
-
-        return log_details
-      except Exception as e:
-        traceback.print_exc()
-        return None

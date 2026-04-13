@@ -3,6 +3,15 @@
 
 HOST_STATUS_INDEXES = 'host-system-status,host-*-system-status-*,*-host-system-status-*'
 FILEBEAT_INDEXES = 'filebeat-*'
+LOG_MONITOR_INDEXES = (
+    'filebeat-*,'
+    'host-debian-*-syslog-*,'
+    'host-debian-*-nginx-*,'
+    'host-debian-*-nginx-error-*,'
+    'host-debian-*-eggjs-*,'
+    'host-debian-*-mysql-*,'
+    'host-debian-*-jh-panel-*'
+)
 HOST_REPORT_SINGLE_INDEXES = 'host-report-single,host-report-single-test'
 HOST_REPORT_SINGLE_DATA_STREAM_PREFIX = 'host-report-single'
 HOST_REPORT_TEST_SINGLE_DATA_STREAM_PREFIX = 'host-report-test-single'
@@ -18,6 +27,7 @@ HOST_STATUS_SOURCE_FIELDS = [
 ]
 
 REPORT_LOG_SOURCE_FIELDS = ["message", "@timestamp", "host.ip"]
+LOG_DETAIL_SOURCE_FIELDS = ["message", "@timestamp", "host.ip", "log.file.path"]
 LOG_PATH_TIMESTAMP_SOURCE_FIELDS = {"includes": ["@timestamp"]}
 
 
@@ -236,12 +246,15 @@ def buildLatestSingleHostReportLegacySearchBody(host_ids, size=None):
 def buildLogPathListSearchBody(host_ip):
     host_ip = str(host_ip or '').strip()
 
+    if host_ip == '':
+        return {"size": 0, "query": {"match_none": {}}}
+
     return {
         "size": 0,
         "query": {
             "bool": {
                 "filter": [
-                    {"term": {"host.ip": host_ip}}
+                    _buildDualTermShouldFilter("host.ip", host_ip)
                 ]
             }
         },
@@ -249,8 +262,78 @@ def buildLogPathListSearchBody(host_ip):
             "unique_paths": {
                 "terms": {
                     "field": "log.file.path",
-                    "size": 10000
+                    "size": 10000,
+                    "order": {
+                        "latest_timestamp": "desc"
+                    }
                 },
+                "aggs": {
+                    "latest_timestamp": {
+                        "max": {
+                            "field": "@timestamp"
+                        }
+                    },
+                    "latest_update": {
+                        "top_hits": {
+                            "sort": [
+                                {
+                                    "@timestamp": {
+                                        "order": "desc"
+                                    }
+                                }
+                            ],
+                            "_source": LOG_PATH_TIMESTAMP_SOURCE_FIELDS,
+                            "size": 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+def buildLogPathCompositeSearchBody(host_ip, after_key=None, page_size=500):
+    host_ip = str(host_ip or '').strip()
+
+    if host_ip == '':
+        return {"size": 0, "query": {"match_none": {}}}
+
+    try:
+        page_size = int(page_size)
+    except Exception:
+        page_size = 500
+    if page_size < 1:
+        page_size = 1
+    if page_size > 1000:
+        page_size = 1000
+
+    composite_body = {
+        "size": page_size,
+        "sources": [
+            {
+                "path": {
+                    "terms": {
+                        "field": "log.file.path"
+                    }
+                }
+            }
+        ]
+    }
+    if after_key:
+        composite_body["after"] = after_key
+
+    return {
+        "size": 0,
+        "query": {
+            "bool": {
+                "filter": [
+                    _buildDualTermShouldFilter("host.ip", host_ip)
+                ]
+            }
+        },
+        "aggs": {
+            "unique_paths": {
+                "composite": composite_body,
                 "aggs": {
                     "latest_update": {
                         "top_hits": {
@@ -271,22 +354,61 @@ def buildLogPathListSearchBody(host_ip):
     }
 
 
-def buildLogDetailSearchBody(host_ip, log_file_path):
-    return {
-        "size": 100,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"log.file.path": log_file_path}},
-                    {"term": {"host.ip": host_ip}}
-                ]
-            }
-        },
-        "sort": [
+def buildLogDetailQuery(host_ip, log_file_path, keyword=''):
+    host_ip = str(host_ip or '').strip()
+    log_file_path = str(log_file_path or '').strip()
+    keyword = str(keyword or '').strip()
+
+    if host_ip == '' or log_file_path == '':
+        return {"match_none": {}}
+
+    bool_query = {
+        "filter": [
+            _buildDualTermShouldFilter("log.file.path", log_file_path),
+            _buildDualTermShouldFilter("host.ip", host_ip)
+        ]
+    }
+    if keyword != '':
+        bool_query["must"] = [
             {
-                "@timestamp": {
-                    "order": "desc"
+                "simple_query_string": {
+                    "query": keyword,
+                    "fields": ["message"],
+                    "default_operator": "and"
                 }
             }
         ]
+
+    return {"bool": bool_query}
+
+
+def buildLogDetailSearchBody(host_ip, log_file_path, keyword='', page=1, limit=100):
+    try:
+        page = int(page)
+    except Exception:
+        page = 1
+    if page < 1:
+        page = 1
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+    if limit < 1:
+        limit = 1
+
+    return {
+        "from": (page - 1) * limit,
+        "size": limit,
+        "track_total_hits": True,
+        "query": buildLogDetailQuery(host_ip, log_file_path, keyword),
+        "sort": [
+            {
+                "@timestamp": {
+                    "order": "desc",
+                    "unmapped_type": "date"
+                }
+            }
+        ],
+        "_source": LOG_DETAIL_SOURCE_FIELDS
     }
