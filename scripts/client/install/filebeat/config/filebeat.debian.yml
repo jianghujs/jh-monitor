@@ -255,6 +255,9 @@ output.elasticsearch:
     - index: "host-debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
       when.equals:
         log_type: "syslog"
+    - index: "host-debian-<hostIdIndex>-nginx-error-%{+yyyy.MM}"
+      when.equals:
+        nginx_log_kind: "error"
     - index: "host-debian-<hostIdIndex>-nginx-%{+yyyy.MM}"
       when.equals:
         log_type: "nginx"
