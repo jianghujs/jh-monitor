@@ -92,7 +92,7 @@ filebeat.inputs:
   enabled: true
   paths:
     - /www/wwwlogs/*.log
-  exclude_files: ['\.error\.log$', '\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
+  prospector.scanner.exclude_files: ['\.error\.log$', '\.log_\d{4}-\d{2}-\d{2}_\d{6}\.log$']
   fields:
     log_type: nginx
     nginx_log_kind: access
