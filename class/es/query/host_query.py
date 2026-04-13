@@ -5,12 +5,12 @@ HOST_STATUS_INDEXES = 'host-system-status,host-*-system-status-*,*-host-system-s
 FILEBEAT_INDEXES = 'filebeat-*'
 LOG_MONITOR_INDEXES = (
     'filebeat-*,'
-    'host-debian-*-syslog-*,'
-    'host-debian-*-nginx-*,'
-    'host-debian-*-nginx-error-*,'
-    'host-debian-*-eggjs-*,'
-    'host-debian-*-mysql-*,'
-    'host-debian-*-jh-panel-*'
+    'host-*-syslog-*,'
+    'host-*-nginx-*,'
+    'host-*-nginx-error-*,'
+    'host-*-eggjs-*,'
+    'host-*-mysql-*,'
+    'host-*-jh-panel-*'
 )
 HOST_REPORT_SINGLE_INDEXES = 'host-report-single,host-report-single-test'
 HOST_REPORT_SINGLE_DATA_STREAM_PREFIX = 'host-report-single'
