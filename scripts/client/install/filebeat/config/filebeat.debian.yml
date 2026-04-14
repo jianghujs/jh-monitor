@@ -191,8 +191,10 @@ setup.template.settings:
   index.codec: best_compression
   index.refresh_interval: "5s"
 
-setup.ilm.enabled: true
-setup.ilm.check_exists: true
+# This config writes to custom monthly indices via output.elasticsearch.indices.
+# Per Filebeat docs, custom indices disable ILM, and keeping ILM enabled here
+# causes `filebeat setup` to fall back to the default filebeat data stream flow.
+setup.ilm.enabled: false
 
 setup.template.name: "host-debian-<hostIdIndex>-logs"
 setup.template.pattern: "host-debian-<hostIdIndex>-*"
