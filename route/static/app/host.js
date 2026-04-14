@@ -6,6 +6,7 @@ var currentHostSearch = '';
 var currentHostGroupId = '-1';
 var hostSortSaving = false;
 var hostSortResumeRefresh = false;
+var hostSortSelectionState = null;
 var hostReportTemplates = { panel: null, pve: null };
 var hostReportTemplateQueue = { panel: [], pve: [] };
 var detailLogMonitorState = {
@@ -142,8 +143,75 @@ function canDragSortHostList() {
 }
 
 function updateHostSortHandleState(enabled, title) {
-  var handleTitle = title || (enabled ? '拖动排序' : '仅全部主机列表支持拖动排序');
+  var handleTitle = title || (enabled ? '拖动排序，勾选多台后可批量拖动' : '仅全部主机列表支持拖动排序');
   $('#webBody .host-sort-handle').toggleClass('disabled', !enabled).attr('title', handleTitle);
+}
+
+function clearHostSortSelectionState() {
+  hostSortSelectionState = null;
+  $('#webBody tr').removeClass('host-sort-selected');
+}
+
+function buildHostSortSelectionState(draggedRow) {
+  var currentRow = $(draggedRow);
+  var selectedRows = $('#webBody tr').filter(function() {
+    return $(this).find("input[name='id']").prop('checked');
+  });
+  if (selectedRows.length <= 1) {
+    clearHostSortSelectionState();
+    return null;
+  }
+  if (!currentRow.find("input[name='id']").prop('checked')) {
+    clearHostSortSelectionState();
+    return null;
+  }
+
+  var selectedRowElements = selectedRows.get();
+  var draggedRowElement = currentRow.get(0);
+  var draggedIndex = selectedRowElements.indexOf(draggedRowElement);
+  if (draggedIndex === -1) {
+    clearHostSortSelectionState();
+    return null;
+  }
+
+  hostSortSelectionState = {
+    draggedRowId: currentRow.attr('data-host-row-id'),
+    draggedIndex: draggedIndex,
+    selectedRows: selectedRowElements,
+    beforeRows: selectedRowElements.slice(0, draggedIndex),
+    afterRows: selectedRowElements.slice(draggedIndex + 1)
+  };
+  $(selectedRowElements).addClass('host-sort-selected');
+  return hostSortSelectionState;
+}
+
+function applyHostSortSelectionState(draggedRow) {
+  if (!hostSortSelectionState || !hostSortSelectionState.selectedRows || hostSortSelectionState.selectedRows.length <= 1) {
+    return;
+  }
+
+  var anchorRow = $(draggedRow);
+  if (!anchorRow.length || anchorRow.attr('data-host-row-id') !== hostSortSelectionState.draggedRowId) {
+    clearHostSortSelectionState();
+    return;
+  }
+
+  hostSortSelectionState.beforeRows.forEach(function(row) {
+    $(row).detach();
+  });
+  hostSortSelectionState.afterRows.forEach(function(row) {
+    $(row).detach();
+  });
+
+  hostSortSelectionState.beforeRows.forEach(function(row) {
+    anchorRow.before(row);
+  });
+
+  var tailRow = anchorRow;
+  hostSortSelectionState.afterRows.forEach(function(row) {
+    tailRow.after(row);
+    tailRow = $(row);
+  });
 }
 
 function bindHostSortPointerEvents() {
@@ -151,6 +219,7 @@ function bindHostSortPointerEvents() {
     if ($(this).hasClass('disabled')) {
       return false;
     }
+    buildHostSortSelectionState($(this).closest('tr'));
     hostSortResumeRefresh = !!refreshTimer;
     if (hostSortResumeRefresh) {
       stopAutoRefresh();
@@ -161,6 +230,9 @@ function bindHostSortPointerEvents() {
     if (hostSortResumeRefresh && !hostSortSaving) {
       hostSortResumeRefresh = false;
       startAutoRefresh();
+    }
+    if (!hostSortSaving) {
+      clearHostSortSelectionState();
     }
   });
 }
@@ -195,6 +267,7 @@ function saveHostListSort() {
     layer.msg('排序保存失败!', {icon: 2});
   }).always(function() {
     hostSortSaving = false;
+    clearHostSortSelectionState();
     if (hostSortResumeRefresh) {
       hostSortResumeRefresh = false;
       startAutoRefresh();
@@ -222,11 +295,12 @@ function initHostDragSort() {
     return;
   }
 
-  updateHostSortHandleState(true, '拖动排序');
+  updateHostSortHandleState(true, '拖动排序，勾选多台后可批量拖动');
   hostBody.dragsort({
     itemSelector: 'tr',
     dragSelector: '.host-sort-handle',
     dragEnd: function() {
+      applyHostSortSelectionState(this);
       saveHostListSort();
     }
   });
