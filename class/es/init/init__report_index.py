@@ -19,6 +19,7 @@ if ES_DIR not in sys.path:
 if ES_MODEL_DIR not in sys.path:
     sys.path.insert(0, ES_MODEL_DIR)
 
+from clean_system_status_indexes import discover_system_status_resources, clean_system_status_resources
 from index_manager import IndexManager
 from report_schema import REPORT_INDEXES, REPORT_INDEX_TEMPLATES, REPORT_DATA_STREAMS
 
@@ -30,6 +31,8 @@ def build_args():
     parser.add_argument('--all', action='store_true', help='同时初始化 REPORT_INDEXES 和 REPORT_INDEX_TEMPLATES 中的全部定义')
     parser.add_argument('--overwrite', dest='overwrite', action='store_true', default=True, help='覆盖重建目标索引/模板/数据流：先删除旧资源，再按当前定义重建（默认开启）')
     parser.add_argument('--no-overwrite', dest='overwrite', action='store_false', help='不删除旧资源，只执行创建/更新')
+    parser.add_argument('--clean-system-status', dest='clean_system_status', action='store_true', default=None, help='初始化前先清理所有 system-status 索引/数据流')
+    parser.add_argument('--skip-clean-system-status', dest='clean_system_status', action='store_false', help='初始化前跳过 system-status 清理')
     parser.add_argument('--sync-existing-indices', action='store_true', help='同步更新已存在的报告普通索引 mapping，可能因历史字段类型冲突失败')
     parser.add_argument('--month', default='', help='指定报告数据流月份，格式 YYYY-MM，默认当前月份')
     return parser.parse_args()
@@ -153,6 +156,22 @@ def overwrite_targets(manager, target_indices, template_definitions, target_data
     return results
 
 
+def should_clean_system_status(args, resources):
+    if args.check_only:
+        return False
+    if args.clean_system_status is not None:
+        return bool(args.clean_system_status)
+    if len(resources.get('data_streams', [])) == 0 and len(resources.get('indices', [])) == 0:
+        return False
+    if not sys.stdin.isatty():
+        return False
+
+    print('检测到以下 system-status 资源:')
+    print(json.dumps(resources, ensure_ascii=False, indent=2))
+    answer = input('初始化前是否清理全部 system-status 索引/数据流？[y/N]: ').strip().lower()
+    return answer in ['y', 'yes']
+
+
 def main():
     args = build_args()
     manager = IndexManager()
@@ -182,14 +201,26 @@ def main():
         'month': normalize_month(args.month),
         'mode': 'check_only' if args.check_only else 'ensure',
         'overwrite': bool(args.overwrite),
+        'clean_system_status': args.clean_system_status,
         'scope': 'all' if args.all else ('report_test' if args.use_test_index else 'report'),
     }
+
+    system_status_resources = discover_system_status_resources(manager)
+    results['system_status_resources'] = system_status_resources
 
     if args.check_only:
         results['indices'] = [fetch_index_summary(manager, index_name) for index_name in target_indices]
         results['data_streams'] = [fetch_data_stream_summary(manager, data_stream_name) for data_stream_name in target_data_streams]
         print(json.dumps(results, ensure_ascii=False, indent=2))
         return 0
+
+    if should_clean_system_status(args, system_status_resources):
+        results['system_status_cleanup'] = clean_system_status_resources(manager)
+    else:
+        results['system_status_cleanup'] = {
+            'skipped': True,
+            'resources': system_status_resources,
+        }
 
     if args.overwrite:
         results['overwrite_deleted'] = overwrite_targets(
