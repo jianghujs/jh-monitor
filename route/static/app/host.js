@@ -7,6 +7,7 @@ var currentHostGroupId = '-1';
 var hostSortSaving = false;
 var hostSortResumeRefresh = false;
 var hostSortSelectionState = null;
+var hostSortDragContext = null;
 var hostReportTemplates = { panel: null, pve: null };
 var hostReportTemplateQueue = { panel: [], pve: [] };
 var detailLogMonitorState = {
@@ -152,6 +153,26 @@ function clearHostSortSelectionState() {
   $('#webBody tr').removeClass('host-sort-selected');
 }
 
+function getHostSortRowIds() {
+  return $('#webBody tr').map(function() {
+    return $(this).attr('data-host-row-id');
+  }).get().filter(function(item) {
+    return !!item;
+  });
+}
+
+function isSameHostSortRowOrder(beforeRows, afterRows) {
+  if (!beforeRows || !afterRows || beforeRows.length !== afterRows.length) {
+    return false;
+  }
+  for (var i = 0; i < beforeRows.length; i++) {
+    if (beforeRows[i] !== afterRows[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function buildHostSortSelectionState(draggedRow) {
   var currentRow = $(draggedRow);
   var selectedRows = $('#webBody tr').filter(function() {
@@ -185,55 +206,261 @@ function buildHostSortSelectionState(draggedRow) {
   return hostSortSelectionState;
 }
 
-function applyHostSortSelectionState(draggedRow) {
-  if (!hostSortSelectionState || !hostSortSelectionState.selectedRows || hostSortSelectionState.selectedRows.length <= 1) {
+function buildHostSortDragRows(draggedRow) {
+  var currentRow = $(draggedRow);
+  if (hostSortSelectionState && hostSortSelectionState.selectedRows && hostSortSelectionState.selectedRows.length > 1 && currentRow.find("input[name='id']").prop('checked')) {
+    return hostSortSelectionState.selectedRows.slice();
+  }
+  return currentRow.length ? [currentRow.get(0)] : [];
+}
+
+function createHostSortPlaceholder(dragRows) {
+  var totalHeight = 0;
+  var columnCount = 0;
+
+  dragRows.forEach(function(row) {
+    totalHeight += $(row).outerHeight();
+    if (!columnCount) {
+      columnCount = $(row).children().length;
+    }
+  });
+
+  var placeholderHeight = Math.max(totalHeight - 8, 24);
+  return $("<tr class='host-sort-placeholder'><td colspan='" + columnCount + "'><div class='host-sort-placeholder-inner' style='height:" + placeholderHeight + "px'></div></td></tr>");
+}
+
+function createHostSortPreviewTable(dragRows) {
+  var preview = $("<div class='host-sort-drag-preview'></div>");
+  var table = $("<table class='table table-hover host-list-table'></table>");
+  var tbody = $('<tbody></tbody>');
+
+  dragRows.forEach(function(row) {
+    $(row).children().each(function() {
+      $(this).width($(this).outerWidth());
+    });
+    tbody.append(row);
+  });
+
+  table.append(tbody);
+  preview.append(table);
+  $('body').append(preview);
+  return preview;
+}
+
+function moveHostSortPreview(pageX, pageY) {
+  if (!hostSortDragContext || !hostSortDragContext.preview) {
     return;
   }
-
-  var anchorRow = $(draggedRow);
-  if (!anchorRow.length || anchorRow.attr('data-host-row-id') !== hostSortSelectionState.draggedRowId) {
-    clearHostSortSelectionState();
-    return;
-  }
-
-  hostSortSelectionState.beforeRows.forEach(function(row) {
-    $(row).detach();
-  });
-  hostSortSelectionState.afterRows.forEach(function(row) {
-    $(row).detach();
-  });
-
-  hostSortSelectionState.beforeRows.forEach(function(row) {
-    anchorRow.before(row);
-  });
-
-  var tailRow = anchorRow;
-  hostSortSelectionState.afterRows.forEach(function(row) {
-    tailRow.after(row);
-    tailRow = $(row);
+  hostSortDragContext.preview.css({
+    left: pageX - hostSortDragContext.pointerOffsetLeft,
+    top: pageY - hostSortDragContext.pointerOffsetTop
   });
 }
 
-function bindHostSortPointerEvents() {
-  $('#webBody').off('mousedown.hostSort', '.host-sort-handle').on('mousedown.hostSort', '.host-sort-handle', function() {
-    if ($(this).hasClass('disabled')) {
+function updateHostSortPlaceholderPosition(pageY) {
+  if (!hostSortDragContext || !hostSortDragContext.placeholder) {
+    return;
+  }
+
+  var hostBody = hostSortDragContext.hostBody;
+  var placeholder = hostSortDragContext.placeholder;
+  var rows = hostBody.children('tr').not(placeholder);
+  var inserted = false;
+
+  rows.each(function() {
+    var currentRow = $(this);
+    var middleY = currentRow.offset().top + (currentRow.outerHeight() / 2);
+    if (pageY < middleY) {
+      currentRow.before(placeholder);
+      inserted = true;
       return false;
-    }
-    buildHostSortSelectionState($(this).closest('tr'));
-    hostSortResumeRefresh = !!refreshTimer;
-    if (hostSortResumeRefresh) {
-      stopAutoRefresh();
     }
   });
 
-  $(document).off('mouseup.hostSort').on('mouseup.hostSort', function() {
-    if (hostSortResumeRefresh && !hostSortSaving) {
-      hostSortResumeRefresh = false;
-      startAutoRefresh();
+  if (!inserted) {
+    hostBody.append(placeholder);
+  }
+}
+
+function updateHostSortAutoScroll(pageY) {
+  if (!hostSortDragContext || !hostSortDragContext.scrollContainer) {
+    return;
+  }
+
+  var scrollContainer = hostSortDragContext.scrollContainer;
+  if (!scrollContainer.length) {
+    return;
+  }
+
+  var offset = scrollContainer.offset();
+  if (!offset) {
+    return;
+  }
+
+  var threshold = 48;
+  var topEdge = offset.top;
+  var bottomEdge = topEdge + scrollContainer.outerHeight();
+  var delta = 0;
+
+  if (pageY < topEdge + threshold) {
+    delta = -Math.max(6, Math.ceil((topEdge + threshold - pageY) / 4));
+  } else if (pageY > bottomEdge - threshold) {
+    delta = Math.max(6, Math.ceil((pageY - (bottomEdge - threshold)) / 4));
+  }
+
+  if (delta !== 0) {
+    scrollContainer.scrollTop(scrollContainer.scrollTop() + delta);
+  }
+}
+
+function cleanupHostSortDragContext() {
+  if (!hostSortDragContext) {
+    return;
+  }
+
+  if (hostSortDragContext.preview) {
+    hostSortDragContext.preview.remove();
+  }
+
+  if (hostSortDragContext.dragRows && hostSortDragContext.dragRows.length) {
+    $(hostSortDragContext.dragRows).removeClass('host-sort-selected');
+  }
+
+  $(document).off('.hostSortDrag');
+  $('body').removeClass('host-sort-dragging');
+  hostSortDragContext = null;
+}
+
+function startHostSortDrag(event, draggedRow) {
+  var anchorRow = $(draggedRow);
+  var dragRows = buildHostSortDragRows(draggedRow);
+  if (!dragRows.length) {
+    return;
+  }
+
+  var anchorIndex = dragRows.indexOf(anchorRow.get(0));
+  var anchorOffsetTop = 0;
+  for (var i = 0; i < anchorIndex; i++) {
+    anchorOffsetTop += $(dragRows[i]).outerHeight();
+  }
+
+  var hostBody = $('#webBody');
+  var placeholder = createHostSortPlaceholder(dragRows);
+  var firstRow = $(dragRows[0]);
+
+  hostSortDragContext = {
+    started: true,
+    hostBody: hostBody,
+    dragRows: dragRows,
+    anchorRow: anchorRow,
+    placeholder: placeholder,
+    preview: null,
+    scrollContainer: hostBody.closest('.tablescroll'),
+    initialOrder: getHostSortRowIds(),
+    pointerOffsetLeft: event.pageX - anchorRow.offset().left,
+    pointerOffsetTop: event.pageY - anchorRow.offset().top + anchorOffsetTop
+  };
+
+  firstRow.before(placeholder);
+  hostSortDragContext.preview = createHostSortPreviewTable(dragRows);
+  moveHostSortPreview(event.pageX, event.pageY);
+  updateHostSortPlaceholderPosition(event.pageY);
+  $('body').addClass('host-sort-dragging');
+
+  hostSortResumeRefresh = !!refreshTimer;
+  if (hostSortResumeRefresh) {
+    stopAutoRefresh();
+  }
+}
+
+function finishHostSortDrag() {
+  if (!hostSortDragContext || !hostSortDragContext.started) {
+    cleanupHostSortDragContext();
+    return false;
+  }
+
+  var placeholder = hostSortDragContext.placeholder;
+  var dragRows = hostSortDragContext.dragRows || [];
+  var hostBody = hostSortDragContext.hostBody;
+  var beforeOrder = hostSortDragContext.initialOrder || [];
+
+  if (placeholder && placeholder.length) {
+    dragRows.forEach(function(row) {
+      placeholder.before(row);
+    });
+    placeholder.remove();
+  } else {
+    dragRows.forEach(function(row) {
+      hostBody.append(row);
+    });
+  }
+
+  var afterOrder = getHostSortRowIds();
+  cleanupHostSortDragContext();
+
+  if (!isSameHostSortRowOrder(beforeOrder, afterOrder)) {
+    saveHostListSort();
+    return true;
+  }
+
+  if (hostSortResumeRefresh && !hostSortSaving) {
+    hostSortResumeRefresh = false;
+    startAutoRefresh();
+  }
+  clearHostSortSelectionState();
+  return false;
+}
+
+function bindHostSortPointerEvents() {
+  $('#webBody').off('mousedown.hostSort', '.host-sort-handle').on('mousedown.hostSort', '.host-sort-handle', function(event) {
+    if ($(this).hasClass('disabled')) {
+      return false;
     }
-    if (!hostSortSaving) {
-      clearHostSortSelectionState();
+
+    if (event.which !== 1) {
+      return true;
     }
+
+    event.preventDefault();
+    var draggedRow = $(this).closest('tr');
+    var startX = event.pageX;
+    var startY = event.pageY;
+    var dragStarted = false;
+
+    buildHostSortSelectionState(draggedRow);
+
+    $(document).off('.hostSortDrag')
+      .on('mousemove.hostSortDrag', function(moveEvent) {
+        if (!dragStarted) {
+          var diffX = Math.abs(moveEvent.pageX - startX);
+          var diffY = Math.abs(moveEvent.pageY - startY);
+          if (Math.max(diffX, diffY) < 4) {
+            return;
+          }
+
+          dragStarted = true;
+          startHostSortDrag(event, draggedRow);
+        }
+
+        if (!hostSortDragContext || !hostSortDragContext.started) {
+          return;
+        }
+
+        moveHostSortPreview(moveEvent.pageX, moveEvent.pageY);
+        updateHostSortAutoScroll(moveEvent.pageY);
+        updateHostSortPlaceholderPosition(moveEvent.pageY);
+      })
+      .on('mouseup.hostSortDrag', function() {
+        if (dragStarted) {
+          finishHostSortDrag();
+          return;
+        }
+
+        $(document).off('.hostSortDrag');
+        clearHostSortSelectionState();
+      });
+
+    return false;
   });
 }
 
@@ -276,14 +503,8 @@ function saveHostListSort() {
 }
 
 function initHostDragSort() {
-  var hostBody = $('#webBody');
-  hostBody.trigger('dragsort-uninit');
+  cleanupHostSortDragContext();
   bindHostSortPointerEvents();
-
-  if (typeof hostBody.dragsort !== 'function') {
-    updateHostSortHandleState(false, '拖动组件未加载');
-    return;
-  }
 
   if (!canDragSortHostList()) {
     updateHostSortHandleState(false, '仅全部主机列表支持拖动排序');
@@ -296,14 +517,6 @@ function initHostDragSort() {
   }
 
   updateHostSortHandleState(true, '拖动排序，勾选多台后可批量拖动');
-  hostBody.dragsort({
-    itemSelector: 'tr',
-    dragSelector: '.host-sort-handle',
-    dragEnd: function() {
-      applyHostSortSelectionState(this);
-      saveHostListSort();
-    }
-  });
 }
 
 /**
