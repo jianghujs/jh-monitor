@@ -583,11 +583,11 @@ function getWeb(page, search, host_group_id) {
       `;
       
 
-			body = "<tr data-host-row-id='" + data.data[i].id + "'><td class='text-center'><span class='host-sort-handle' aria-hidden='true'><i></i><i></i><i></i></span></td>\
-					<td><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
-					<td>" + name + "</td>\
-					<td>" + status + "</td>\
-					<td>" + host_group + "</td>\
+			body = "<tr data-host-row-id='" + data.data[i].id + "'><td class='text-center host-sticky-left host-sticky-left-1'><span class='host-sort-handle' aria-hidden='true'><i></i><i></i><i></i></span></td>\
+					<td class='host-sticky-left host-sticky-left-2'><input type='checkbox' name='id' title='"+hostNameDisplay+"' onclick='checkSelect();' value='" + data.data[i].id + "'></td>\
+					<td class='host-sticky-left host-sticky-left-3'>" + name + "</td>\
+					<td class='host-sticky-left host-sticky-left-4'>" + status + "</td>\
+					<td class='host-sticky-left host-sticky-left-5'>" + host_group + "</td>\
 					<td class='percent-color'>" + load_status + "</td>\
 					<td class='percent-color'>" + cpu_status + "</td>\
 					<td class='percent-color'>" + mem_status + "</td>\
@@ -597,7 +597,7 @@ function getWeb(page, search, host_group_id) {
 					<td>" + disk_status + "</td>\
 					<td>" + report_summary + "</td>\
 					<td>" + detailAddtimeDisplay + "</td>\
-					<td style='text-align:right; color:#bbb'>" + opt + "</td>\
+					<td class='host-action-col' style='text-align:right; color:#bbb'>" + opt + "</td>\
         </tr>"
 			
 			$("#webBody").append(body);
