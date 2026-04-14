@@ -71,14 +71,8 @@ filebeat.inputs:
 # ============================== Filebeat modules ==============================
 
 filebeat.config.modules:
-  # Glob pattern for configuration loading
   path: ${path.config}/modules.d/*.yml
-
-  # Set to true to enable config reloading
-  reload.enabled: false
-
-  # Period on which files under path should be checked for changes
-  #reload.period: 10s
+  enabled: false
 
 # ======================= Elasticsearch template setting =======================
 
@@ -91,6 +85,11 @@ setup.template.name: "host-pve-<hostIdIndex>-logs"
 setup.template.pattern: "host-pve-<hostIdIndex>-*"
 setup.template.enabled: false
 setup.template.overwrite: true
+
+# This config writes to custom monthly indices via output.elasticsearch.indices.
+# Disable Filebeat ILM/module loading so setup/runtime won't fall back to the
+# default data stream/modules flow on client machines.
+setup.ilm.enabled: false
 
 
 # ================================== General ===================================
