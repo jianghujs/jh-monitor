@@ -36,6 +36,22 @@ class IndexManager(object):
                 ))
         return results
 
+    def delete_indices(self, index_names):
+        results = []
+        for index_name in index_names:
+            exists = self.es.indexExists(index_name)
+            if not exists:
+                results.append({'index': index_name, 'action': 'not_found'})
+                continue
+            response = self.es.deleteIndex(index_name)
+            if response is None:
+                raise Exception('failed to delete index {0}: {1}'.format(
+                    index_name,
+                    self.es.getError()
+                ))
+            results.append({'index': index_name, 'action': 'deleted'})
+        return results
+
     def ensure_index_templates(self, template_definitions):
         results = []
         for template_name, template_body in template_definitions.items():
@@ -47,6 +63,22 @@ class IndexManager(object):
                     self.es.getError()
                 ))
             results.append({'template': template_name, 'action': 'updated' if exists else 'created'})
+        return results
+
+    def delete_index_templates(self, template_names):
+        results = []
+        for template_name in template_names:
+            exists = self.es.indexTemplateExists(template_name)
+            if not exists:
+                results.append({'template': template_name, 'action': 'not_found'})
+                continue
+            response = self.es.deleteIndexTemplate(template_name)
+            if response is None:
+                raise Exception('failed to delete index template {0}: {1}'.format(
+                    template_name,
+                    self.es.getError()
+                ))
+            results.append({'template': template_name, 'action': 'deleted'})
         return results
 
     def ensure_data_streams(self, data_stream_names):
@@ -63,6 +95,22 @@ class IndexManager(object):
                     self.es.getError()
                 ))
             results.append({'data_stream': data_stream_name, 'action': 'created'})
+        return results
+
+    def delete_data_streams(self, data_stream_names):
+        results = []
+        for data_stream_name in data_stream_names:
+            exists = self.es.dataStreamExists(data_stream_name)
+            if not exists:
+                results.append({'data_stream': data_stream_name, 'action': 'not_found'})
+                continue
+            response = self.es.deleteDataStream(data_stream_name)
+            if response is None:
+                raise Exception('failed to delete data stream {0}: {1}'.format(
+                    data_stream_name,
+                    self.es.getError()
+                ))
+            results.append({'data_stream': data_stream_name, 'action': 'deleted'})
         return results
 
 

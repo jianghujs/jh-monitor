@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ES_CONFIG_PATH="${ROOT_DIR}/data/es.json"
+FILEBEAT_CONFIG_PATH="${FILEBEAT_CONFIG_PATH:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 ES_URL="${ES_URL:-}"
@@ -13,7 +14,7 @@ HOST_ID=""
 HOST_ID_INDEX=""
 MONTH_TEXT=""
 AUTO_CONFIRM="0"
-AUTO_DELETE="0"
+AUTO_DELETE="1"
 
 EXPECTED_TEMPLATE_NAME="host-debian-system-status-template"
 EXPECTED_TEMPLATE_PRIORITY="500"
@@ -67,17 +68,19 @@ usage() {
 说明:
   1. 补齐 ES 模板 host-debian-system-status-template
   2. 检查指定主机的 system-status 数据流是否错误绑定到 filebeat 宿主模板
-  3. 如确认需要，可删除错误创建的数据流，等待 filebeat 重新写入
+  3. 执行确认后，如目标数据流已存在，则自动删除该数据流，等待 filebeat 重新写入
+  4. 默认优先从客户端 filebeat 配置读取 ES 连接信息和 host_id_index
 
 参数:
   --host-id            主机 host_id，会自动转换成 host_id_index
   --host-id-index      直接指定 host_id_index
   --month              数据流月份，支持 YYYY.MM 或 YYYY-MM，默认当前月份
+  --filebeat-config    filebeat 配置路径，默认优先尝试 /etc/filebeat/filebeat.yml，再尝试 /etc/filebeat.yml
   --es-url             ES 地址，例如 http://127.0.0.1:9200
   --username           ES 用户名
   --password           ES 密码
   --yes                跳过总确认
-  --delete-data-stream 检测到错误绑定时自动删除数据流，不再二次确认
+  --delete-data-stream 保留兼容参数，当前版本默认自动删除已有目标数据流
   -h, --help           查看帮助
 EOF
 }
@@ -122,6 +125,10 @@ while [ $# -gt 0 ]; do
       MONTH_TEXT="${2:-}"
       shift 2
       ;;
+    --filebeat-config)
+      FILEBEAT_CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
     --es-url)
       ES_URL="${2:-}"
       shift 2
@@ -156,18 +163,78 @@ if [ -n "$HOST_ID" ] && [ -z "$HOST_ID_INDEX" ]; then
   HOST_ID_INDEX="$(normalize_host_id_for_index "$HOST_ID")"
 fi
 
-[ -n "$HOST_ID_INDEX" ] || fail "请通过 --host-id 或 --host-id-index 指定目标主机"
-MONTH_TEXT="$(normalize_month "$MONTH_TEXT")"
-TARGET_DATA_STREAM="host-debian-${HOST_ID_INDEX}-system-status-${MONTH_TEXT}"
-WRONG_TEMPLATE_NAME="host-debian-${HOST_ID_INDEX}-logs"
+resolve_filebeat_config_path() {
+  if [ -n "$FILEBEAT_CONFIG_PATH" ] && [ -f "$FILEBEAT_CONFIG_PATH" ]; then
+    printf "%s" "$FILEBEAT_CONFIG_PATH"
+    return 0
+  fi
+
+  if [ -f /etc/filebeat/filebeat.yml ]; then
+    printf "%s" "/etc/filebeat/filebeat.yml"
+    return 0
+  fi
+
+  if [ -f /etc/filebeat.yml ]; then
+    printf "%s" "/etc/filebeat.yml"
+    return 0
+  fi
+
+  return 1
+}
+
+read_filebeat_config_values() {
+  local config_path="$1"
+  "$PYTHON_BIN" - <<'PY' "$config_path"
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as fp:
+    text = fp.read()
+
+def pick(pattern):
+    match = re.search(pattern, text, re.MULTILINE)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+host_value = pick(r'^\s*hosts:\s*\[\s*"([^"]+)"')
+user_value = pick(r'^\s*username:\s*"([^"]*)"')
+pass_value = pick(r'^\s*password:\s*"([^"]*)"')
+index_value = pick(r'^\s*-\s*index:\s*"host-debian-(.+)-system-status-%\{\+yyyy\.MM\}"')
+
+print(host_value)
+print(user_value)
+print(pass_value)
+print(index_value)
+PY
+}
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  fail "未找到 ${PYTHON_BIN}"
+fi
+
+if [ -z "$ES_URL" ] || [ -z "$ES_USER" ] || [ -z "$ES_PASS" ] || [ -z "$HOST_ID_INDEX" ]; then
+  if FILEBEAT_CONFIG_PATH_RESOLVED="$(resolve_filebeat_config_path)"; then
+    readarray -t FILEBEAT_CONF < <(read_filebeat_config_values "$FILEBEAT_CONFIG_PATH_RESOLVED")
+    if [ -z "$ES_URL" ] && [ -n "${FILEBEAT_CONF[0]:-}" ]; then
+      ES_URL="http://${FILEBEAT_CONF[0]}"
+    fi
+    if [ -z "$ES_USER" ] && [ -n "${FILEBEAT_CONF[1]:-}" ]; then
+      ES_USER="${FILEBEAT_CONF[1]}"
+    fi
+    if [ -z "$ES_PASS" ] && [ -n "${FILEBEAT_CONF[2]:-}" ]; then
+      ES_PASS="${FILEBEAT_CONF[2]}"
+    fi
+    if [ -z "$HOST_ID_INDEX" ] && [ -n "${FILEBEAT_CONF[3]:-}" ]; then
+      HOST_ID_INDEX="${FILEBEAT_CONF[3]}"
+    fi
+  fi
+fi
 
 if [ -z "$ES_URL" ] || [ -z "$ES_USER" ] || [ -z "$ES_PASS" ]; then
   if [ ! -f "$ES_CONFIG_PATH" ]; then
-    fail "未找到 ES 配置文件，且未通过参数传入 ES 连接信息: $ES_CONFIG_PATH"
-  fi
-
-  if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-    fail "未找到 ${PYTHON_BIN}，无法读取 ${ES_CONFIG_PATH}"
+    fail "未找到 filebeat 配置，且未通过参数传入 ES 连接信息；项目 ES 配置也不存在: $ES_CONFIG_PATH"
   fi
 
   readarray -t ES_CONF < <(
@@ -199,12 +266,16 @@ PY
   ES_PASS="${ES_PASS:-${ES_CONF[2]}}"
 fi
 
+[ -n "$HOST_ID_INDEX" ] || fail "未能自动识别 host_id_index，请通过 --host-id 或 --host-id-index 指定"
+MONTH_TEXT="$(normalize_month "$MONTH_TEXT")"
+TARGET_DATA_STREAM="host-debian-${HOST_ID_INDEX}-system-status-${MONTH_TEXT}"
+WRONG_TEMPLATE_NAME="host-debian-${HOST_ID_INDEX}-logs"
+
 [ -n "$ES_URL" ] || fail "ES_URL 不能为空"
 [ -n "$ES_USER" ] || fail "ES 用户名不能为空"
 [ -n "$ES_PASS" ] || fail "ES 密码不能为空"
 
 command -v curl >/dev/null 2>&1 || fail "未找到 curl"
-command -v "$PYTHON_BIN" >/dev/null 2>&1 || fail "未找到 ${PYTHON_BIN}"
 
 curl_json() {
   local path="$1"
@@ -334,15 +405,21 @@ show_info "准备修复 Debian system-status 数据流模板"
 show_info "步骤1/5: 检查 ES 连通性"
 show_info "步骤2/5: 创建或更新模板 ${EXPECTED_TEMPLATE_NAME}"
 show_info "步骤3/5: 检查目标数据流 ${TARGET_DATA_STREAM}"
-show_info "步骤4/5: 如数据流绑定错误模板，可删除该数据流"
+show_info "步骤4/5: 如目标数据流已存在，则自动删除该数据流"
 show_info "步骤5/5: 输出修复结果与后续操作建议"
 show_info "-----------------------"
 show_info "ES地址: ${ES_URL}"
+if [ -n "${FILEBEAT_CONFIG_PATH_RESOLVED:-}" ]; then
+  show_info "filebeat配置: ${FILEBEAT_CONFIG_PATH_RESOLVED}"
+else
+  show_info "filebeat配置: 未使用，当前通过参数或 data/es.json 获取 ES 信息"
+fi
 show_info "目标主机: ${HOST_ID_INDEX}"
 show_info "目标月份: ${MONTH_TEXT}"
 show_info "目标数据流: ${TARGET_DATA_STREAM}"
 show_info "预期模板: ${EXPECTED_TEMPLATE_NAME}"
-show_info "冲突模板: ${WRONG_TEMPLATE_NAME}"
+show_info "旧宿主模板: ${WRONG_TEMPLATE_NAME}"
+show_info "删除策略: 已确认执行后自动删除已有目标数据流"
 
 if ! prompt_yes_no "确认开始执行以上修复步骤吗？" "Y"; then
   show_info "已取消执行"
@@ -432,35 +509,35 @@ print(json.dumps({
 }, ensure_ascii=False, indent=2))
 '
 
-CURRENT_TEMPLATE="$("$PYTHON_BIN" - <<'PY' <<<"$DATA_STREAM_JSON"
+CURRENT_TEMPLATE="$(printf '%s' "$DATA_STREAM_JSON" | "$PYTHON_BIN" -c '
 import json
 import sys
 data = json.load(sys.stdin)
 streams = data.get("data_streams", []) or []
 print((streams[0].get("template") if streams else "") or "")
-PY
-)"
+')"
 
 show_info "-----------------------"
-show_info "步骤4/5: 判断是否需要删除错误数据流"
+show_info "步骤4/5: 自动删除已有目标数据流"
 if [ "$CURRENT_TEMPLATE" = "$EXPECTED_TEMPLATE_NAME" ]; then
-  show_info "当前数据流已经绑定到正确模板，无需删除数据流"
+  show_info "当前数据流已绑定正确模板，但已有 backing index 可能仍沿用旧状态"
+  show_info "为确保按最新模板重新创建，继续删除当前数据流"
 else
   show_info "检测到数据流当前绑定模板不是预期模板: ${CURRENT_TEMPLATE}"
   show_info "这通常说明它是在正确模板创建前被 filebeat 宿主模板抢先创建出来的"
   show_info "删除后，待客户端重新写入时会按新模板重新创建"
+fi
 
-  if [ "$AUTO_DELETE" = "1" ] || prompt_yes_no "是否现在删除该错误数据流？" "N"; then
-    DELETE_JSON="$(curl_json "/_data_stream/${TARGET_DATA_STREAM}" "DELETE")"
-    printf '%s' "$DELETE_JSON" | "$PYTHON_BIN" -c '
+if [ "$AUTO_DELETE" = "1" ]; then
+  DELETE_JSON="$(curl_json "/_data_stream/${TARGET_DATA_STREAM}" "DELETE")"
+  printf '%s' "$DELETE_JSON" | "$PYTHON_BIN" -c '
 import json
 import sys
 print(json.dumps(json.load(sys.stdin), ensure_ascii=False, indent=2))
 '
-    show_info "错误数据流已删除"
-  else
-    show_info "已跳过删除数据流，请确认停掉客户端 filebeat 后再手工处理"
-  fi
+  show_info "目标数据流已删除"
+else
+  show_info "已跳过删除数据流，请确认停掉客户端 filebeat 后再手工处理"
 fi
 
 show_info "-----------------------"

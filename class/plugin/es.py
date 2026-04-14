@@ -184,6 +184,13 @@ class ES:
             self._err = ex
             return None
 
+    def deleteIndex(self, index):
+        try:
+            return self.getConn().indices.delete(index=index, ignore_unavailable=True)
+        except Exception as ex:
+            self._err = ex
+            return None
+
     def putMapping(self, index, body):
         try:
             return self.getConn().indices.put_mapping(index=index, body=body)
@@ -205,6 +212,13 @@ class ES:
             self._err = ex
             return None
 
+    def deleteIndexTemplate(self, name):
+        try:
+            return self.getConn().indices.delete_index_template(name=name)
+        except Exception as ex:
+            self._err = ex
+            return None
+
     def dataStreamExists(self, name):
         try:
             response = self.getConn().indices.get_data_stream(name=name)
@@ -217,6 +231,13 @@ class ES:
     def createDataStream(self, name):
         try:
             return self.getConn().indices.create_data_stream(name=name)
+        except Exception as ex:
+            self._err = ex
+            return None
+
+    def deleteDataStream(self, name):
+        try:
+            return self.getConn().indices.delete_data_stream(name=name)
         except Exception as ex:
             self._err = ex
             return None

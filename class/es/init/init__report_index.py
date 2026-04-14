@@ -28,6 +28,7 @@ def build_args():
     parser.add_argument('--use-test-index', action='store_true', help='创建 host-report-*-test 测试索引')
     parser.add_argument('--check-only', action='store_true', help='只检查索引是否存在，不执行创建/更新')
     parser.add_argument('--all', action='store_true', help='同时初始化 REPORT_INDEXES 和 REPORT_INDEX_TEMPLATES 中的全部定义')
+    parser.add_argument('--overwrite', action='store_true', help='覆盖重建目标索引/模板/数据流：先删除旧资源，再按当前定义重建')
     parser.add_argument('--sync-existing-indices', action='store_true', help='同步更新已存在的报告普通索引 mapping，可能因历史字段类型冲突失败')
     parser.add_argument('--month', default='', help='指定报告数据流月份，格式 YYYY-MM，默认当前月份')
     return parser.parse_args()
@@ -142,6 +143,15 @@ def fetch_data_stream_summary(manager, data_stream_name):
     return summary
 
 
+def overwrite_targets(manager, target_indices, template_definitions, target_data_streams):
+    results = {
+        'deleted_data_streams': manager.delete_data_streams(target_data_streams),
+        'deleted_indices': manager.delete_indices(target_indices),
+        'deleted_templates': manager.delete_index_templates(list(template_definitions.keys())),
+    }
+    return results
+
+
 def main():
     args = build_args()
     manager = IndexManager()
@@ -170,6 +180,7 @@ def main():
         'target_data_streams': target_data_streams,
         'month': normalize_month(args.month),
         'mode': 'check_only' if args.check_only else 'ensure',
+        'overwrite': bool(args.overwrite),
         'scope': 'all' if args.all else ('report_test' if args.use_test_index else 'report'),
     }
 
@@ -178,6 +189,14 @@ def main():
         results['data_streams'] = [fetch_data_stream_summary(manager, data_stream_name) for data_stream_name in target_data_streams]
         print(json.dumps(results, ensure_ascii=False, indent=2))
         return 0
+
+    if args.overwrite:
+        results['overwrite_deleted'] = overwrite_targets(
+            manager,
+            target_indices,
+            template_definitions,
+            target_data_streams
+        )
 
     if args.all:
         results['indices'] = manager.ensure_indices(index_definitions)
