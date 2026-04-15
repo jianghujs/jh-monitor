@@ -4,6 +4,7 @@
 import argparse
 import copy
 import datetime
+import fnmatch
 import json
 import os
 import sys
@@ -147,10 +148,100 @@ def fetch_data_stream_summary(manager, data_stream_name):
     return summary
 
 
+def _safe_get_data_stream_names(manager, pattern):
+    try:
+        response = manager.es.getConn().indices.get_data_stream(name=pattern)
+        response = normalize_response(response)
+    except Exception:
+        return []
+    data_streams = response.get('data_streams', []) or []
+    return [item.get('name', '') for item in data_streams if item.get('name')]
+
+
+def _safe_get_index_names(manager, pattern):
+    try:
+        response = manager.es.getConn().indices.get(
+            index=pattern,
+            expand_wildcards='all',
+            allow_no_indices=True,
+            ignore_unavailable=True,
+        )
+        response = normalize_response(response)
+    except Exception:
+        return []
+    return [name for name in response.keys() if name]
+
+
+def _safe_get_all_data_streams(manager):
+    try:
+        response = manager.es.getConn().indices.get_data_stream(name='*')
+        response = normalize_response(response)
+    except Exception:
+        return []
+    return response.get('data_streams', []) or []
+
+
+def _safe_get_index_template(manager, template_name):
+    try:
+        response = manager.es.getConn().indices.get_index_template(name=template_name)
+        response = normalize_response(response)
+    except Exception:
+        return {}
+    templates = response.get('index_templates', []) or []
+    if len(templates) == 0:
+        return {}
+    return (templates[0].get('index_template') or {})
+
+
+def resolve_overwrite_data_streams(manager, template_definitions, target_data_streams):
+    resolved_names = list(target_data_streams or [])
+    template_names = list(template_definitions.keys())
+    template_patterns = []
+
+    for template_body in template_definitions.values():
+        template_patterns.extend(template_body.get('index_patterns', []) or [])
+
+    for template_name in template_names:
+        existing_template = _safe_get_index_template(manager, template_name)
+        template_patterns.extend(existing_template.get('index_patterns', []) or [])
+
+    all_data_streams = _safe_get_all_data_streams(manager)
+    for data_stream in all_data_streams:
+        data_stream_name = data_stream.get('name', '')
+        data_stream_template = data_stream.get('template', '')
+        if data_stream_name == '':
+            continue
+        if data_stream_template in template_names:
+            resolved_names.append(data_stream_name)
+            continue
+        for pattern in template_patterns:
+            if fnmatch.fnmatch(data_stream_name, pattern):
+                resolved_names.append(data_stream_name)
+                break
+
+    for pattern in template_patterns:
+        resolved_names.extend(_safe_get_data_stream_names(manager, pattern))
+
+    return sorted(list(dict.fromkeys([name for name in resolved_names if name])))
+
+
+def resolve_data_stream_conflict_indices(manager, data_stream_names):
+    conflict_indices = []
+    for data_stream_name in data_stream_names:
+        if manager.es.dataStreamExists(data_stream_name):
+            continue
+        conflict_indices.extend(_safe_get_index_names(manager, data_stream_name))
+    return sorted(list(dict.fromkeys([name for name in conflict_indices if name])))
+
+
 def overwrite_targets(manager, target_indices, template_definitions, target_data_streams):
+    overwrite_data_streams = resolve_overwrite_data_streams(manager, template_definitions, target_data_streams)
+    conflict_indices = resolve_data_stream_conflict_indices(manager, overwrite_data_streams)
     results = {
-        'deleted_data_streams': manager.delete_data_streams(target_data_streams),
-        'deleted_indices': manager.delete_indices(target_indices),
+        'resolved_data_streams': overwrite_data_streams,
+        'deleted_data_streams': manager.delete_data_streams(overwrite_data_streams),
+        'resolved_conflict_indices': conflict_indices,
+        'deleted_indices': manager.delete_indices(list(target_indices) + conflict_indices),
         'deleted_templates': manager.delete_index_templates(list(template_definitions.keys())),
     }
     return results
