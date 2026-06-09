@@ -1320,24 +1320,11 @@ class HostReportAnalyser(object):
                 'desc': summary_text
             })
 
-        all_host_overview_list = []
         single_host_report_list = []
         for doc in single_documents:
             validation = doc.get('validation', {}) or {}
             is_error = bool(doc.get('is_abnormal')) or not validation.get('is_complete', False)
-            latest_status_time = value_tool.getNested(doc, ['extra_info', 'latest_status_time'], '')
-            status_name = '提醒' if is_error else '正常'
-            status_color = 'orange' if is_error else 'green'
             summary_tips = doc.get('summary_tips', []) or []
-            all_host_overview_list.append({
-                'host_id': doc.get('host_id', ''),
-                'host_name': doc.get('host_name', ''),
-                'host_ip': doc.get('host_ip', ''),
-                'status_name': status_name,
-                'status_color': status_color,
-                'latest_status_time': latest_status_time or '无',
-                'summary_text': '<br/>'.join(summary_tips) if summary_tips else '<span style="color: green;">服务运行正常，继续保持！</span>',
-            })
             single_host_report_list.append({
                 'host_id': doc.get('host_id', ''),
                 'host_name': doc.get('host_name', ''),
@@ -1345,17 +1332,6 @@ class HostReportAnalyser(object):
                 'is_error': is_error,
                 'summary_tips': summary_tips,
                 'html_content': doc.get('html_content', ''),
-            })
-
-        for doc in offline_documents:
-            all_host_overview_list.append({
-                'host_id': doc.get('host_id', ''),
-                'host_name': doc.get('host_name', ''),
-                'host_ip': doc.get('host_ip', ''),
-                'status_name': '提醒',
-                'status_color': 'orange',
-                'latest_status_time': '无',
-                'summary_text': '<span style="color: orange;">缺少单机报告或主机未上报数据</span>',
             })
 
         host_normal = len(normal_documents)
@@ -1378,7 +1354,6 @@ class HostReportAnalyser(object):
             },
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
-            'all_host_overview_list': all_host_overview_list,
             'single_host_report_list': single_host_report_list,
         }
 
@@ -1419,7 +1394,6 @@ class HostReportAnalyser(object):
             'host_overview_info': overview_payload['host_overview_info'],
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
-            'all_host_overview_list': all_host_overview_list,
             'single_host_report_list': single_host_report_list,
             'validation': validation,
             'delivery': delivery_state,

@@ -20,26 +20,6 @@
   table tr td:nth-child(2) {
       width: 72%;
   }
-  .host-overview-list {
-      border-top: 1px solid #ddd;
-      margin-top: 6px;
-  }
-  .host-overview-item {
-      padding: 8px 0;
-      border-bottom: 1px solid #ddd;
-  }
-  .host-overview-title {
-      line-height: 22px;
-      font-weight: bold;
-      word-break: break-all;
-  }
-  .host-overview-summary {
-      margin-top: 4px;
-      padding-left: 22px;
-      line-height: 20px;
-      color: #555;
-      word-break: break-all;
-  }
   .report-card {
       margin-top: 24px;
       padding-top: 12px;
@@ -48,7 +28,7 @@
 </style>
 <div class="panel_report bgw p-5">
   <div class="title c6 f16 plr15">
-    <h3 class="c6 f16 pull-left">{{ title_prefix }}<span style="color: green;">{{ host_normal }}正常</span> <span style="color: orange;">{{ host_error }}异常</span>）</h3>
+    <h3 class="c6 f16 pull-left">{{ title_prefix }}<span style="color: green;">{{ host_normal }}正常</span> <span style="color: red;">{{ host_error }}异常</span>）</h3>
   </div>
   <div class="pt-5" style="color: #efefef; font-size: 14px;">
     <div>统计范围：{{ start_time }} 至 {{ end_time }}</div>
@@ -80,7 +60,7 @@
         <td>异常主机</td>
         <td>
           {% if host_overview_info.host_error and host_overview_info.host_error > 0 %}
-          <span style="color: orange;">{{ host_overview_info.host_error }}</span>
+          <span style="color: red;">{{ host_overview_info.host_error }}</span>
           {% else %}
           <span style="color: green;">{{ host_overview_info.host_error }}</span>
           {% endif %}
@@ -98,12 +78,12 @@
       </tr>
       {% elif item.name == '异常主机' %}
       <tr>
-        <td><span style="color: orange;">{{ item.name }}</span></td>
+        <td><span style="color: red;">{{ item.name }}</span></td>
         <td>
           {% if item.desc == '无' %}
           <span style="color: green;">{{ item.desc }}</span>
           {% else %}
-          <span style="color: orange;">{{ item.desc }}</span>
+          <span style="color: red;">{{ item.desc }}</span>
           {% endif %}
         </td>
       </tr>
@@ -123,8 +103,8 @@
     {% if exception_host_summary_tips %}
       {% for item in exception_host_summary_tips %}
       <tr>
-        <td><span style="color: orange;">{{ item.name }}</span></td>
-        <td><span style="color: orange;">{{ item.desc }}</span></td>
+        <td><span style="color: red;">{{ item.name }}</span></td>
+        <td><span style="color: red;">{{ item.desc }}</span></td>
       </tr>
       {% endfor %}
     {% else %}
@@ -135,32 +115,13 @@
     {% endif %}
     </table>
 
-    <h3 class="font-bold my-5">全部主机概览：</h3>
-    <div class="host-overview-list">
-      {% if all_host_overview_list %}
-        {% for item in all_host_overview_list %}
-        <div class="host-overview-item">
-          <div class="host-overview-title">
-            <span style="color: #666;">{{ loop.index }}.</span>
-            <span style="color: {{ item.status_color }};">{{ item.host_name or '-' }}</span>
-            <span style="color: #999;"> / {{ item.host_ip or '-' }}</span>
-            <span style="color: {{ item.status_color }};">[{{ item.status_name }}]</span>
-          </div>
-          <div class="host-overview-summary">{{ item.summary_text }}</div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="host-overview-item"><span style="color: orange;">暂无主机概览数据</span></div>
-      {% endif %}
-    </div>
-
     <h3 class="font-bold my-5">主机单机报告列表：</h3>
     {% for item in single_host_report_list %}
     <div class="report-card">
       <h3>
         [{{ loop.index }}] {{ item.host_name }}（{{ item.host_ip }}）
         {% if item.is_error %}
-        <span style="color: orange;">提醒</span>
+        <span style="color: red;">提醒</span>
         {% else %}
         <span style="color: green;">正常</span>
         {% endif %}
