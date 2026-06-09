@@ -23,8 +23,11 @@ filebeat.inputs:
     - /home/ansible/jh-monitor-data/host-debian-system-status-*.json
   json.keys_under_root: true
   json.add_error_key: true
+  json.overwrite_keys: true
+  close_eof: true
   fields:
     log_index: host-debian-system-status
+  fields_under_root: true
 
 - type: log
   enabled: true
@@ -37,6 +40,7 @@ filebeat.inputs:
   close_eof: true
   fields:
     log_index: host-debian-xtrabackup
+  fields_under_root: true
 
 - type: log
   enabled: true
@@ -49,6 +53,7 @@ filebeat.inputs:
   close_eof: true
   fields:
     log_index: host-debian-xtrabackup-inc
+  fields_under_root: true
 
 - type: log
   enabled: true
@@ -61,17 +66,18 @@ filebeat.inputs:
   close_eof: true
   fields:
     log_index: host-debian-backup
+  fields_under_root: true
 
 # Common
 - type: log
   enabled: true
   paths:
-    - '^/var/log/daemon\.log$'
     - /var/log/*.log
     - /www/wwwlogs/*.log
     - /www/server/mysql-apt/data/*.log
     - /www/server/jh-panel/logs/report.log
   exclude_files:
+    - '^/var/log/daemon\.log$'
     - '^/www/wwwlogs/.*'
     - '^/www/server/mysql-apt/data/error\.log$'
     - '^/www/server/mysql-apt/data/mysql-slow\.log$'
@@ -199,10 +205,8 @@ setup.template.settings:
   index.codec: best_compression
   index.refresh_interval: "5s"
 
-# This config writes to custom monthly indices via output.elasticsearch.indices.
-# Per Filebeat docs, custom indices disable ILM, and keeping ILM enabled here
-# causes `filebeat setup` to fall back to the default filebeat data stream flow.
-setup.ilm.enabled: false
+setup.ilm.enabled: true
+setup.ilm.check_exists: true
 
 setup.template.name: "host-debian-<hostIdIndex>-logs"
 setup.template.pattern: "host-debian-<hostIdIndex>-*"
