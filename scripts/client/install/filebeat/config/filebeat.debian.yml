@@ -34,6 +34,8 @@ filebeat.inputs:
   paths:
     - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
     - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
+  exclude_files:
+    - 'host-debian-xtrabackup-inc-.*\.ndjson$'
   json.keys_under_root: true
   json.add_error_key: true
   json.overwrite_keys: true
@@ -253,18 +255,30 @@ setup.kibana:
 output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
-    - index: "host-debian-<hostIdIndex>-common-%{+yyyy.MM}"
-      when.equals:
-        log_index: "host-debian-system-status"
+    - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
+      when.or:
+        - equals:
+            log_index: "host-debian-system-status"
+        - equals:
+            fields.log_index: "host-debian-system-status"
     - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
-      when.equals:
-        log_index: "host-debian-xtrabackup"
+      when.or:
+        - equals:
+            log_index: "host-debian-xtrabackup"
+        - equals:
+            fields.log_index: "host-debian-xtrabackup"
     - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
-      when.equals:
-        log_index: "host-debian-xtrabackup-inc"
+      when.or:
+        - equals:
+            log_index: "host-debian-xtrabackup-inc"
+        - equals:
+            fields.log_index: "host-debian-xtrabackup-inc"
     - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
-      when.equals:
-        log_index: "host-debian-backup"
+      when.or:
+        - equals:
+            log_index: "host-debian-backup"
+        - equals:
+            fields.log_index: "host-debian-backup"
     - index: "host-debian-<hostIdIndex>-common-%{+yyyy.MM}"
       when.equals:
         fields.log_type: "common"
