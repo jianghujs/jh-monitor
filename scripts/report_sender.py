@@ -266,7 +266,9 @@ class HostReportSender(HostReportAnalyser):
                 single_skipped += 1
                 continue
 
-            title = '{0}({1})-服务器报告 {2}'.format(
+            single_icon = '🔴' if document.get('is_abnormal') else '🟢'
+            title = '{0} {1}({2})-服务器报告 {3}'.format(
+                single_icon,
                 document.get('host_name', ''),
                 document.get('host_ip', ''),
                 window['report_date']

@@ -117,7 +117,8 @@ class host_api:
             'siteinfo_tips': report_data.get('siteinfo_tips') or [],
             'jianghujsinfo_tips': report_data.get('jianghujsinfo_tips') or [],
             'dockerinfo_tips': report_data.get('dockerinfo_tips') or [],
-            'mysqlinfo_tips': report_data.get('mysqlinfo_tips') or []
+            'mysqlinfo_tips': report_data.get('mysqlinfo_tips') or [],
+            'is_abnormal': bool(report_data.get('is_abnormal'))
         }
 
         try:
@@ -158,7 +159,8 @@ class host_api:
             'smart_tips': report_data.get('smart_tips') or [],
             'io_tips': report_data.get('io_tips') or [],
             'sensor_tips': report_data.get('sensor_tips') or [],
-            'power_tips': report_data.get('power_tips') or []
+            'power_tips': report_data.get('power_tips') or [],
+            'is_abnormal': bool(report_data.get('is_abnormal'))
         }
 
         try:

@@ -1105,6 +1105,7 @@ class HostReportAnalyser(object):
             'io_tips': io_tips,
             'sensor_tips': sensor_tips,
             'power_tips': power_tips,
+            'is_abnormal': len(error_tips) > 0,
         }, error_tips
 
     def build_single_host_report(self, host_row, host_group, window):
@@ -1171,6 +1172,7 @@ class HostReportAnalyser(object):
                 'jianghujsinfo_tips': jianghujsinfo_tips,
                 'dockerinfo_tips': dockerinfo_tips,
                 'mysqlinfo_tips': mysqlinfo_tips,
+                'is_abnormal': len(error_tips) > 0,
             }
             backup_tips = report_payload.get('backup_tips', [])
             siteinfo_tips = report_payload.get('siteinfo_tips', [])
@@ -1192,9 +1194,12 @@ class HostReportAnalyser(object):
             existing_doc = existing_doc.get('_source', {})
         delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
+        single_is_abnormal = len(error_tips) > 0
+        single_icon = '🔴' if single_is_abnormal else '🟢'
         document = {
             'report_type': 'single',
-            'title': '{0}({1})-{2}'.format(
+            'title': '{0} {1}({2})-{3}'.format(
+                single_icon,
                 host_name,
                 host_ip,
                 'PVE硬件健康报告' if self._is_pve_host(host_row) else '服务器运行报告'
