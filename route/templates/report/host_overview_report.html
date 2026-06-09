@@ -20,15 +20,25 @@
   table tr td:nth-child(2) {
       width: 72%;
   }
-  table.host-overview-table tr td:nth-child(1) { width: 6%; text-align: center; }
-  table.host-overview-table tr td:nth-child(2) { width: 22%; }
-  table.host-overview-table tr td:nth-child(3) { width: 20%; }
-  table.host-overview-table tr td:nth-child(4) { width: 10%; text-align: center; }
-  table.host-overview-table tr td:nth-child(5) { width: 42%; }
-  table.host-overview-table tr.head td {
-      background: #f5f5f5;
+  .host-overview-list {
+      border-top: 1px solid #ddd;
+      margin-top: 6px;
+  }
+  .host-overview-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #ddd;
+  }
+  .host-overview-title {
+      line-height: 22px;
       font-weight: bold;
-      text-align: center;
+      word-break: break-all;
+  }
+  .host-overview-summary {
+      margin-top: 4px;
+      padding-left: 22px;
+      line-height: 20px;
+      color: #555;
+      word-break: break-all;
   }
   .report-card {
       margin-top: 24px;
@@ -126,30 +136,23 @@
     </table>
 
     <h3 class="font-bold my-5">全部主机概览：</h3>
-    <table border class="w-full host-overview-table">
-      <tr class="head">
-        <td>#</td>
-        <td>主机名称</td>
-        <td>主机IP</td>
-        <td>状态</td>
-        <td>摘要</td>
-      </tr>
+    <div class="host-overview-list">
       {% if all_host_overview_list %}
         {% for item in all_host_overview_list %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td><span style="color: {{ item.status_color }};">{{ item.host_name or '-' }}</span></td>
-          <td><span style="color: {{ item.status_color }};">{{ item.host_ip or '-' }}</span></td>
-          <td><span style="color: {{ item.status_color }}; font-weight: bold;">{{ item.status_name }}</span></td>
-          <td>{{ item.summary_text }}</td>
-        </tr>
+        <div class="host-overview-item">
+          <div class="host-overview-title">
+            <span style="color: #666;">{{ loop.index }}.</span>
+            <span style="color: {{ item.status_color }};">{{ item.host_name or '-' }}</span>
+            <span style="color: #999;"> / {{ item.host_ip or '-' }}</span>
+            <span style="color: {{ item.status_color }};">[{{ item.status_name }}]</span>
+          </div>
+          <div class="host-overview-summary">{{ item.summary_text }}</div>
+        </div>
         {% endfor %}
       {% else %}
-        <tr>
-          <td colspan="5"><span style="color: orange;">暂无主机概览数据</span></td>
-        </tr>
+        <div class="host-overview-item"><span style="color: orange;">暂无主机概览数据</span></div>
       {% endif %}
-    </table>
+    </div>
 
     <h3 class="font-bold my-5">主机单机报告列表：</h3>
     {% for item in single_host_report_list %}
