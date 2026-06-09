@@ -194,9 +194,8 @@ filebeat.inputs:
 
 filebeat.config.modules:
   path: ${path.config}/modules.d/*.yml
-  # reload.enabled: false
-  # reload.period: 10s
-  enabled: false
+  reload.enabled: false
+  reload.period: 10s
 
 # ======================= Elasticsearch template setting =======================
 
@@ -256,19 +255,19 @@ output.elasticsearch:
   indices:
     - index: "host-debian-<hostIdIndex>-common-%{+yyyy.MM}"
       when.equals:
-        fields.log_type: "common"
-    - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
-      when.equals:
-        fields.log_index: "host-debian-system-status"
+        log_index: "host-debian-system-status"
     - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-xtrabackup"
+        log_index: "host-debian-xtrabackup"
     - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-xtrabackup-inc"
+        log_index: "host-debian-xtrabackup-inc"
     - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-debian-backup"
+        log_index: "host-debian-backup"
+    - index: "host-debian-<hostIdIndex>-common-%{+yyyy.MM}"
+      when.equals:
+        fields.log_type: "common"
     - index: "host-debian-<hostIdIndex>-syslog-%{+yyyy.MM}"
       when.equals:
         log_type: "syslog"
