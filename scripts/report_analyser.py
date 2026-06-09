@@ -1335,7 +1335,7 @@ class HostReportAnalyser(object):
             })
 
         host_normal = len(normal_documents)
-        title_prefix = '{0}-全部主机概览报告（'.format(jh.getConfig('title'))
+        title_prefix = '📊 {0}-全部主机概览报告（'.format(jh.getConfig('title'))
         title = '{0}{1}正常 {2}异常）'.format(title_prefix, host_normal, host_error)
         overview_payload = {
             'title': title,

@@ -119,6 +119,7 @@
     {% for item in single_host_report_list %}
     <div class="report-card">
       <h3>
+        {% if item.is_error %}🔴{% else %}🟢{% endif %}
         [{{ loop.index }}] {{ item.host_name }}（{{ item.host_ip }}）
         {% if item.is_error %}
         <span style="color: red;">提醒</span>
