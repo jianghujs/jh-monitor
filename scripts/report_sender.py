@@ -1,6 +1,8 @@
 # coding: utf-8
 
 import datetime
+import random
+import time
 
 from report_analyser import (
     HostReportAnalyser,
@@ -258,13 +260,24 @@ class HostReportSender(HostReportAnalyser):
                 'report_date': window['report_date']
             }
 
-        for document in single_documents:
+        # 概览发送成功后等待 5 秒，再开始发送单机异常报告，避免与概览邮件混在一起
+        if len(single_documents) > 0:
+            self.log('[report-delivery] sleeping 5s before single reports report_date={0}'.format(window['report_date']))
+            time.sleep(5)
+
+        for index, document in enumerate(single_documents):
             doc_id = '{0}:{1}'.format(window['report_date'], document.get('host_id', ''))
             validation_errors = self._validate_report_for_delivery(document, 'single', window['report_date'])
             if len(validation_errors) > 0:
                 self._mark_report_skipped(SINGLE_REPORT_INDEX, doc_id, document, '；'.join(validation_errors))
                 single_skipped += 1
                 continue
+
+            # 单机报告之间随机间隔 1-2 秒，降低邮件网关压力
+            if index > 0:
+                sleep_seconds = random.uniform(1, 2)
+                self.log('[report-delivery] sleeping {0:.2f}s before next single report'.format(sleep_seconds))
+                time.sleep(sleep_seconds)
 
             single_icon = '🔴' if document.get('is_abnormal') else '🟢'
             title = '{0} {1}({2})-服务器报告 {3}'.format(
