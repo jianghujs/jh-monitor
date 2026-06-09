@@ -34,8 +34,6 @@ filebeat.inputs:
   paths:
     - /home/ansible_user/jh-monitor-data/host-debian-xtrabackup-*.ndjson
     - /home/ansible/jh-monitor-data/host-debian-xtrabackup-*.ndjson
-  exclude_files:
-    - 'host-debian-xtrabackup-inc-.*\.ndjson$'
   json.keys_under_root: true
   json.add_error_key: true
   json.overwrite_keys: true
@@ -256,29 +254,17 @@ output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
     - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
-      when.or:
-        - equals:
-            log_index: "host-debian-system-status"
-        - equals:
-            fields.log_index: "host-debian-system-status"
+      when.equals:
+        log_index: "host-debian-system-status"
     - index: "host-debian-<hostIdIndex>-xtrabackup-%{+yyyy.MM}"
-      when.or:
-        - equals:
-            log_index: "host-debian-xtrabackup"
-        - equals:
-            fields.log_index: "host-debian-xtrabackup"
+      when.equals:
+        log_index: "host-debian-xtrabackup"
     - index: "host-debian-<hostIdIndex>-xtrabackup-inc-%{+yyyy.MM}"
-      when.or:
-        - equals:
-            log_index: "host-debian-xtrabackup-inc"
-        - equals:
-            fields.log_index: "host-debian-xtrabackup-inc"
+      when.equals:
+        log_index: "host-debian-xtrabackup-inc"
     - index: "host-debian-<hostIdIndex>-backup-%{+yyyy.MM}"
-      when.or:
-        - equals:
-            log_index: "host-debian-backup"
-        - equals:
-            fields.log_index: "host-debian-backup"
+      when.equals:
+        log_index: "host-debian-backup"
     - index: "host-debian-<hostIdIndex>-common-%{+yyyy.MM}"
       when.equals:
         fields.log_type: "common"
@@ -346,12 +332,12 @@ processors:
 
 # Sets log level. The default log level is info.
 # Available log levels are: error, warning, info, debug
-logging.level: error
+logging.level: info
 
 # At debug level, you can selectively enable logging only for some components.
 # To enable all selectors, use ["*"]. Examples of other selectors are "beat",
 # "publisher", "service".
-#logging.selectors: ["*"]
+logging.selectors: ["input"]
 logging.metrics.enabled: false
 
 # ============================= X-Pack Monitoring ==============================
