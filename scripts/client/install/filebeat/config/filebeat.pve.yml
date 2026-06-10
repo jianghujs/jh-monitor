@@ -12,6 +12,8 @@
 
 # ============================== Filebeat inputs ===============================
 
+name: "<hostId>"
+
 filebeat.inputs:
 
 # Each - is an input. Most options can be set at the input level, so
@@ -24,10 +26,14 @@ filebeat.inputs:
   enabled: true
   paths:
     - /home/ansible_user/jh-monitor-data/host-pve-system-status-*.json
+    - /home/ansible/jh-monitor-data/host-pve-system-status-*.json
   json.keys_under_root: true
   json.add_error_key: true
+  json.overwrite_keys: true
+  close_eof: true
   fields:
     log_index: host-pve-system-status
+  fields_under_root: true
 
 - type: log
 
@@ -81,15 +87,14 @@ setup.template.settings:
   #index.codec: best_compression
   #_source.enabled: false
 
+setup.ilm.enabled: true
+setup.ilm.check_exists: true
+
 setup.template.name: "host-pve-<hostIdIndex>-logs"
 setup.template.pattern: "host-pve-<hostIdIndex>-*"
-setup.template.enabled: false
+setup.template.enabled: true
 setup.template.overwrite: true
-
-# This config writes to custom monthly indices via output.elasticsearch.indices.
-# Disable Filebeat ILM/module loading so setup/runtime won't fall back to the
-# default data stream/modules flow on client machines.
-setup.ilm.enabled: false
+setup.template.priority: 200
 
 
 # ================================== General ===================================
@@ -162,7 +167,7 @@ output.elasticsearch:
   indices:
     - index: "host-pve-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
-        fields.log_index: "host-pve-system-status"
+        log_index: "host-pve-system-status"
 
   # Performance preset - one of "balanced", "throughput", "scale",
   # "latency", or "custom".
