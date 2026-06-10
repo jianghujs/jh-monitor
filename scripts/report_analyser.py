@@ -1196,10 +1196,12 @@ class HostReportAnalyser(object):
 
         single_is_abnormal = len(error_tips) > 0
         single_icon = '🔴' if single_is_abnormal else '🟢'
+        site_title = jh.getConfig('title')
         document = {
             'report_type': 'single',
-            'title': '{0} {1}({2})-{3}'.format(
+            'title': '{0} {1}-{2}({3})-{4}'.format(
                 single_icon,
+                site_title,
                 host_name,
                 host_ip,
                 'PVE硬件健康报告' if self._is_pve_host(host_row) else '服务器运行报告'

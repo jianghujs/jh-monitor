@@ -280,8 +280,9 @@ class HostReportSender(HostReportAnalyser):
                 time.sleep(sleep_seconds)
 
             single_icon = '🔴' if document.get('is_abnormal') else '🟢'
-            title = '{0} {1}({2})-服务器报告 {3}'.format(
+            title = '{0} {1}-{2}({3})-服务器报告 {4}'.format(
                 single_icon,
+                jh.getConfig('title'),
                 document.get('host_name', ''),
                 document.get('host_ip', ''),
                 window['report_date']
