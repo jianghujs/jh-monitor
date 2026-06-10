@@ -78,7 +78,8 @@ def buildLatestStatusSearchBody(host_row):
             {
                 "add_timestamp": {
                     "order": "desc",
-                    "unmapped_type": "double"
+                    "unmapped_type": "double",
+                    "numeric_type": "double"
                 }
             }
         ],
@@ -114,7 +115,8 @@ def buildHostStatusHistorySearchBody(host_id='', start_ts=None, end_ts=None):
             {
                 "add_timestamp": {
                     "order": "asc",
-                    "unmapped_type": "double"
+                    "unmapped_type": "double",
+                    "numeric_type": "double"
                 }
             }
         ]

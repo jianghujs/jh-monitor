@@ -413,7 +413,46 @@ class host_api:
         except Exception:
             return jh.returnJson(False, '模板不存在', {'template': ''})
         return jh.returnJson(True, 'ok', {'template': template_source})
-    
+
+    def refreshHostReportApi(self):
+        host_id = request.form.get('host_id', '').strip()
+        if not host_id:
+            return jh.returnJson(False, '缺少主机ID')
+
+        host_rows = jh.M('host').where('host_id=?', (host_id,)).field(self.host_meta_field).select()
+        if not host_rows:
+            return jh.returnJson(False, '主机不存在')
+
+        host_row = host_rows[0]
+        scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+
+        try:
+            from report_analyser import HostReportAnalyser, SINGLE_REPORT_INDEX
+
+            now_ts = int(time.time())
+            analyser = HostReportAnalyser(now_ts=now_ts)
+            report_date = time.strftime('%Y-%m-%d', time.localtime(now_ts))
+            window = analyser.get_report_window(report_date)
+            raw_groups = analyser.load_raw_groups([host_row], window)
+            host_group = raw_groups.get(host_id, {'status': [], 'xtrabackup': [], 'xtrabackup_inc': [], 'backup': []})
+            doc_id, document = analyser.build_single_host_report(host_row, host_group, window)
+            analyser._save_report_document(SINGLE_REPORT_INDEX, doc_id, document)
+            data_stream_name = analyser._get_single_report_data_stream_name(window['report_date'])
+            analyser._append_report_data_stream_document(data_stream_name, document, analyser._build_report_run_id(window))
+            return jh.returnJson(True, '主机报告已刷新，不会发送通知', {
+                'host_id': host_id,
+                'report_date': window['report_date'],
+                'is_abnormal': bool(document.get('is_abnormal')),
+                'is_warning': bool(document.get('is_warning')),
+                'report_summary': document.get('summary_tips', []),
+                'report_title': document.get('title', ''),
+            })
+        except Exception as ex:
+            traceback.print_exc()
+            return jh.returnJson(False, '刷新主机报告失败: {0}'.format(str(ex)))
+
     def getLogPathListApi(self):
         host_ip = request.form.get('host_ip', '').strip()
         path_list = host_log_service_utils.getLogPathList(host_ip)

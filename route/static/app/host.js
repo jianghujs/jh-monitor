@@ -797,6 +797,7 @@ function getWeb(page, search, host_group_id) {
       }
       opt += `
         <a href='javascript:;' class='btlink' onclick="openHostDetail('${data.data[i].host_id}','${hostName}','${hostEdate}','${hostAddtime}')">详情</a>
+        | <a href='javascript:;' class='btlink' onclick="refreshHostReport('${data.data[i].host_id}','${hostName}')" title='仅刷新报告，不发送通知'>刷新报告</a>
         | <a href='javascript:;' class='btlink' onclick="hostDelete('${data.data[i].host_id}','${hostName}')" title='删除主机'>删除</a>
       `;
       
@@ -1866,6 +1867,19 @@ function detailPanelReport(host_id) {
   }
   
   $("#hostdetail-con").html(bodyHtml);
+}
+
+function refreshHostReport(host_id, host_name) {
+  var loadT = layer.msg('正在刷新主机报告...', {icon:16,time:0,shade:[0.3, '#000']});
+  $.post('/host/refreshHostReport', {host_id: host_id}, function(rdata) {
+    layer.close(loadT);
+    showMsg(rdata.msg || '刷新完成', function() {
+      getWeb(1, currentHostSearch, currentHostGroupId);
+    }, {icon: rdata.status ? 1 : 2}, 2500);
+  }, 'json').fail(function() {
+    layer.close(loadT);
+    layer.msg('刷新主机报告失败', {icon:2});
+  });
 }
 
 // <========================== 弹框内容 End 

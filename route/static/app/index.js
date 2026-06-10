@@ -334,10 +334,21 @@ function createHostChart(host) {
  */
 function updateHostChartData(s, e) {
   $.post('/host/get_all_host_chart', '&start='+s+'&end='+e,function(rdata){
+    let chartData = rdata;
+    if (typeof chartData === 'string') {
+      try {
+        chartData = JSON.parse(chartData);
+      } catch (err) {
+        chartData = {};
+      }
+    }
+    if (chartData && chartData.data && typeof chartData.data === 'object') {
+      chartData = chartData.data;
+    }
     for (let hostIndex in hostList) {
       let host = hostList[hostIndex];
       let {host_id} = host;
-      let host_data = rdata[host_id] || [];
+      let host_data = chartData[host_id] || [];
       let cpu_history = [];
       let mem_history = [];
       let disk_io_history = [];
