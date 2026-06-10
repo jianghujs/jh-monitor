@@ -762,7 +762,12 @@ function getWeb(page, search, host_group_id) {
 
       if (has_report) {
         let is_abnormal = severity !== 'normal';
-        let status_text = is_abnormal ? '异常' : '正常';
+        let status_text = '正常';
+        if (severity === 'warning') {
+          status_text = '提醒';
+        } else if (severity === 'error') {
+          status_text = '异常';
+        }
         let status_color = is_abnormal ? (severity === 'warning' ? '#faad14' : 'red') : 'rgb(92, 184, 92)';
         if (summary_tips.length > 0) {
           report_items_html = summary_tips.map(item => `<div>${item}</div>`).join('');
