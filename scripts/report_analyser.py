@@ -1195,7 +1195,17 @@ class HostReportAnalyser(object):
         delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
         single_is_abnormal = len(error_tips) > 0
-        single_icon = '🔴' if single_is_abnormal else '🟢'
+        # 仅提醒：summary_tips 中含橙色提示且没有严重异常
+        single_is_warning = (
+            not single_is_abnormal
+            and any('color: orange' in str(tip) for tip in summary_tips)
+        )
+        if single_is_abnormal:
+            single_icon = '🔴'
+        elif single_is_warning:
+            single_icon = '🟠'
+        else:
+            single_icon = '🟢'
         site_title = jh.getConfig('title')
         document = {
             'report_type': 'single',
@@ -1234,7 +1244,8 @@ class HostReportAnalyser(object):
             'power_tips': report_payload.get('power_tips', []),
             'validation': validation,
             'delivery': delivery_state,
-            'is_abnormal': len(error_tips) > 0,
+            'is_abnormal': single_is_abnormal,
+            'is_warning': single_is_warning,
             'extra_info': {
                 'raw_counts': {
                     'status': len(status_docs),
@@ -1268,6 +1279,7 @@ class HostReportAnalyser(object):
         """汇总所有单机报告，生成全局概览文档。"""
         online_count = 0
         abnormal_documents = []
+        warning_documents = []
         normal_documents = []
         offline_documents = []
 
@@ -1293,12 +1305,15 @@ class HostReportAnalyser(object):
                 online_count += 1
             if current_doc.get('is_abnormal') or not validation.get('is_complete', False):
                 abnormal_documents.append(current_doc)
+            elif current_doc.get('is_warning'):
+                warning_documents.append(current_doc)
             else:
                 normal_documents.append(current_doc)
 
         host_total = len(host_rows)
         host_offline = max(host_total - online_count, 0)
         host_error = len(abnormal_documents)
+        host_warning = len(warning_documents)
 
         host_overview_tips = [
             {
@@ -1308,6 +1323,10 @@ class HostReportAnalyser(object):
             {
                 'name': '异常主机',
                 'desc': self._format_host_summary(abnormal_documents) if abnormal_documents else '无'
+            },
+            {
+                'name': '提醒主机',
+                'desc': self._format_host_summary(warning_documents) if warning_documents else '无'
             }
         ]
         if host_offline > 0:
@@ -1343,11 +1362,15 @@ class HostReportAnalyser(object):
 
         host_normal = len(normal_documents)
         title_prefix = '📊 {0}-全部主机概览报告（'.format(jh.getConfig('title'))
-        title = '{0}{1}正常 {2}异常）'.format(title_prefix, host_normal, host_error)
+        if host_warning > 0:
+            title = '{0}{1}正常 {2}提醒 {3}异常）'.format(title_prefix, host_normal, host_warning, host_error)
+        else:
+            title = '{0}{1}正常 {2}异常）'.format(title_prefix, host_normal, host_error)
         overview_payload = {
             'title': title,
             'title_prefix': title_prefix,
             'host_normal': host_normal,
+            'host_warning': host_warning,
             'host_error': host_error,
             'report_time': window['report_time'],
             'start_time': window['start_time'],
@@ -1358,6 +1381,7 @@ class HostReportAnalyser(object):
                 'host_online': online_count,
                 'host_offline': host_offline,
                 'host_error': host_error,
+                'host_warning': host_warning,
             },
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,

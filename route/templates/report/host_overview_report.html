@@ -44,22 +44,32 @@
         <td><span style="color: green;">{{ host_overview_info.host_online }}</span></td>
       </tr>
       <tr>
-        <td>离线主机</td>
-        <td>
-          {% if host_overview_info.host_offline and host_overview_info.host_offline > 0 %}
-          <span style="color: orange;">{{ host_overview_info.host_offline }}</span>
-          {% else %}
-          <span style="color: green;">{{ host_overview_info.host_offline }}</span>
-          {% endif %}
-        </td>
-      </tr>
-      <tr>
         <td>异常主机</td>
         <td>
           {% if host_overview_info.host_error and host_overview_info.host_error > 0 %}
           <span style="color: red;">{{ host_overview_info.host_error }}</span>
           {% else %}
           <span style="color: green;">{{ host_overview_info.host_error }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>提醒主机</td>
+        <td>
+          {% if host_overview_info.host_warning and host_overview_info.host_warning > 0 %}
+          <span style="color: orange;">{{ host_overview_info.host_warning }}</span>
+          {% else %}
+          <span style="color: green;">{{ host_overview_info.host_warning or 0 }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>离线主机</td>
+        <td>
+          {% if host_overview_info.host_offline and host_overview_info.host_offline > 0 %}
+          <span style="color: orange;">{{ host_overview_info.host_offline }}</span>
+          {% else %}
+          <span style="color: green;">{{ host_overview_info.host_offline }}</span>
           {% endif %}
         </td>
       </tr>
@@ -73,6 +83,18 @@
         <td><span style="color: green;">{{ item.name }}</span></td>
         <td><span style="color: green;">{{ item.desc }}</span></td>
       </tr>
+      {% elif item.name == '提醒主机' %}
+      {% if item.desc == '无' %}
+      <tr>
+        <td><span style="color: green;">{{ item.name }}</span></td>
+        <td><span style="color: green;">{{ item.desc }}</span></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td><span style="color: orange;">{{ item.name }}</span></td>
+        <td><span style="color: orange;">{{ item.desc }}</span></td>
+      </tr>
+      {% endif %}
       {% elif item.name == '异常主机' %}
       {% if item.desc == '无' %}
       <tr>
