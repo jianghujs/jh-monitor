@@ -104,6 +104,41 @@ def summarize_pve_disk_io(pve_data):
     }
 
 
+
+def _force_float_sensor_values(pve_data):
+    """Ensure all sensor numeric values are float, preventing ES mapping conflicts.
+
+    Filebeat flattens arrays so `sensors.temperatures[*].value` collapses into one
+    ES field `pve.data.sensors.temperatures.value`. If first event has int 24 and
+    later one has float 56.2, ES locks the field as `long` and rejects the float.
+    """
+    if not isinstance(pve_data, dict):
+        return pve_data
+    sensors = pve_data.get('sensors')
+    if not isinstance(sensors, dict):
+        return pve_data
+    for key in ('temperatures', 'fans', 'voltages'):
+        items = sensors.get(key) or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, dict) and 'value' in item:
+                try:
+                    item['value'] = float(item['value'])
+                except Exception:
+                    item['value'] = 0.0
+    # Also normalize SMART per-device temperature to float for consistency
+    smart = pve_data.get('smart')
+    if isinstance(smart, dict):
+        for dev in smart.get('devices', []) or []:
+            if isinstance(dev, dict) and dev.get('temperature') is not None:
+                try:
+                    dev['temperature'] = float(dev['temperature'])
+                except Exception:
+                    pass
+    return pve_data
+
+
 def build_system_status(host_meta=None):
     if host_meta is None:
         host_meta = {
@@ -128,7 +163,7 @@ def build_system_status(host_meta=None):
         try:
             reporter.collect_all()
             reporter._analyze_all_and_collect_issues()
-            pve_data = reporter.report_data or {}
+            pve_data = _force_float_sensor_values(reporter.report_data or {})
             pve_issues = reporter.issues or []
             thresholds = reporter.thresholds or dict(DEFAULT_THRESHOLDS)
         except Exception as ex:
