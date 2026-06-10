@@ -815,9 +815,10 @@ class HostReportAnalyser(object):
             messages = [item.get('message', '') for item in items if str(item.get('message', '')).strip() != '']
             if messages:
                 summary_tips.append("<span style='color: {0};'>{1}: {2}</span>".format(color, category, ', '.join(messages)))
-            for item in items:
-                if str(item.get('message', '')).strip() != '':
-                    error_tips.append('{0}: {1}'.format(category, item.get('message', '')))
+            if has_critical:
+                for item in items:
+                    if item.get('severity') == 'critical' and str(item.get('message', '')).strip() != '':
+                        error_tips.append('{0}: {1}'.format(category, item.get('message', '')))
         return summary_tips, error_tips
 
     def _build_pve_report_payload(self, host_row, latest_doc, window, validation_errors):
