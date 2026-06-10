@@ -93,7 +93,7 @@ setup.ilm.check_exists: true
 setup.template.name: "host-pve-<hostIdIndex>-logs"
 setup.template.pattern: "host-pve-<hostIdIndex>-*"
 setup.template.enabled: true
-setup.template.overwrite: true
+setup.template.overwrite: false
 setup.template.priority: 200
 
 
