@@ -74,16 +74,17 @@
         <td><span style="color: green;">{{ item.desc }}</span></td>
       </tr>
       {% elif item.name == '异常主机' %}
+      {% if item.desc == '无' %}
+      <tr>
+        <td><span style="color: green;">{{ item.name }}</span></td>
+        <td><span style="color: green;">{{ item.desc }}</span></td>
+      </tr>
+      {% else %}
       <tr>
         <td><span style="color: red;">{{ item.name }}</span></td>
-        <td>
-          {% if item.desc == '无' %}
-          <span style="color: green;">{{ item.desc }}</span>
-          {% else %}
-          <span style="color: red;">{{ item.desc }}</span>
-          {% endif %}
-        </td>
+        <td><span style="color: red;">{{ item.desc }}</span></td>
       </tr>
+      {% endif %}
       {% elif item.name == '离线主机' %}
       <tr>
         <td><span style="color: orange;">{{ item.name }}</span></td>
