@@ -135,6 +135,18 @@
     {% endif %}
     </table>
 
+    {% if warning_host_summary_tips %}
+    <h3 class="font-bold my-5">提醒主机摘要：</h3>
+    <table border class="w-full">
+      {% for item in warning_host_summary_tips %}
+      <tr>
+        <td><span style="color: orange;">{{ item.name }}</span></td>
+        <td><span style="color: orange;">{{ item.desc }}</span></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+
     <h3 class="font-bold my-5">主机单机报告列表：</h3>
     {% for item in single_host_report_list %}
     <div class="report-card">

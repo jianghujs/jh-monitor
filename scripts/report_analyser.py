@@ -1347,6 +1347,16 @@ class HostReportAnalyser(object):
                 'desc': summary_text
             })
 
+        warning_host_summary_tips = []
+        for doc in warning_documents:
+            summary_text = '；'.join(doc.get('summary_tips', []) or [])
+            if summary_text == '':
+                summary_text = '有提醒项需要关注'
+            warning_host_summary_tips.append({
+                'name': self._build_host_label(doc),
+                'desc': summary_text
+            })
+
         single_host_report_list = []
         for doc in single_documents:
             validation = doc.get('validation', {}) or {}
@@ -1386,6 +1396,7 @@ class HostReportAnalyser(object):
             },
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
+            'warning_host_summary_tips': warning_host_summary_tips,
             'single_host_report_list': single_host_report_list,
         }
 
@@ -1426,6 +1437,7 @@ class HostReportAnalyser(object):
             'host_overview_info': overview_payload['host_overview_info'],
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
+            'warning_host_summary_tips': warning_host_summary_tips,
             'single_host_report_list': single_host_report_list,
             'validation': validation,
             'delivery': delivery_state,
