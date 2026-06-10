@@ -52,7 +52,7 @@ DEFAULT_THRESHOLDS = {
     'disk_warn': 80,
     'disk_crit': 90,
     'temp_warn': 70,
-    'temp_crit': 80,
+    'temp_crit': 85,
     'io_wait_warn': 20,
     'io_wait_crit': 40,
 }
@@ -242,6 +242,14 @@ def determine_status(value: float, warn_threshold: float, crit_threshold: float,
             return 'warning'
         else:
             return 'normal'
+
+def determine_temperature_status(value: float, warn_threshold: float, crit_threshold: float) -> str:
+    """按温度专用规则判断状态：>crit 为 critical，>warn 为 warning。"""
+    if value > crit_threshold:
+        return 'critical'
+    elif value > warn_threshold:
+        return 'warning'
+    return 'normal'
 
 def all_fans_stopped(fans: List[Dict[str, Any]]) -> bool:
     if not fans:
@@ -1274,7 +1282,7 @@ class HardwareReporter:
                 
                 temp = dev.get('temperature')
                 if temp is not None:
-                    temp_status = determine_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                    temp_status = determine_temperature_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                     if temp_status != 'normal':
                         self.issues.append({
                             'category': '磁盘温度',
@@ -1319,7 +1327,7 @@ class HardwareReporter:
         if not sensors.get('error'):
             for temp in sensors.get('temperatures', []):
                 value = temp['value']
-                status = determine_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                status = determine_temperature_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                 if status != 'normal':
                     self.issues.append({
                         'category': '温度',
@@ -1469,7 +1477,7 @@ class HardwareReporter:
             
             temp = dev.get('temperature')
             if temp is not None:
-                temp_status = determine_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                temp_status = determine_temperature_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                 temp_color = get_status_color(temp_status)
                 self.log(f"    温度: {color_text(f'{temp}°C', temp_color)}")
 
@@ -1599,7 +1607,7 @@ class HardwareReporter:
             self.log("  温度传感器:")
             for temp in temps:
                 value = temp['value']
-                status = determine_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                status = determine_temperature_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                 status_color = get_status_color(status)
                 unit = temp['unit']
                 self.log(f"    {temp['name']}: {color_text(f'{value}{unit}', status_color)}")
@@ -1851,7 +1859,7 @@ class HardwareReporter:
                     desc_parts.append(f"健康度: {dev.get('health_score')}%")
                 temp = dev.get('temperature')
                 if temp is not None:
-                    temp_status = determine_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                    temp_status = determine_temperature_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                     temp_color = 'red' if temp_status == 'critical' else 'orange' if temp_status == 'warning' else 'auto'
                     desc_parts.append(f"温度: <span style='color: {temp_color}'>{temp}°C</span>")
                 if dev.get('is_nvme'):
@@ -1923,7 +1931,7 @@ class HardwareReporter:
                 for temp in temps:
                     value = temp.get('value', 0)
                     unit = temp.get('unit', '')
-                    status = determine_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                    status = determine_temperature_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                     color = 'red' if status == 'critical' else 'orange' if status == 'warning' else 'auto'
                     temp_lines.append(f"{temp.get('name', '-')}: <span style='color: {color}'>{value}{unit}</span>")
                 sensor_tips.append({
@@ -2163,7 +2171,7 @@ class HardwareReporter:
                 
                 temp = dev.get('temperature')
                 if temp is not None:
-                    temp_status = determine_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                    temp_status = determine_temperature_status(temp, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                     temp_color = 'red' if temp_status == 'critical' else 'orange' if temp_status == 'warning' else 'auto'
                     smart_desc += f"温度: <span style='color: {temp_color}'>{temp}°C</span>"
 
@@ -2259,7 +2267,7 @@ class HardwareReporter:
             if temps:
                 for temp in temps:
                     value = temp['value']
-                    status = determine_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+                    status = determine_temperature_status(value, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
                     color = 'red' if status == 'critical' else 'orange' if status == 'warning' else 'auto'
                     sensor_rows.append(f"<tr><td>温度 ({temp['name']})</td><td><span style='color: {color}'>{value}{temp['unit']}</span></td></tr>")
             
