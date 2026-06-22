@@ -139,7 +139,7 @@ class HostReportSender(HostReportAnalyser):
                     last_error=''
                 )
                 self._append_delivery_history(document, 'success', recipients, '')
-                self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+                self._es.index(index_name, doc_id, document=document)
                 self.log_tool.detail_ok('[report-delivery] 发送成功', index=index_name, doc_id=doc_id)
                 return True, ''
             error_message = 'notify_message_returned_false'
@@ -154,7 +154,7 @@ class HostReportSender(HostReportAnalyser):
             last_error=error_message
         )
         self._append_delivery_history(document, 'failed', recipients, error_message)
-        self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+        self._es.index(index_name, doc_id, document=document)
         self.log_tool.detail_fail('[report-delivery] 发送失败', index=index_name, doc_id=doc_id, error=error_message)
         return False, error_message
 
@@ -169,7 +169,7 @@ class HostReportSender(HostReportAnalyser):
             last_error=error_message
         )
         self._append_delivery_history(document, 'skipped', delivery.get('recipients', []), error_message)
-        self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+        self._es.index(index_name, doc_id, document=document)
         self.log_tool.warn('[report-delivery] 跳过发送', index=index_name, doc_id=doc_id, reason=error_message)
 
     def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None):

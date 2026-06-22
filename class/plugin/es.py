@@ -45,7 +45,7 @@ class ES:
     def _build_conn_kwargs(self):
         kwargs = {
             'hosts': self._es_hosts,
-            'request_timeout': 10,
+            'request_timeout': 30,
             'verify_certs': False,
         }
         if self._username != '':

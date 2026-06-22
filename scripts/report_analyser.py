@@ -210,7 +210,7 @@ class HostReportAnalyser(object):
 
     def _update_doc(self, index_name, doc_id, document):
         """兼容旧脚本：统一回写 ES 文档。"""
-        self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+        self._es.index(index_name, doc_id, document=document)
         return True
 
     def _get_es_error_message(self):
@@ -226,7 +226,7 @@ class HostReportAnalyser(object):
 
     def _save_report_document(self, index_name, doc_id, document):
         """保存报告文档，并立即回读确认已经成功写入 ES。"""
-        result = self._es.index(index_name, doc_id, document=document, refresh='wait_for')
+        result = self._es.index(index_name, doc_id, document=document)
         if not result:
             error_message = self._get_es_error_message() or 'unknown_es_index_error'
             raise RuntimeError('保存报告到ES失败 index={0} doc_id={1} error={2}'.format(index_name, doc_id, error_message))
@@ -286,7 +286,7 @@ class HostReportAnalyser(object):
     def _append_report_data_stream_document(self, data_stream_name, document, report_run_id):
         """将报告事件追加写入数据流。"""
         ds_document = self._build_data_stream_document(document, report_run_id)
-        result = self._es.appendDocument(data_stream_name, document=ds_document, refresh='wait_for')
+        result = self._es.appendDocument(data_stream_name, document=ds_document)
         if not result:
             error_message = self._get_es_error_message() or 'unknown_es_append_error'
             raise RuntimeError('保存报告到数据流失败 data_stream={0} report_run_id={1} error={2}'.format(
