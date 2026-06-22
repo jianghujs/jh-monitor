@@ -1337,14 +1337,9 @@ class HostReportAnalyser(object):
             backup_tips = report_payload.get('backup_tips', [])
             siteinfo_tips = report_payload.get('siteinfo_tips', [])
 
-        # 监控任务分析：在生成 HTML 前合并任务结果到 summary/error_tips
+        # 监控任务只单独展示，不参与主机报告异常/提醒判定。
         monitor_task_section = self._build_monitor_task_section(host_row, self.now_ts)
         monitor_task_results = monitor_task_section.get('monitor_task_results', [])
-        summary_tips.extend(monitor_task_section.get('summary_tips', []))
-        error_tips.extend(monitor_task_section.get('error_tips', []))
-        if isinstance(report_payload, dict):
-            report_payload['summary_tips'] = summary_tips
-            report_payload['error_tips'] = error_tips
 
         html_content = h_api.buildHostReportMessage(host_row, report_payload)
         if not html_content or '暂无报告内容' in html_content:
@@ -1423,6 +1418,7 @@ class HostReportAnalyser(object):
                     'backup': len(backup_docs),
                 },
                 'latest_status_time': latest_doc.get('add_time', '') if isinstance(latest_doc, dict) else '',
+                'monitor_task_results': monitor_task_results,
             }
         }
         return doc_id, document
