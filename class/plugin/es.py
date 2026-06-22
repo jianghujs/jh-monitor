@@ -107,6 +107,19 @@ class ES:
             self._err = ex
             return None
 
+    def msearch(self, body):
+        try:
+            kwargs = {
+                'body': body,
+                'expand_wildcards': 'all',
+                'ignore_unavailable': True,
+                'allow_no_indices': True,
+            }
+            return self.normalizeResponse(self.getConn().msearch(**kwargs))
+        except Exception as ex:
+            self._err = ex
+            return None
+
     def get(self, index, doc_id):
         try:
             return self.normalizeResponse(self.getConn().get(index=index, id=doc_id))

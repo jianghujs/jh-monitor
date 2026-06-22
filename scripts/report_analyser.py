@@ -1267,6 +1267,70 @@ class HostReportAnalyser(object):
 
         return {'summary_tips': summary_tips, 'error_tips': error_tips, 'monitor_task_results': results}
 
+    def _build_monitor_task_overview(self, now_ts):
+        """实时查询 ES 最新任务事件，生成监控任务总览并回写 SQLite 状态。"""
+        monitor_task_overview = []
+        try:
+            all_task_rows = jh.M('monitor_task').where('enabled=?', (1,)).field(
+                'task_id,task_name,host_id,host_name,host_ip,log_path,check_interval,grace_seconds,last_status,last_msg,last_run_at,last_event_at,last_analyse_at'
+            ).order('id desc').select()
+        except Exception:
+            return monitor_task_overview
+
+        if not isinstance(all_task_rows, list) or len(all_task_rows) == 0:
+            return monitor_task_overview
+
+        task_host_pairs = []
+        for row in all_task_rows:
+            if not isinstance(row, dict):
+                continue
+            task_id = str(row.get('task_id', '') or '').strip()
+            host_id = str(row.get('host_id', '') or '').strip()
+            if task_id and host_id:
+                task_host_pairs.append((task_id, host_id))
+
+        latest_event_map = {}
+        try:
+            latest_event_map = monitor_task_event_service_utils.getLatestTaskEventsBatch(task_host_pairs, es_client=self._es) or {}
+        except Exception:
+            latest_event_map = {}
+
+        for t in all_task_rows:
+            if not isinstance(t, dict):
+                continue
+            task_id = str(t.get('task_id', '') or '').strip()
+            host_id = str(t.get('host_id', '') or '').strip()
+            latest_event = latest_event_map.get(task_id, {}) if task_id else {}
+            status, msg, run_at = self._classify_monitor_task_status(t, latest_event, now_ts)
+            event_at = value_tool.parseTime(latest_event.get('@timestamp', '')) if latest_event else 0
+
+            try:
+                update_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts))
+                jh.M('monitor_task').where('task_id=?', (task_id,)).save(
+                    'last_status,last_msg,last_run_at,last_event_at,last_analyse_at,update_time',
+                    (status, msg[:500], run_at, event_at, now_ts, update_time)
+                )
+            except Exception:
+                pass
+
+            monitor_task_overview.append({
+                'task_id': task_id,
+                'task_name': str(t.get('task_name', '') or ''),
+                'host_id': host_id,
+                'host_name': str(t.get('host_name', '') or ''),
+                'host_ip': str(t.get('host_ip', '') or ''),
+                'log_path': str(t.get('log_path', '') or ''),
+                'status': status,
+                'msg': msg,
+                'last_run_at': run_at,
+                'last_run_at_text': self._format_monitor_task_time(run_at),
+                'last_event_at': event_at,
+                'last_event_at_text': self._format_monitor_task_time(event_at),
+                'last_analyse_at': now_ts,
+            })
+
+        return monitor_task_overview
+
     def build_single_host_report(self, host_row, host_group, window):
         """基于单台主机原始数据生成单机报告文档。"""
         host_id = host_row.get('host_id', '')
@@ -1521,41 +1585,8 @@ class HostReportAnalyser(object):
                 'desc': summary_text
             })
 
-        # 监控任务总览：收集所有启用的监控任务及最新分析状态
-        monitor_task_overview = []
-        try:
-            all_task_rows = jh.M('monitor_task').where('enabled=?', (1,)).field(
-                'task_id,task_name,host_id,host_name,host_ip,log_path,check_interval,grace_seconds,last_status,last_msg,last_run_at,last_event_at,last_analyse_at'
-            ).order('id desc').select()
-            if isinstance(all_task_rows, list):
-                for t in all_task_rows:
-                    if not isinstance(t, dict):
-                        continue
-                    last_status = str(t.get('last_status', '') or '').strip()
-                    if not last_status or last_status == 'unknown':
-                        last_status = 'pending'
-                    raw_run_at = str(t.get('last_run_at', '') or '').strip()
-                    raw_event_at = str(t.get('last_event_at', '') or '').strip()
-                    run_at = self._parse_monitor_task_time(raw_run_at)
-                    event_at = self._parse_monitor_task_time(raw_event_at)
-                    last_run_at_text = self._format_monitor_task_time(raw_run_at)
-                    monitor_task_overview.append({
-                        'task_id': str(t.get('task_id', '') or ''),
-                        'task_name': str(t.get('task_name', '') or ''),
-                        'host_id': str(t.get('host_id', '') or ''),
-                        'host_name': str(t.get('host_name', '') or ''),
-                        'host_ip': str(t.get('host_ip', '') or ''),
-                        'log_path': str(t.get('log_path', '') or ''),
-                        'status': last_status,
-                        'msg': str(t.get('last_msg', '') or ''),
-                        'last_run_at': run_at,
-                        'last_run_at_text': last_run_at_text,
-                        'last_event_at': event_at,
-                        'last_event_at_text': self._format_monitor_task_time(raw_event_at),
-                        'last_analyse_at': str(t.get('last_analyse_at', '') or ''),
-                    })
-        except Exception:
-            pass
+        # 监控任务总览：生成报告时实时查询 ES 最新事件，避免发送旧的 SQLite 状态。
+        monitor_task_overview = self._build_monitor_task_overview(self.now_ts)
 
         overview_summary_messages = []
 
