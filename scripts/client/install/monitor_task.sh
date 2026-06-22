@@ -308,6 +308,62 @@ YAML
   fi
 }
 
+ensure_filebeat_task_output() {
+  [ -f "$FILEBEAT_MAIN" ] || fail "filebeat main config not found: ${FILEBEAT_MAIN}"
+  if grep -q 'host-monitor-task-event' "$FILEBEAT_MAIN"; then
+    info_detail "filebeat 已包含任务日志索引路由" index="host-monitor-task-event"
+    return 0
+  fi
+
+  info_step "修补 filebeat 任务日志索引路由" index="host-monitor-task-event"
+  local backup="${FILEBEAT_MAIN}.task-event.$(date +%Y%m%d%H%M%S)"
+  cp "$FILEBEAT_MAIN" "$backup"
+  python3 - "$FILEBEAT_MAIN" <<'PY_PATCH_OUTPUT'
+import sys
+
+path = sys.argv[1]
+with open(path, 'r') as fp:
+    lines = fp.readlines()
+
+route = [
+    '    - index: "host-monitor-task-event"\n',
+    '      when.equals:\n',
+    '        log_index: "host-monitor-task-event"\n',
+]
+
+output_idx = None
+for i, line in enumerate(lines):
+    if line.rstrip() == 'output.elasticsearch:':
+        output_idx = i
+        break
+
+if output_idx is None:
+    raise SystemExit('output.elasticsearch not found')
+
+indices_idx = None
+for i in range(output_idx + 1, len(lines)):
+    line = lines[i]
+    if line.strip() == '':
+        continue
+    if not line.startswith((' ', '\t')) and ':' in line:
+        break
+    if line.strip() == 'indices:':
+        indices_idx = i
+        break
+
+if indices_idx is not None:
+    insert_at = indices_idx + 1
+    lines[insert_at:insert_at] = route
+else:
+    insert_at = output_idx + 1
+    lines[insert_at:insert_at] = ['  indices:\n'] + route
+
+with open(path, 'w') as fp:
+    fp.writelines(lines)
+PY_PATCH_OUTPUT
+  info_detail "已备份旧 filebeat 配置" path="$backup"
+}
+
 write_filebeat_input() {
   command -v filebeat >/dev/null 2>&1 || fail "filebeat command not found"
   mkdir -p "$TASK_INPUT_DIR"
@@ -334,9 +390,11 @@ write_filebeat_input() {
     task_name: ${task_name_yaml}
     host_id: ${host_id_yaml}
     log_path: ${log_path_yaml}
+  fields_under_root: true
 YAML
   chmod 644 "$input_file"
   ensure_filebeat_include
+  ensure_filebeat_task_output
 }
 
 validate_and_reload_filebeat() {

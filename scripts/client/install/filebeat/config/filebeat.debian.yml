@@ -69,6 +69,9 @@ setup.kibana:
 output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
+    - index: "host-monitor-task-event"
+      when.equals:
+        log_index: "host-monitor-task-event"
     - index: "host-debian-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
         log_index: "host-debian-system-status"

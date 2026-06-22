@@ -52,6 +52,9 @@ setup.kibana:
 output.elasticsearch:
   hosts: ["<serverIp>:9200"]
   indices:
+    - index: "host-monitor-task-event"
+      when.equals:
+        log_index: "host-monitor-task-event"
     - index: "host-pve-<hostIdIndex>-system-status-%{+yyyy.MM}"
       when.equals:
         log_index: "host-pve-system-status"
