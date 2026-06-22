@@ -68,6 +68,7 @@ def jhcli(jh_input=0, confirm=False):
         print("(13) 显示面板错误日志")
         print("(20) 关闭BasicAuth认证")
         print("(21) 解除域名绑定")
+        print("(22) 初始化ES全部索引")
         print("(0) 取消")
         print(raw_tip)
         try:
@@ -77,7 +78,7 @@ def jhcli(jh_input=0, confirm=False):
         except:
             jh_input = 0
 
-    nums = [1, 2, 3, 4, 5, 10, 11, 12, 13, 20, 21]
+    nums = [1, 2, 3, 4, 5, 10, 11, 12, 13, 20, 21, 22]
     if not jh_input in nums:
         print(raw_tip)
         print("已取消!")
@@ -138,6 +139,13 @@ def jhcli(jh_input=0, confirm=False):
             os.remove(bind_domain)
             os.system(INIT_CMD + " unbind_domain")
             print("|-解除域名绑定成功")
+    elif jh_input == 22:
+        if not confirm:
+            confirm = jh_input_default_cmd("提示：将初始化ES报告索引、数据流和监控任务索引，不会删除历史数据。确定继续吗？（默认y）[y/n]：", 'y')
+            if confirm != 'y':
+                print("已取消")
+                exit()
+        os.system(INIT_CMD + " init-es")
 
 def set_panel_pwd(password, ncli=False):
     # 设置面板密码

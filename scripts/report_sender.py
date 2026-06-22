@@ -112,16 +112,15 @@ class HostReportSender(HostReportAnalyser):
         delivery = normalize_delivery_state(document.get('delivery', {}))
         retry_count = value_tool.safeInt(delivery.get('retry_count', 0))
         title = self._build_delivery_title(document, title_prefix)
-        self.log(
-            '[report-delivery] sending index={0} doc_id={1} previous_status={2} previous_last_sent_time={3} retry_count={4} recipients={5} title={6}'.format(
-                index_name,
-                doc_id,
-                delivery.get('status', ''),
-                delivery.get('last_sent_time', ''),
-                retry_count,
-                recipients,
-                title
-            )
+        self.log_tool.step(
+            '[report-delivery] 开始发送报告',
+            index=index_name,
+            doc_id=doc_id,
+            previous_status=delivery.get('status', ''),
+            previous_last_sent_time=delivery.get('last_sent_time', ''),
+            retry_count=retry_count,
+            recipients=recipients,
+            title=title,
         )
         try:
             send_ok = jh.notifyMessage(
@@ -141,7 +140,7 @@ class HostReportSender(HostReportAnalyser):
                 )
                 self._append_delivery_history(document, 'success', recipients, '')
                 self._es.index(index_name, doc_id, document=document, refresh='wait_for')
-                self.log('[report-delivery] send success index={0} doc_id={1}'.format(index_name, doc_id))
+                self.log_tool.detail_ok('[report-delivery] 发送成功', index=index_name, doc_id=doc_id)
                 return True, ''
             error_message = 'notify_message_returned_false'
         except Exception as ex:
@@ -156,7 +155,7 @@ class HostReportSender(HostReportAnalyser):
         )
         self._append_delivery_history(document, 'failed', recipients, error_message)
         self._es.index(index_name, doc_id, document=document, refresh='wait_for')
-        self.log('[report-delivery] send failed index={0} doc_id={1} error={2}'.format(index_name, doc_id, error_message))
+        self.log_tool.detail_fail('[report-delivery] 发送失败', index=index_name, doc_id=doc_id, error=error_message)
         return False, error_message
 
     def _mark_report_skipped(self, index_name, doc_id, document, error_message):
@@ -171,7 +170,7 @@ class HostReportSender(HostReportAnalyser):
         )
         self._append_delivery_history(document, 'skipped', delivery.get('recipients', []), error_message)
         self._es.index(index_name, doc_id, document=document, refresh='wait_for')
-        self.log('[report-delivery] mark skipped index={0} doc_id={1} reason={2}'.format(index_name, doc_id, error_message))
+        self.log_tool.warn('[report-delivery] 跳过发送', index=index_name, doc_id=doc_id, reason=error_message)
 
     def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None):
         """执行发送阶段：先发总览，再发异常单机报告。"""
@@ -179,23 +178,22 @@ class HostReportSender(HostReportAnalyser):
         if due_rows is None or report_config is None or enabled_rows is None:
             report_config, enabled_rows, due_rows = self.get_schedule_state()
         if len(due_rows) == 0:
-            self.log('[report-delivery] skipped not due report_date={0}'.format(window['report_date']))
+            self.log_tool.warn('[report-delivery] 未到发送时间，跳过本轮', report_date=window['report_date'])
             return {'status': 'skipped', 'reason': 'not_due', 'report_date': window['report_date']}
         notify_data = jh.getNotifyData(True)
         email_enabled = False
         if isinstance(notify_data, dict) and 'email' in notify_data and notify_data['email'].get('enable'):
             email_enabled = True
-        self.log(
-            '[report-delivery] start report_date={0} enabled_rows={1} due_rows={2} due_host_ids={3} email_enabled={4}'.format(
-                window['report_date'],
-                len(enabled_rows or []),
-                len(due_rows),
-                [row.get('host_id') for row in due_rows if row.get('host_id')],
-                email_enabled
-            )
+        self.log_tool.start(
+            '[report-delivery] 开始执行发送流水线',
+            report_date=window['report_date'],
+            enabled_rows=len(enabled_rows or []),
+            due_rows=len(due_rows),
+            due_host_ids=[row.get('host_id') for row in due_rows if row.get('host_id')],
+            email_enabled=email_enabled,
         )
         if not email_enabled:
-            self.log('[report-delivery] blocked email not configured report_date={0}'.format(window['report_date']))
+            self.log_tool.fail('[report-delivery] 邮件未配置，发送中止', report_date=window['report_date'])
             return {'status': 'blocked', 'reason': 'email_not_configured', 'report_date': window['report_date']}
 
         overview_doc_id = window['report_date']
@@ -203,13 +201,12 @@ class HostReportSender(HostReportAnalyser):
         if isinstance(overview_document, dict):
             overview_document = overview_document.get('_source', {})
         overview_errors = self._validate_report_for_delivery(overview_document, 'overview', window['report_date'])
-        self.log(
-            '[report-delivery] overview check doc_id={0} validation={1} delivery={2} errors={3}'.format(
-                overview_doc_id,
-                value_tool.getNested(overview_document, ['validation', 'status'], ''),
-                value_tool.getNested(overview_document, ['delivery', 'status'], ''),
-                overview_errors
-            )
+        self.log_tool.step(
+            '[report-delivery] 校验总览报告',
+            doc_id=overview_doc_id,
+            validation=value_tool.getNested(overview_document, ['validation', 'status'], ''),
+            delivery=value_tool.getNested(overview_document, ['delivery', 'status'], ''),
+            errors=overview_errors,
         )
         if len(overview_errors) > 0:
             if isinstance(overview_document, dict):
@@ -227,20 +224,18 @@ class HostReportSender(HostReportAnalyser):
             )
         matched_host_ids = [doc.get('host_id') for doc in single_documents]
         missing_host_ids = [host_id for host_id in host_ids if host_id not in matched_host_ids]
-        self.log(
-            '[report-delivery] single reports loaded report_date={0} expected_hosts={1} matched_docs={2} matched_host_ids={3}'.format(
-                window['report_date'],
-                host_ids,
-                len(single_documents),
-                matched_host_ids
-            )
+        self.log_tool.detail_ok(
+            '[report-delivery] 单机异常报告加载完成',
+            report_date=window['report_date'],
+            expected_hosts=host_ids,
+            matched_docs=len(single_documents),
+            matched_host_ids=matched_host_ids,
         )
         if len(missing_host_ids) > 0:
-            self.log(
-                '[report-delivery] single reports missing report_date={0} missing_host_ids={1}'.format(
-                    window['report_date'],
-                    missing_host_ids
-                )
+            self.log_tool.warn(
+                '[report-delivery] 部分主机缺少单机报告文档',
+                report_date=window['report_date'],
+                missing_host_ids=missing_host_ids,
             )
         single_success = 0
         single_failed = 0
@@ -262,7 +257,7 @@ class HostReportSender(HostReportAnalyser):
 
         # 概览发送成功后等待 5 秒，再开始发送单机异常报告，避免与概览邮件混在一起
         if len(single_documents) > 0:
-            self.log('[report-delivery] sleeping 5s before single reports report_date={0}'.format(window['report_date']))
+            self.log_tool.step('[report-delivery] 等待 5 秒后开始发送单机异常报告', report_date=window['report_date'])
             time.sleep(5)
 
         for index, document in enumerate(single_documents):
@@ -276,7 +271,7 @@ class HostReportSender(HostReportAnalyser):
             # 单机报告之间随机间隔 1-2 秒，降低邮件网关压力
             if index > 0:
                 sleep_seconds = random.uniform(1, 2)
-                self.log('[report-delivery] sleeping {0:.2f}s before next single report'.format(sleep_seconds))
+                self.log_tool.step('[report-delivery] 单机报告发送间隔等待', sleep='{0:.2f}s'.format(sleep_seconds))
                 time.sleep(sleep_seconds)
 
             single_icon = '🔴' if document.get('is_abnormal') else '🟢'
@@ -292,20 +287,28 @@ class HostReportSender(HostReportAnalyser):
                 single_success += 1
             else:
                 single_failed += 1
-                self.log('[report-delivery] single report send failed {0}: {1}'.format(doc_id, error_message))
+                self.log_tool.detail_fail('[report-delivery] 单机报告发送失败', doc_id=doc_id, error=error_message)
 
         all_done = (single_failed == 0 and overview_success)
 
-        self.log(
-            '[report-delivery] finished report_date={0} status={1} overview_sent={2} single_success={3} single_failed={4} single_skipped={5}'.format(
-                window['report_date'],
-                'ok' if all_done else 'partial',
-                overview_success,
-                single_success,
-                single_failed,
-                single_skipped
+        if all_done:
+            self.log_tool.done(
+                '[report-delivery] 发送流水线全部成功',
+                report_date=window['report_date'],
+                overview_sent=overview_success,
+                single_success=single_success,
+                single_failed=single_failed,
+                single_skipped=single_skipped,
             )
-        )
+        else:
+            self.log_tool.fail(
+                '[report-delivery] 发送流水线部分失败',
+                report_date=window['report_date'],
+                overview_sent=overview_success,
+                single_success=single_success,
+                single_failed=single_failed,
+                single_skipped=single_skipped,
+            )
         return {
             'status': 'ok' if all_done else 'partial',
             'report_date': window['report_date'],

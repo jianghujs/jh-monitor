@@ -9,6 +9,20 @@ USERNAME="${REPORT_COLLECTOR_USERNAME:-ansible_user}"
 DATA_DIR="${DATA_DIR:-/home/${USERNAME}/jh-monitor-data}"
 HOST_ID_FILE="${JH_MONITOR_HOST_ID_FILE:-${DATA_DIR}/host_id}"
 
+_SEP_LONG='========================================'
+_SEP_SHORT='----------------------------------------'
+_ICON_OK='☑️'
+_ICON_FAIL='❌'
+
+_log() { echo "[filebeat-install] $*"; }
+_log_sep() { _log "$_SEP_LONG"; }
+_log_sep_short() { _log "$_SEP_SHORT"; }
+_log_start() { _log "$_ICON_OK $*"; }
+_log_done() { _log "$_ICON_OK $*"; }
+_log_fail() { _log "$_ICON_FAIL $*"; }
+_log_step() { _log "|- $*"; }
+_log_detail() { _log "|--- $*"; }
+
 resolve_host_id() {
   if [ -n "$JH_MONITOR_HOST_ID" ]; then
     printf "%s" "$JH_MONITOR_HOST_ID"
@@ -43,6 +57,9 @@ escape_sed_replacement() {
   printf "%s" "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
+_log_sep
+_log_start "开始安装 filebeat" version="8.11.3"
+
 # wget -O /tmp/filebeat.deb "${RAW_BASE}/scripts/client/install/filebeat/filebeat.deb" && dpkg -i /tmp/filebeat.deb
 FILEBEAT_VERSION="8.11.3"
 FILEBEAT_DEB="filebeat-${FILEBEAT_VERSION}-amd64.deb"
@@ -53,8 +70,9 @@ fi
 
 INSTALLED_FILEBEAT_VERSION="$(dpkg-query -W -f='${Version}' filebeat 2>/dev/null || true)"
 if echo "$INSTALLED_FILEBEAT_VERSION" | grep -q "^${FILEBEAT_VERSION}"; then
-  echo "filebeat ${INSTALLED_FILEBEAT_VERSION} 已安装，跳过重复安装"
+  _log_step "filebeat 已安装，跳过" version="$INSTALLED_FILEBEAT_VERSION"
 else
+  _log_step "下载并安装 filebeat deb" url="$FILEBEAT_URL"
   wget -O /tmp/filebeat.deb "${FILEBEAT_URL}" && dpkg -i /tmp/filebeat.deb
 fi
 
@@ -64,24 +82,24 @@ if [ -d /etc/pve ]; then
   config_type="pve"
 fi
 
-echo "开始下载最新 filebeat 配置: filebeat.${config_type}.yml"
+_log_step "下载主配置" type="$config_type" file="filebeat.${config_type}.yml"
 wget -O /tmp/filebeat.yml "${RAW_BASE}/scripts/client/install/filebeat/config/filebeat.${config_type}.yml"
 if [ ! -s /tmp/filebeat.yml ]; then
-  echo "错误: 下载 filebeat 配置失败 (${config_type})"
+  _log_fail "下载主配置失败" type="$config_type"
   exit 1
 fi
 mv /tmp/filebeat.yml /etc/filebeat/filebeat.yml
 chmod 644 /etc/filebeat/filebeat.yml
-
+_log_detail "主配置已写入" path="/etc/filebeat/filebeat.yml"
 
 if [ -z "$SERVER_IP" ]; then
   read -p "请输入ELK服务端IP: " SERVER_IP
   if [ -z "$SERVER_IP" ]; then
-    echo "错误:未指定ELK服务端IP"
+    _log_fail "未指定ELK服务端IP"
     exit 1
   fi
 fi
-# 替换文件中的IP为当前服务器的IP
+_log_step "替换配置占位符" serverIp="$SERVER_IP"
 sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
 
 HOST_ID="$(resolve_host_id)"
@@ -91,25 +109,42 @@ if [ -n "$HOST_ID" ]; then
   ESCAPED_HOST_ID_INDEX="$(escape_sed_replacement "$HOST_ID_INDEX")"
   sed -i "s/<hostId>/$ESCAPED_HOST_ID/g" /etc/filebeat/filebeat.yml
   sed -i "s/<hostIdIndex>/$ESCAPED_HOST_ID_INDEX/g" /etc/filebeat/filebeat.yml
-  echo "已写入 filebeat host_id: $HOST_ID"
-  echo "已写入 filebeat host_id_index: $HOST_ID_INDEX"
+  _log_detail "已写入 host_id" hostId="$HOST_ID" hostIdIndex="$HOST_ID_INDEX"
 else
-  echo "警告: 未获取到 host_id，filebeat 配置将保留占位符"
+  _log_detail "未获取到 host_id，配置将保留占位符"
 fi
 
+
+# 下载主机 inputs 配置到 /etc/filebeat/inputs.d/
+INPUTS_DIR="/etc/filebeat/inputs.d"
+mkdir -p "$INPUTS_DIR"
+HOST_INPUT_FILE="${INPUTS_DIR}/host-${config_type}.yml"
+_log_step "下载主机 inputs 配置" type="$config_type" file="host-${config_type}.yml"
+wget -O /tmp/host-inputs.yml "${RAW_BASE}/scripts/client/install/filebeat/config/inputs.d/host-${config_type}.yml"
+if [ ! -s /tmp/host-inputs.yml ]; then
+  _log_fail "下载主机 inputs 配置失败" type="$config_type"
+  exit 1
+fi
+mv /tmp/host-inputs.yml "$HOST_INPUT_FILE"
+chmod 644 "$HOST_INPUT_FILE"
+if [ -n "$HOST_ID" ]; then
+  sed -i "s/<hostId>/$ESCAPED_HOST_ID/g" "$HOST_INPUT_FILE"
+  _log_detail "已写入 host inputs host_id" hostId="$HOST_ID"
+fi
+_log_detail "主机 inputs 配置完成" path="$HOST_INPUT_FILE"
+
 validate_filebeat_config() {
-  echo "开始校验 filebeat 配置: /etc/filebeat/filebeat.yml"
+  _log_step "校验 filebeat 配置"
   if command -v filebeat >/dev/null 2>&1; then
-    echo "检测到 filebeat 命令，执行: filebeat test config -c /etc/filebeat/filebeat.yml"
+    _log_detail "执行 filebeat test config"
     filebeat test config -c /etc/filebeat/filebeat.yml >/tmp/filebeat_test.log 2>&1 || {
-      echo "filebeat 配置校验失败，输出如下:"
       cat /tmp/filebeat_test.log
-      echo "错误: filebeat 配置校验失败"
+      _log_fail "filebeat 配置校验失败"
       exit 1
     }
-    echo "filebeat 配置校验通过"
+    _log_detail "配置校验通过"
   else
-    echo "警告: 未找到 filebeat 命令，跳过配置校验"
+    _log_detail "未找到 filebeat 命令，跳过校验"
   fi
 }
 
@@ -118,26 +153,25 @@ validate_filebeat_config
 run_filebeat_setup() {
   local setup_log_file="/tmp/filebeat_setup.log"
   if ! command -v filebeat >/dev/null 2>&1; then
-    echo "警告: 未找到 filebeat 命令，跳过 setup"
+    _log_step "未找到 filebeat 命令，跳过 setup"
     return 0
   fi
 
-  echo "开始执行 filebeat setup，日志写入: ${setup_log_file}"
-  echo "执行命令: filebeat setup -e"
+  _log_step "执行 filebeat setup" log="$setup_log_file"
   : > "${setup_log_file}"
   if ! filebeat setup -e >"${setup_log_file}" 2>&1; then
-    echo "filebeat setup 失败，输出如下:"
     cat "${setup_log_file}"
-    echo "错误: filebeat setup 失败，请检查日志: ${setup_log_file}"
+    _log_fail "filebeat setup 失败" log="$setup_log_file"
     return 1
   fi
-  echo "filebeat setup完成✅"
+  _log_detail "filebeat setup 完成"
 }
 
 run_filebeat_setup || exit 1
 
-echo "正在启动filebeat..."
+_log_step "启动 filebeat 服务"
 service filebeat restart
 systemctl enable filebeat
 
-echo "filebeat配置完成✅"
+_log_done "filebeat 配置完成"
+_log_sep

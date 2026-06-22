@@ -8,6 +8,8 @@ import fnmatch
 import json
 import os
 import sys
+import tempfile
+import time
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ES_DIR = os.path.dirname(CURRENT_DIR)
@@ -19,10 +21,20 @@ if ES_DIR not in sys.path:
     sys.path.insert(0, ES_DIR)
 if ES_MODEL_DIR not in sys.path:
     sys.path.insert(0, ES_MODEL_DIR)
+PLUGIN_DIR = os.path.join(ROOT_DIR, 'class', 'plugin')
+if PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, PLUGIN_DIR)
 
 from clean_system_status_indexes import discover_system_status_resources, clean_system_status_resources
 from index_manager import IndexManager
-from report_schema import REPORT_INDEXES, REPORT_INDEX_TEMPLATES, REPORT_DATA_STREAMS
+from log_tool import LogTool
+from report_schema import (
+    REPORT_INDEXES,
+    REPORT_INDEX_TEMPLATES,
+    REPORT_DATA_STREAMS,
+    TASK_EVENT_INDEXES,
+    TASK_EVENT_INDEX_TEMPLATES,
+)
 
 
 def build_args():
@@ -36,7 +48,11 @@ def build_args():
     parser.add_argument('--skip-clean-system-status', dest='clean_system_status', action='store_false', help='初始化前跳过 system-status 清理')
     parser.add_argument('--sync-existing-indices', action='store_true', help='同步更新已存在的报告普通索引 mapping，可能因历史字段类型冲突失败')
     parser.add_argument('--month', default='', help='指定报告数据流月份，格式 YYYY-MM，默认当前月份')
+    parser.add_argument('--task-events', action='store_true', help='仅初始化 host-monitor-task-event 索引/模板')
     return parser.parse_args()
+
+
+logger = LogTool('es-init')
 
 
 def normalize_response(response):
@@ -84,6 +100,21 @@ def build_report_data_stream_names(use_test_index=False, month_text=''):
         return [name.replace('host-report-', 'host-report-test-') for name in names]
     return names
 
+def build_task_event_definitions(use_test_index=False):
+    index_definitions = copy.deepcopy(TASK_EVENT_INDEXES)
+    template_definitions = copy.deepcopy(TASK_EVENT_INDEX_TEMPLATES)
+    if use_test_index:
+        for index_name in list(index_definitions.keys()):
+            renamed = index_name + '-test'
+            index_definitions[renamed] = index_definitions.pop(index_name)
+        for template_name in list(template_definitions.keys()):
+            body = template_definitions[template_name]
+            renamed = template_name + '-test'
+            body['index_patterns'] = [pattern.replace('host-monitor-task-event', 'host-monitor-task-event-test') for pattern in body.get('index_patterns', [])]
+            body['priority'] = max(int(body.get('priority', 500)) + 1, 100)
+            template_definitions[renamed] = template_definitions.pop(template_name)
+    return index_definitions, template_definitions
+
 
 def fetch_index_summary(manager, index_name):
     exists = manager.es.indexExists(index_name)
@@ -107,6 +138,7 @@ def ensure_report_indices(manager, index_definitions, sync_existing_indices=Fals
         exists = manager.es.indexExists(index_name)
         if exists:
             if not sync_existing_indices:
+                logger.info('|--- 索引已存在跳过', index=index_name, action='exists_skipped')
                 results.append({
                     'index': index_name,
                     'action': 'exists_skipped',
@@ -115,19 +147,23 @@ def ensure_report_indices(manager, index_definitions, sync_existing_indices=Fals
                 continue
             response = manager.es.putMapping(index_name, index_body.get('mappings', {}))
             if response is None:
+                logger.detail_fail('索引 mapping 同步失败', index=index_name, error=manager.es.getError())
                 raise Exception('failed to sync index {0}: {1}'.format(
                     index_name,
                     manager.es.getError()
                 ))
+            logger.detail_ok('索引 mapping 同步完成', index=index_name, action='updated')
             results.append({'index': index_name, 'action': 'updated'})
             continue
 
         response = manager.es.createIndex(index_name, index_body)
         if response is None:
+            logger.detail_fail('索引创建失败', index=index_name, error=manager.es.getError())
             raise Exception('failed to create index {0}: {1}'.format(
                 index_name,
                 manager.es.getError()
             ))
+        logger.detail_ok('索引创建完成', index=index_name, action='created')
         results.append({'index': index_name, 'action': 'created'})
     return results
 
@@ -264,12 +300,27 @@ def should_clean_system_status(args, resources):
 
 
 def main():
+    start_time = time.time()
     args = build_args()
     manager = IndexManager()
+    logger.separator(long=True)
+    logger.start('开始初始化ES报告相关索引',
+             scope='task_events' if args.task_events else ('all' if args.all else ('report_test' if args.use_test_index else 'report')),
+             mode='check_only' if args.check_only else 'ensure',
+             overwrite=bool(args.overwrite),
+             month=normalize_month(args.month),
+             use_test_index=bool(args.use_test_index))
 
-    if args.all:
+    if args.task_events:
+        index_definitions, template_definitions = build_task_event_definitions(use_test_index=args.use_test_index)
+        target_indices = list(index_definitions.keys())
+        target_data_streams = []
+    elif args.all:
         index_definitions = copy.deepcopy(REPORT_INDEXES)
         template_definitions = copy.deepcopy(REPORT_INDEX_TEMPLATES)
+        task_index_definitions, task_template_definitions = build_task_event_definitions(False)
+        index_definitions.update(task_index_definitions)
+        template_definitions.update(task_template_definitions)
         target_indices = list(index_definitions.keys())
         data_stream_templates = build_report_data_stream_templates(False)
         template_definitions.update(data_stream_templates)
@@ -293,47 +344,131 @@ def main():
         'mode': 'check_only' if args.check_only else 'ensure',
         'overwrite': bool(args.overwrite),
         'clean_system_status': args.clean_system_status,
-        'scope': 'all' if args.all else ('report_test' if args.use_test_index else 'report'),
+        'scope': 'task_events' if args.task_events else ('all' if args.all else ('report_test' if args.use_test_index else 'report')),
     }
 
+    logger.detail_ok('解析初始化目标完成',
+             indices=len(target_indices),
+             templates=len(template_definitions),
+             data_streams=len(target_data_streams))
+    logger.info('|--- 目标索引列表', items=target_indices)
+    logger.info('|--- 目标模板列表', items=list(template_definitions.keys()))
+    logger.info('|--- 目标数据流列表', items=target_data_streams)
+
+    logger.info('|- 开始扫描 system-status 历史资源')
     system_status_resources = discover_system_status_resources(manager)
     results['system_status_resources'] = system_status_resources
+    logger.detail_ok('system-status 资源扫描完成',
+             indices=len((system_status_resources or {}).get('indices', []) or []),
+             data_streams=len((system_status_resources or {}).get('data_streams', []) or []))
 
     if args.check_only:
+        logger.info('|- 进入只读检查模式，跳过任何写操作')
         results['indices'] = [fetch_index_summary(manager, index_name) for index_name in target_indices]
         results['data_streams'] = [fetch_data_stream_summary(manager, data_stream_name) for data_stream_name in target_data_streams]
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        logger.detail_ok('索引存在性检查完成', count=len(results['indices']))
+        logger.detail_ok('数据流存在性检查完成', count=len(results['data_streams']))
+        logger.done('ES索引检查完成', useTime='{0:.2f}s'.format(time.time() - start_time))
+        logger.separator(long=True)
+        _tmp = tempfile.NamedTemporaryFile(
+            prefix='es-init-check-', suffix='.json',
+            delete=False, mode='w', encoding='utf-8',
+            dir='/tmp',
+        )
+        try:
+            _tmp.write(json.dumps(results, ensure_ascii=False, indent=2))
+            _tmp.close()
+            logger.info('完整运行结果已写入', file=_tmp.name)
+        except Exception:
+            _tmp.close()
+            raise
         return 0
 
     if should_clean_system_status(args, system_status_resources):
+        logger.info('|- 开始清理 system-status 历史资源')
         results['system_status_cleanup'] = clean_system_status_resources(manager)
+        logger.detail_ok('system-status 历史资源清理完成',
+                 deleted_data_streams=len((results['system_status_cleanup'] or {}).get('deleted_data_streams', []) or []),
+                 deleted_indices=len((results['system_status_cleanup'] or {}).get('deleted_indices', []) or []))
     else:
+        logger.info('|--- 跳过 system-status 清理', reason='check_only/未确认/无资源')
         results['system_status_cleanup'] = {
             'skipped': True,
             'resources': system_status_resources,
         }
 
     if args.overwrite:
+        logger.info('|- 开始覆盖重建：删除旧索引/模板/数据流')
         results['overwrite_deleted'] = overwrite_targets(
             manager,
             target_indices,
             template_definitions,
             target_data_streams
         )
-
-    if args.all:
-        results['indices'] = manager.ensure_indices(index_definitions)
+        _overwrite_info = results['overwrite_deleted'] or {}
+        logger.detail_ok('覆盖重建删除完成',
+                 deleted_data_streams=len(_overwrite_info.get('deleted_data_streams', []) or []),
+                 deleted_indices=len(_overwrite_info.get('deleted_indices', []) or []),
+                 deleted_templates=len(_overwrite_info.get('deleted_templates', []) or []))
     else:
+        logger.info('|--- 跳过覆盖重建', reason='--no-overwrite')
+
+    logger.info('|- 开始创建/检查目标索引', count=len(index_definitions))
+    try:
         results['indices'] = ensure_report_indices(
             manager,
             index_definitions,
             sync_existing_indices=args.sync_existing_indices
         )
-    results['templates'] = manager.ensure_index_templates(template_definitions) if len(template_definitions) > 0 else []
-    results['data_streams'] = manager.ensure_data_streams(target_data_streams)
+    except Exception as ex:
+        logger.fail('索引创建/检查失败', error=str(ex), useTime='{0:.2f}s'.format(time.time() - start_time))
+        logger.separator(long=True)
+        raise
+    logger.detail_ok('索引创建/检查完成', count=len(results['indices']))
+
+    logger.info('|- 开始更新索引模板', count=len(template_definitions))
+    try:
+        results['templates'] = manager.ensure_index_templates(template_definitions) if len(template_definitions) > 0 else []
+    except Exception as ex:
+        logger.fail('索引模板更新失败', error=str(ex), useTime='{0:.2f}s'.format(time.time() - start_time))
+        logger.separator(long=True)
+        raise
+    for _tpl in results['templates']:
+        logger.info('|--- 索引模板处理', template=_tpl.get('template'), action=_tpl.get('action'))
+    logger.detail_ok('索引模板更新完成', count=len(results['templates']))
+
+    logger.info('|- 开始确保数据流', count=len(target_data_streams))
+    try:
+        results['data_streams'] = manager.ensure_data_streams(target_data_streams)
+    except Exception as ex:
+        logger.fail('数据流初始化失败', error=str(ex), useTime='{0:.2f}s'.format(time.time() - start_time))
+        logger.separator(long=True)
+        raise
+    for _ds in results['data_streams']:
+        logger.info('|--- 数据流处理', data_stream=_ds.get('data_stream'), action=_ds.get('action'))
+    logger.detail_ok('数据流确保完成', count=len(results['data_streams']))
+
     results['index_summaries'] = [fetch_index_summary(manager, index_name) for index_name in target_indices]
     results['data_stream_summaries'] = [fetch_data_stream_summary(manager, data_stream_name) for data_stream_name in target_data_streams]
-    print(json.dumps(results, ensure_ascii=False, indent=2))
+
+    logger.done('ES索引初始化完成',
+             indices=len(results['indices']),
+             templates=len(results['templates']),
+             data_streams=len(results['data_streams']),
+             useTime='{0:.2f}s'.format(time.time() - start_time))
+    logger.separator(long=True)
+    _tmp = tempfile.NamedTemporaryFile(
+        prefix='es-init-result-', suffix='.json',
+        delete=False, mode='w', encoding='utf-8',
+        dir='/tmp',
+    )
+    try:
+        _tmp.write(json.dumps(results, ensure_ascii=False, indent=2))
+        _tmp.close()
+        logger.info('完整结果已写入', file=_tmp.name)
+    except Exception:
+        _tmp.close()
+        raise
     return 0
 
 

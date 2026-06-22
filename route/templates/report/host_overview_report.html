@@ -33,6 +33,23 @@
   </div>
   <div class="mx-auto leading-10 plr15">
 
+    <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
+      <h3 class="text-2xl mb-2">概要信息：</h3>
+      <ul>
+      {% if overview_summary_messages and (overview_summary_messages | length) > 0 %}
+        {% for item in overview_summary_messages %}
+        <li>
+          {% if item.level == 'error' %}<span style="color: red;">{{ item.text }}</span>
+          {% elif item.level == 'warning' %}<span style="color: orange;">{{ item.text }}</span>
+          {% else %}<span>{{ item.text }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      {% else %}
+        <li><span style="color: green;">全部服务运行正常，继续保持</span></li>
+      {% endif %}
+      </ul>
+    </div>
+
     <h3 class="font-bold my-5">主机统计：</h3>
     <table border class="w-full">
       <tr>
@@ -144,6 +161,29 @@
         <td><span style="color: orange;">{{ item.desc }}</span></td>
       </tr>
       {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if monitor_task_overview and (monitor_task_overview | length) > 0 %}
+    <h3 class="font-bold my-5">监控任务：</h3>
+    <table border class="w-full">
+      <tr>
+        <th style="padding:5px;border-right:1px solid #999;border-bottom:1px solid #999;text-align:left;width:200px;">任务</th>
+        <th style="padding:5px;border-bottom:1px solid #999;text-align:left;">状态</th>
+      </tr>
+    {% for item in monitor_task_overview %}
+      <tr>
+        <td style="padding:5px;border-right:1px solid #999;border-bottom:1px solid #999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.task_name }}</td>
+        <td style="padding:5px;border-bottom:1px solid #999;">
+          {% if item.status == 'error' %}<span style="color: red;">异常</span>
+          {% elif item.status == 'warning' %}<span style="color: orange;">告警</span>
+          {% elif item.status == 'normal' %}<span style="color: green;">正常</span>
+          {% else %}<span style="color: #999;">{{ item.status }}</span>{% endif %}
+          {% if item.msg %}<span style="color:#666;"> — {{ item.msg }}</span>{% endif %}
+          {% if item.last_run_at_text %}<div style="color:#999;font-size:12px;margin-top:2px;">日志时间: {{ item.last_run_at_text }}</div>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
     </table>
     {% endif %}
 

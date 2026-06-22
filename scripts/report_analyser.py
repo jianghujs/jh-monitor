@@ -28,6 +28,7 @@ if CLIENT_DIR not in sys.path:
 
 import jh
 import value_tool
+from log_tool import LogTool
 from config_api import config_api
 from get_pve_hardware_report import (
     DEFAULT_THRESHOLDS as DEFAULT_PVE_THRESHOLDS,
@@ -44,6 +45,16 @@ from get_pve_hardware_report import (
 )
 from host_api import host_api
 from report_state import build_delivery_state, build_validation_state, normalize_delivery_state
+
+ES_SERVICE_DIR = os.path.join(ROOT_DIR, 'class', 'es', 'service')
+if ES_SERVICE_DIR not in sys.path:
+    sys.path.insert(0, ES_SERVICE_DIR)
+import monitor_task_event_service as monitor_task_event_service_utils
+
+try:
+    from monitor_task_api import monitor_task_api
+except Exception:
+    monitor_task_api = None
 
 h_api = host_api()
 c_api = config_api()
@@ -71,11 +82,13 @@ ANALYSIS_STALE_SECONDS = 15 * 60
 PAGE_SIZE = 500
 
 
+
 class HostReportAnalyser(object):
     def __init__(self, now_ts=None, logger=None, es_client=None):
         """初始化流水线运行上下文与可注入依赖。"""
         self.now_ts = int(now_ts or time.time())
         self.logger = logger
+        self.log_tool = LogTool('report', callback=self.logger)
         self._es = es_client or jh.getES()
         self._last_schedule_debug_rows = []
         self._overview_env = Environment(
@@ -85,13 +98,16 @@ class HostReportAnalyser(object):
         self.thresholds = self.load_thresholds()
 
     def log(self, message):
-        if self.logger:
-            try:
-                self.logger(message)
-                return
-            except Exception:
-                pass
-        print(message)
+        try:
+            self.log_tool.info(str(message))
+        except Exception:
+            if self.logger:
+                try:
+                    self.logger(message)
+                    return
+                except Exception:
+                    pass
+            print(message)
 
     def load_thresholds(self):
         """读取报告阈值配置，并补齐默认值。"""
@@ -1109,9 +1125,152 @@ class HostReportAnalyser(object):
             'is_abnormal': len(error_tips) > 0,
         }, error_tips
 
+    def _classify_monitor_task_status(self, task_row, latest_event, now_ts):
+        """根据最新任务事件、检查周期和宽限时间判定任务状态。
+
+        返回 (status, msg, run_at_ts)：
+        - 没有 event -> error/"未发现任务日志"
+        - 事件 run_at + check_interval + grace_seconds < now -> error/"任务超时未执行"
+        - 事件 status -> 映射到 normal/warning/error，unknown 当 error 处理
+        """
+        check_interval = value_tool.safeInt(task_row.get('check_interval', 0), 0)
+        grace_seconds = value_tool.safeInt(task_row.get('grace_seconds', 0), 0)
+
+        if not latest_event:
+            return 'error', '未发现任务日志', 0
+
+        raw_run_at = latest_event.get('run_at') or latest_event.get('@timestamp') or ''
+        run_at_ts = value_tool.parseTime(raw_run_at)
+        event_status = str(latest_event.get('status', '') or '').strip().lower()
+        event_msg = str(latest_event.get('msg', '') or '').strip()
+
+        if run_at_ts <= 0:
+            # 无法解析运行时间，视为异常以触发关注
+            return 'error', event_msg or '任务运行时间无法解析', run_at_ts
+
+        deadline = run_at_ts + check_interval + grace_seconds
+        if now_ts > deadline:
+            return 'error', '任务超时未执行（最近运行：{0}）'.format(raw_run_at), run_at_ts
+
+        if event_status == 'success':
+            return 'normal', event_msg or '任务执行成功', run_at_ts
+        if event_status == 'warning':
+            return 'warning', event_msg or '任务执行告警', run_at_ts
+        if event_status == 'error':
+            return 'error', event_msg or '任务执行失败', run_at_ts
+        if event_status == 'normal':
+            return 'normal', event_msg or '任务执行正常', run_at_ts
+        # unknown / 其它 -> 按 error 处理以便被发现
+        return 'error', event_msg or '任务状态未知（{0}）'.format(event_status or 'unknown'), run_at_ts
+
+    def _format_monitor_task_time(self, value):
+        """Format monitor task time from text, unix seconds, or unix milliseconds."""
+        raw = str(value or '').strip()
+        if raw == '':
+            return ''
+        try:
+            ts = value_tool.safeInt(raw, 0)
+            if ts > 0 and raw.replace('.', '', 1).isdigit():
+                if ts > 100000000000:
+                    ts = int(ts / 1000)
+                return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
+        except Exception:
+            pass
+        parsed_ts = value_tool.parseTime(raw, 0)
+        if parsed_ts > 0:
+            return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(parsed_ts))
+        return raw
+
+    def _parse_monitor_task_time(self, value):
+        """Parse monitor task time as unix seconds for ES long fields."""
+        raw = str(value or '').strip()
+        if raw == '':
+            return 0
+        if raw.replace('.', '', 1).isdigit():
+            ts = value_tool.safeInt(raw, 0)
+            if ts > 100000000000:
+                ts = int(ts / 1000)
+            return ts
+        return value_tool.parseTime(raw, 0)
+
+    def _build_monitor_task_section(self, host_row, now_ts):
+        """分析该主机所有启用的监控任务，回写状态并生成报告片段。"""
+        host_id = str(host_row.get('host_id', '') or '')
+        summary_tips = []
+        error_tips = []
+        results = []
+        if not host_id:
+            return {'summary_tips': summary_tips, 'error_tips': error_tips, 'monitor_task_results': results}
+
+        try:
+            task_rows = jh.M('monitor_task').where('host_id=? and enabled=?', (host_id, 1)).field(
+                'task_id,task_name,host_id,host_name,host_ip,log_path,check_interval,grace_seconds,enabled'
+            ).select()
+        except Exception as e:
+            summary_tips.append("<span style='color: red;'>监控任务读取失败：{0}</span>".format(value_tool.escapeHtml(str(e))))
+            error_tips.append('监控任务读取失败')
+            return {'summary_tips': summary_tips, 'error_tips': error_tips, 'monitor_task_results': results}
+
+        if not isinstance(task_rows, list) or len(task_rows) == 0:
+            return {'summary_tips': summary_tips, 'error_tips': error_tips, 'monitor_task_results': results}
+
+        for task_row in task_rows:
+            if not isinstance(task_row, dict):
+                continue
+            task_id = str(task_row.get('task_id', '') or '')
+            task_name = str(task_row.get('task_name', '') or task_id)
+            if not task_id:
+                continue
+
+            latest_event = {}
+            try:
+                latest_event = monitor_task_event_service_utils.getLatestTaskEvent(task_id, host_id, es_client=self._es) or {}
+            except Exception as e:
+                status = 'error'
+                msg = '任务事件查询失败：{0}'.format(str(e))
+                run_at_ts = 0
+            else:
+                status, msg, run_at_ts = self._classify_monitor_task_status(task_row, latest_event, now_ts)
+
+            result = {
+                'task_id': task_id,
+                'task_name': task_name,
+                'log_path': str(task_row.get('log_path', '') or ''),
+                'status': status,
+                'msg': msg,
+                'last_run_at': run_at_ts,
+                'has_event': bool(latest_event),
+            }
+            results.append(result)
+
+            # 回写分析状态到 SQLite
+            try:
+                update_fields = {
+                    'last_status': status,
+                    'last_msg': msg[:500],
+                    'last_run_at': run_at_ts,
+                    'last_event_at': value_tool.parseTime(latest_event.get('@timestamp', '')) if latest_event else 0,
+                    'last_analyse_at': now_ts,
+                    'update_time': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts)),
+                }
+                jh.M('monitor_task').where('task_id=?', (task_id,)).save(update_fields)
+            except Exception:
+                pass
+
+            if status == 'error':
+                summary_tips.append("<span style='color: red;'>任务【{0}】异常：{1}</span>".format(
+                    value_tool.escapeHtml(task_name), value_tool.escapeHtml(msg)))
+                error_tips.append('任务【{0}】异常：{1}'.format(task_name, msg))
+            elif status == 'warning':
+                summary_tips.append("<span style='color: orange;'>任务【{0}】告警：{1}</span>".format(
+                    value_tool.escapeHtml(task_name), value_tool.escapeHtml(msg)))
+
+        return {'summary_tips': summary_tips, 'error_tips': error_tips, 'monitor_task_results': results}
+
     def build_single_host_report(self, host_row, host_group, window):
         """基于单台主机原始数据生成单机报告文档。"""
         host_id = host_row.get('host_id', '')
+
         host_name = host_row.get('host_name', '')
         host_ip = host_row.get('ip', '')
         status_docs = sorted(host_group.get('status', []) or [], key=lambda item: value_tool.safeInt(item.get('add_timestamp', 0), value_tool.parseTime(item.get('add_time', ''))))
@@ -1177,6 +1336,15 @@ class HostReportAnalyser(object):
             }
             backup_tips = report_payload.get('backup_tips', [])
             siteinfo_tips = report_payload.get('siteinfo_tips', [])
+
+        # 监控任务分析：在生成 HTML 前合并任务结果到 summary/error_tips
+        monitor_task_section = self._build_monitor_task_section(host_row, self.now_ts)
+        monitor_task_results = monitor_task_section.get('monitor_task_results', [])
+        summary_tips.extend(monitor_task_section.get('summary_tips', []))
+        error_tips.extend(monitor_task_section.get('error_tips', []))
+        if isinstance(report_payload, dict):
+            report_payload['summary_tips'] = summary_tips
+            report_payload['error_tips'] = error_tips
 
         html_content = h_api.buildHostReportMessage(host_row, report_payload)
         if not html_content or '暂无报告内容' in html_content:
@@ -1357,6 +1525,78 @@ class HostReportAnalyser(object):
                 'desc': summary_text
             })
 
+        # 监控任务总览：收集所有启用的监控任务及最新分析状态
+        monitor_task_overview = []
+        try:
+            all_task_rows = jh.M('monitor_task').where('enabled=?', (1,)).field(
+                'task_id,task_name,host_id,host_name,host_ip,log_path,check_interval,grace_seconds,last_status,last_msg,last_run_at,last_event_at,last_analyse_at'
+            ).order('id desc').select()
+            if isinstance(all_task_rows, list):
+                for t in all_task_rows:
+                    if not isinstance(t, dict):
+                        continue
+                    last_status = str(t.get('last_status', '') or '').strip()
+                    if not last_status or last_status == 'unknown':
+                        last_status = 'pending'
+                    raw_run_at = str(t.get('last_run_at', '') or '').strip()
+                    raw_event_at = str(t.get('last_event_at', '') or '').strip()
+                    run_at = self._parse_monitor_task_time(raw_run_at)
+                    event_at = self._parse_monitor_task_time(raw_event_at)
+                    last_run_at_text = self._format_monitor_task_time(raw_run_at)
+                    monitor_task_overview.append({
+                        'task_id': str(t.get('task_id', '') or ''),
+                        'task_name': str(t.get('task_name', '') or ''),
+                        'host_id': str(t.get('host_id', '') or ''),
+                        'host_name': str(t.get('host_name', '') or ''),
+                        'host_ip': str(t.get('host_ip', '') or ''),
+                        'log_path': str(t.get('log_path', '') or ''),
+                        'status': last_status,
+                        'msg': str(t.get('last_msg', '') or ''),
+                        'last_run_at': run_at,
+                        'last_run_at_text': last_run_at_text,
+                        'last_event_at': event_at,
+                        'last_event_at_text': self._format_monitor_task_time(raw_event_at),
+                        'last_analyse_at': str(t.get('last_analyse_at', '') or ''),
+                    })
+        except Exception:
+            pass
+
+        overview_summary_messages = []
+
+        def append_grouped_summary(rows, level, subject, status_text, default_desc):
+            grouped = {}
+            for row in rows:
+                desc = str(row.get('desc', '') or default_desc).strip() or default_desc
+                name = str(row.get('name', '') or '未知{0}'.format(subject)).strip()
+                grouped.setdefault(desc, []).append(name)
+            for desc, names in grouped.items():
+                overview_summary_messages.append({
+                    'level': level,
+                    'text': '{0}{1}{2}：{3}'.format('、'.join(names), subject, status_text, desc)
+                })
+
+        append_grouped_summary(exception_host_summary_tips, 'error', '主机', '有异常', '报告异常')
+        append_grouped_summary(warning_host_summary_tips, 'warning', '主机', '有提醒', '有提醒项需要关注')
+
+        error_tasks = []
+        warning_tasks = []
+        for task in monitor_task_overview:
+            task_status = str(task.get('status', '') or '').lower()
+            if task_status not in ('error', 'warning'):
+                continue
+            task_name = str(task.get('task_name', '') or task.get('task_id', '') or '未知任务')
+            desc = str(task.get('msg', '') or '').strip()
+            run_at_text = str(task.get('last_run_at_text', '') or '').strip()
+            if run_at_text:
+                desc = (desc + '；' if desc else '') + '日志时间：' + run_at_text
+            item = {'name': task_name, 'desc': desc or '需要关注'}
+            if task_status == 'error':
+                error_tasks.append(item)
+            else:
+                warning_tasks.append(item)
+        append_grouped_summary(error_tasks, 'error', '任务', '异常', '需要关注')
+        append_grouped_summary(warning_tasks, 'warning', '任务', '有提醒', '需要关注')
+
         single_host_report_list = []
         for doc in single_documents:
             validation = doc.get('validation', {}) or {}
@@ -1397,6 +1637,8 @@ class HostReportAnalyser(object):
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
             'warning_host_summary_tips': warning_host_summary_tips,
+            'overview_summary_messages': overview_summary_messages,
+            'monitor_task_overview': monitor_task_overview,
             'single_host_report_list': single_host_report_list,
         }
 
@@ -1438,9 +1680,11 @@ class HostReportAnalyser(object):
             'host_overview_tips': host_overview_tips,
             'exception_host_summary_tips': exception_host_summary_tips,
             'warning_host_summary_tips': warning_host_summary_tips,
+            'overview_summary_messages': overview_summary_messages,
             'single_host_report_list': single_host_report_list,
             'validation': validation,
             'delivery': delivery_state,
+            'monitor_task_overview': monitor_task_overview,
             'extra_info': {
                 'normal_host_count': len(normal_documents),
                 'offline_host_count': host_offline,

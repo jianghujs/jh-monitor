@@ -1,0 +1,24 @@
+# Host log inputs for PVE hosts. Managed by jh-monitor filebeat installer.
+# Do not edit manually; re-run the host installer to refresh.
+
+- type: log
+  enabled: true
+  paths:
+    - /home/ansible_user/jh-monitor-data/host-pve-system-status-*.json
+    - /home/ansible/jh-monitor-data/host-pve-system-status-*.json
+  json.keys_under_root: true
+  json.add_error_key: true
+  json.overwrite_keys: true
+  close_eof: true
+  fields:
+    log_index: host-pve-system-status
+  fields_under_root: true
+
+- type: log
+  enabled: true
+  paths:
+    - /var/log/*.log
+    - /var/log/pve/*.log
+    - /var/log/pve/tasks/*.log
+    - /var/log/pveproxy/*.log
+    - /www/server/os_tool/pve/logs/report.log

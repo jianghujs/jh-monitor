@@ -631,4 +631,59 @@ __all__ = [
     'REPORT_INDEXES',
     'REPORT_DATA_STREAMS',
     'REPORT_INDEX_TEMPLATES',
+    'TASK_EVENT_INDEXES',
+    'TASK_EVENT_INDEX_TEMPLATES',
 ]
+
+
+TASK_EVENT_INDEXES = {
+    'host-monitor-task-event': {
+        'settings': {
+            'number_of_shards': 1,
+            'number_of_replicas': 0
+        },
+        'mappings': {
+            'dynamic': True,
+            'properties': {
+                'task_id': {'type': 'keyword'},
+                'task_name': {'type': 'keyword'},
+                'host_id': {'type': 'keyword'},
+                'host_ip': {'type': 'ip'},
+                'log_path': {'type': 'keyword'},
+                'status': {'type': 'keyword'},
+                'msg': {'type': 'text'},
+                'run_at': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                '@timestamp': {'type': 'date'},
+                'collector_source': {'type': 'keyword'},
+            }
+        }
+    }
+}
+
+TASK_EVENT_INDEX_TEMPLATES = {
+    'host-monitor-task-event-template': {
+        'index_patterns': ['host-monitor-task-event*'],
+        'priority': 500,
+        'template': {
+            'settings': {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            },
+            'mappings': {
+                'dynamic': True,
+                'properties': {
+                    'task_id': {'type': 'keyword'},
+                    'task_name': {'type': 'keyword'},
+                    'host_id': {'type': 'keyword'},
+                    'host_ip': {'type': 'ip'},
+                    'log_path': {'type': 'keyword'},
+                    'status': {'type': 'keyword'},
+                    'msg': {'type': 'text'},
+                    'run_at': {'type': 'date', 'format': DATE_TIME_FORMAT},
+                    '@timestamp': {'type': 'date'},
+                    'collector_source': {'type': 'keyword'},
+                }
+            }
+        }
+    }
+}

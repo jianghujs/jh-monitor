@@ -26,7 +26,7 @@ import psutil
 from flask import request
 
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 import jh
 import time
 
@@ -81,3 +81,45 @@ class pub_api:
     
     def getHostAddrApi(self):
         return jh.returnJson(True, 'ok', jh.getHostAddr())
+
+    def getMonitorTaskInstallScriptApi(self):
+        script_path = os.path.join(os.getcwd(), 'scripts', 'client', 'install', 'monitor_task.sh')
+        content = jh.readFile(script_path)
+        if content is False:
+            return jh.returnJson(False, '安装脚本不存在')
+        return Response(content, mimetype='text/x-shellscript')
+
+    def registerMonitorTaskApi(self):
+        try:
+            from monitor_task_api import monitor_task_api
+            api = monitor_task_api()
+            task_data = {
+                'task_id': request.form.get('task_id', '').strip(),
+                'task_name': request.form.get('task_name', '').strip(),
+                'host_id': request.form.get('host_id', '').strip(),
+                'enabled': request.form.get('enabled', '1').strip(),
+                'install_status': 'pending'
+            }
+            ok, msg, row = api.upsertTaskFromSetup(task_data)
+            if not ok:
+                return jh.returnJson(False, msg)
+            return jh.returnJson(True, '注册成功', row)
+        except Exception as e:
+            return jh.returnJson(False, '注册失败:' + str(e))
+
+    def updateMonitorTaskInstallStatusApi(self):
+        try:
+            from monitor_task_api import monitor_task_api
+            api = monitor_task_api()
+            task_id = request.form.get('task_id', '').strip()
+            install_status = request.form.get('install_status', '').strip()
+            install_msg = request.form.get('install_msg', '').strip()
+            if not task_id:
+                return jh.returnJson(False, 'task_id不能为空')
+            if not api.getTaskById(task_id):
+                return jh.returnJson(False, '监控任务不存在')
+            if not api.updateInstallStatus(task_id, install_status, install_msg):
+                return jh.returnJson(False, '安装状态更新失败')
+            return jh.returnJson(True, '安装状态已更新')
+        except Exception as e:
+            return jh.returnJson(False, '安装状态更新失败:' + str(e))

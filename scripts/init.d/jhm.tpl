@@ -267,6 +267,27 @@ jh_os_tool(){
   bash /www/server/jh-monitor/scripts/os_tool/index.sh vm "" "true"
 }
 
+jh_init_es(){
+    cd $jhm_path || exit 1
+    case "$1" in
+        'check'|'--check-only')
+            shift || true
+            python3 class/es/init/init.py --all --no-overwrite --check-only --skip-clean-system-status "$@"
+            ;;
+        'overwrite'|'--overwrite')
+            shift || true
+            python3 class/es/init/init.py --all --overwrite --skip-clean-system-status "$@"
+            ;;
+        ''|'safe'|'ensure'|'--no-overwrite')
+            [ -n "$1" ] && shift || true
+            python3 class/es/init/init.py --all --no-overwrite --skip-clean-system-status "$@"
+            ;;
+        *)
+            python3 class/es/init/init.py --all --no-overwrite --skip-clean-system-status "$@"
+            ;;
+    esac
+}
+
 # 获取运行命令的目录
 export RUN_DIR=$(pwd)
 
@@ -295,6 +316,12 @@ case "$1" in
     'unbind_domain') jh_unbind_domain;;
     'debug') jh_debug;;
     'os_tool') jh_os_tool;;
+    'init-es')
+        shift
+        jh_init_es "$@";;
+    'init_es')
+        shift
+        jh_init_es "$@";;
     'default')
         cd $jhm_path
         port=7200

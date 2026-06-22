@@ -218,6 +218,31 @@ CREATE TABLE IF NOT EXISTS `host_danger_cmd` (
   `addtime` TEXT
 );
 
+-- 监控任务（脚本日志监控）
+CREATE TABLE IF NOT EXISTS `monitor_task` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `task_id` TEXT,
+  `task_name` TEXT,
+  `host_id` TEXT,
+  `host_name` TEXT,
+  `host_ip` TEXT,
+  `log_path` TEXT,
+  `check_interval` INTEGER DEFAULT 86400,
+  `grace_seconds` INTEGER DEFAULT 0,
+  `interval_value` INTEGER DEFAULT 1,
+  `interval_unit` TEXT DEFAULT 'day',
+  `enabled` INTEGER DEFAULT 1,
+  `install_status` TEXT DEFAULT 'pending',
+  `install_msg` TEXT,
+  `last_status` TEXT DEFAULT 'unknown',
+  `last_msg` TEXT,
+  `last_run_at` TEXT,
+  `last_event_at` TEXT,
+  `last_analyse_at` TEXT,
+  `addtime` TEXT,
+  `update_time` TEXT
+);
+
 -- 主机日志
 CREATE TABLE IF NOT EXISTS `host_log` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,

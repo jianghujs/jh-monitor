@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="main-content pb55 monitor-task-page">
+  <div class="container-fluid">
+    <div class="pos-box bgw mtb15">
+      <div class="position f14 c9 pull-left">
+        <a class="plr10 c4" href="/">首页</a>/<span class="plr10 c4">监控任务</span>
+      </div>
+      <div class="search pull-right">
+        <form target="hid" onsubmit="getMonitorTaskList(1, $('#SearchValue').prop('value')); return false;">
+          <input type="text" id="SearchValue" class="ser-text pull-left" placeholder="任务/路径搜索"/>
+          <button type="button" class="ser-sub pull-left" onclick="getMonitorTaskList(1, $('#SearchValue').prop('value'))"></button>
+        </form>
+        <iframe name="hid" id="hid" style="display:none"></iframe>
+      </div>
+    </div>
+    <div class="safe bgw mtb15 pd15">
+      <div class="flex align-center monitor-task-toolbar">
+        <button onclick="openMonitorTaskAdd()" class="btn btn-success btn-sm btn-title" type="button">添加监控任务</button>
+        <button onclick="getMonitorTaskList(1, $('#SearchValue').prop('value'))" class="btn btn-default btn-sm btn-title ml-2" type="button">刷新</button>
+        <span class="set-info c7 ml-4">状态实时从ES读取最新日志事件</span>
+      </div>
+      <div class="divtable mtb10">
+        <div class="tablescroll monitor-task-scroll">
+          <table class="table table-hover monitor-task-table">
+            <colgroup>
+              <col style="width: 200px;">
+              <col style="width: 90px;">
+              <col style="width: 90px;">
+              <col style="width: 90px;">
+              <col style="width: 190px;">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>任务</th>
+                <th class="text-center">检查频率</th>
+                <th class="text-center">安装</th>
+                <th class="text-center">最新状态</th>
+                <th class="text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="monitorTaskBody"></tbody>
+          </table>
+        </div>
+        <div class="dataTables_paginate paging_bootstrap pagination">
+          <ul id="monitorTaskPage" class="page"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript" src="/static/app/monitor_task.js?v={{config.version}}"></script>
+<script type="text/javascript">
+setTimeout(function(){
+  getMonitorTaskList(1);
+}, 300);
+</script>
+
+<style>
+.monitor-task-page {
+  height: 100vh;
+  padding-bottom: 55px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.monitor-task-page > .container-fluid {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow: hidden;
+}
+.monitor-task-page .safe {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.monitor-task-page .divtable {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.monitor-task-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.monitor-task-table {
+  min-width: 900px;
+  table-layout: fixed;
+}
+.monitor-task-table th,
+.monitor-task-table td {
+  vertical-align: middle !important;
+}
+.monitor-task-main {
+  line-height: 20px;
+}
+.monitor-task-sub {
+  color: #999;
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-task-status {
+  display: inline-block;
+  min-width: 48px;
+}
+.monitor-task-detail {
+  cursor: help;
+  position: relative;
+}
+.monitor-task-detail:hover::after {
+  content: attr(data-detail);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 1000;
+  background: #333;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  max-width: 400px;
+  word-break: break-all;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+.monitor-task-command-text {
+  width: 100%;
+  height: 120px;
+  resize: none;
+  font-family: Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 20px;
+}
+.monitor-task-section-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 6px;
+}
+</style>
+{% endblock %}

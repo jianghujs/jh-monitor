@@ -443,7 +443,7 @@ def api(reqClass=None, reqAction=None, reqData=None):
         return jh.returnJson(False, '请指定请求方法')
 
     classFile = ('host_api', 'config_api', 'crontab_api', 'files_api', 'firewall_api',
-                 'plugins_api', 'system_api', 'site_api', 'task_api')
+                 'plugins_api', 'system_api', 'site_api', 'task_api', 'monitor_task_api')
     className = reqClass + '_api'
     if not className in classFile:
         return "external api request error"
@@ -475,7 +475,7 @@ def index(reqClass=None, reqAction=None, reqData=None):
         if reqClass == None:
             reqClass = 'index'
 
-        pageFile = ('index', 'host', 'config', 'login')
+        pageFile = ('index', 'host', 'monitor_task', 'config', 'login')
 
         if reqClass == 'login':
             token = request.args.get('tmp_token', '').strip()
@@ -515,7 +515,7 @@ def index(reqClass=None, reqAction=None, reqData=None):
 
     # API请求
     classFile = ('host_api', 'config_api', 'crontab_api', 'files_api', 'firewall_api',
-                 'plugins_api', 'system_api', 'site_api', 'task_api')
+                 'plugins_api', 'system_api', 'site_api', 'task_api', 'monitor_task_api')
     className = reqClass + '_api'
     if not className in classFile:
         return "api error request"
@@ -662,4 +662,3 @@ if not jh.isAppleSystem():
         print(e)
 
 ##################### ssh  end ###########################
-
