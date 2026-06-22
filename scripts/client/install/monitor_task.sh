@@ -9,6 +9,7 @@ ACTION="${1:-install}"
 shift || true
 
 USERNAME="${MONITOR_TASK_USERNAME:-ansible_user}"
+RAW_BASE="${MONITOR_RAW_BASE:-https://raw.githubusercontent.com/jianghujs/jh-monitor/master}"
 SCRIPT_HOME="/home/${USERNAME}/jh-monitor-scripts"
 TASK_HOME="/home/${USERNAME}/jh-monitor-tasks"
 BIN_DIR="${SCRIPT_HOME}/bin"
@@ -275,15 +276,26 @@ ensure_filebeat_include() {
   # 调用独立迁移脚本处理旧版配置（幂等，已迁移时自动跳过）
   local migrate_script
   migrate_script="$(dirname "$0")/migrate_filebeat_inputs.sh"
+  if [ ! -x "$migrate_script" ]; then
+    local tmp_migrate_script="/tmp/migrate_filebeat_inputs.sh"
+    info_step "下载 filebeat 迁移脚本" script="migrate_filebeat_inputs.sh"
+    if wget -O "$tmp_migrate_script" "${RAW_BASE}/scripts/client/install/migrate_filebeat_inputs.sh"; then
+      chmod 755 "$tmp_migrate_script"
+      migrate_script="$tmp_migrate_script"
+    else
+      rm -f "$tmp_migrate_script"
+      info "⚠ 下载迁移脚本失败，将使用兜底逻辑" url="${RAW_BASE}/scripts/client/install/migrate_filebeat_inputs.sh"
+    fi
+  fi
   if [ -x "$migrate_script" ]; then
     bash "$migrate_script" --no-restart
   else
     # 兜底：如果迁移脚本不存在，只做最基本的检查
     if grep -q 'inputs.d/\*.yml' "$FILEBEAT_MAIN"; then
-    info_detail "filebeat 已启用 inputs.d，无需重复添加"
+      info_detail "filebeat 已启用 inputs.d，无需重复添加"
       return
     fi
-  info "⚠ 迁移脚本不存在，正在补丁式追加 include 配置" path="${FILEBEAT_MAIN}"
+    info "⚠ 迁移脚本不存在，正在补丁式追加 include 配置" path="${FILEBEAT_MAIN}"
     cat >> "$FILEBEAT_MAIN" <<'YAML'
 
 # All inputs are loaded from /etc/filebeat/inputs.d/*.yml.
