@@ -838,7 +838,8 @@ class config_api:
                 due_rows=host_rows,
                 report_config=report_config,
                 report_date=report_date,
-                enabled_rows=host_rows
+                enabled_rows=host_rows,
+                force_send=True
             )
         except Exception as ex:
             return jh.returnJson(False, '测试发送服务器报告失败: ' + str(ex))

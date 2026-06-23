@@ -172,12 +172,30 @@ class HostReportSender(HostReportAnalyser):
         self._es.index(index_name, doc_id, document=document)
         self.log_tool.warn('[report-delivery] 跳过发送', index=index_name, doc_id=doc_id, reason=error_message)
 
-    def _is_report_already_sent(self, document):
-        """判断报告是否已经成功发送，避免调度窗口内重复投递。"""
-        delivery = normalize_delivery_state(document.get('delivery', {}) if isinstance(document, dict) else {})
-        return delivery.get('status') == 'success' and bool(delivery.get('last_sent_time'))
+    def _parse_delivery_time_ts(self, time_text):
+        """解析发送时间，解析失败时不阻止后续发送。"""
+        raw_text = str(time_text or '').strip()
+        if raw_text == '':
+            return 0
+        for time_format in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+            try:
+                return int(time.mktime(datetime.datetime.strptime(raw_text[:19], time_format).timetuple()))
+            except Exception:
+                pass
+        return 0
 
-    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None):
+    def _is_report_recently_sent(self, document, cooldown_seconds=300):
+        """判断报告是否在冷却期内成功发送过，避免短时间重复投递。"""
+        delivery = normalize_delivery_state(document.get('delivery', {}) if isinstance(document, dict) else {})
+        if delivery.get('status') != 'success':
+            return False, 0
+        last_sent_ts = self._parse_delivery_time_ts(delivery.get('last_sent_time'))
+        if last_sent_ts <= 0:
+            return False, 0
+        elapsed_seconds = max(self.now_ts - last_sent_ts, 0)
+        return elapsed_seconds < cooldown_seconds, elapsed_seconds
+
+    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None, force_send=False):
         """执行发送阶段：先发总览，再发异常单机报告。"""
         window = self.get_report_window(report_date)
         if due_rows is None or report_config is None or enabled_rows is None:
@@ -196,6 +214,7 @@ class HostReportSender(HostReportAnalyser):
             due_rows=len(due_rows),
             due_host_ids=[row.get('host_id') for row in due_rows if row.get('host_id')],
             email_enabled=email_enabled,
+            force_send=force_send,
         )
         if not email_enabled:
             self.log_tool.fail('[report-delivery] 邮件未配置，发送中止', report_date=window['report_date'])
@@ -246,13 +265,16 @@ class HostReportSender(HostReportAnalyser):
         single_failed = 0
         single_skipped = 0
 
-        overview_already_sent = self._is_report_already_sent(overview_document)
+        overview_already_sent, overview_last_sent_elapsed = self._is_report_recently_sent(overview_document)
+        if force_send:
+            overview_already_sent = False
         overview_success = True
         if overview_already_sent:
             self.log_tool.step(
-                '[report-delivery] 总览报告已发送，跳过重复发送',
+                '[report-delivery] 总览报告 5 分钟内已发送，跳过重复发送',
                 doc_id=overview_doc_id,
                 last_sent_time=value_tool.getNested(overview_document, ['delivery', 'last_sent_time'], ''),
+                elapsed_seconds=overview_last_sent_elapsed,
             )
         else:
             overview_success, overview_error = self._send_report_document(
