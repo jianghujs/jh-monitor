@@ -1624,6 +1624,15 @@ class HostReportAnalyser(object):
         append_grouped_summary(error_tasks, 'error', '任务', '异常', '需要关注')
         append_grouped_summary(warning_tasks, 'warning', '任务', '有提醒', '需要关注')
 
+        title_alert_parts = []
+        title_error_count = len(exception_host_summary_tips) + len(error_tasks)
+        title_warning_count = len(warning_host_summary_tips) + len(warning_tasks)
+        if title_error_count > 0:
+            title_alert_parts.append('❌{0}异常'.format(title_error_count))
+        if title_warning_count > 0:
+            title_alert_parts.append('⚠️{0}提醒'.format(title_warning_count))
+        title_alert_prefix = '（{0}）'.format(' '.join(title_alert_parts)) if len(title_alert_parts) > 0 else ''
+
         single_host_report_list = []
         for doc in single_documents:
             validation = doc.get('validation', {}) or {}
@@ -1639,11 +1648,9 @@ class HostReportAnalyser(object):
             })
 
         host_normal = len(normal_documents)
-        title_prefix = '📊 {0}-全部主机概览报告（'.format(jh.getConfig('title'))
-        if host_warning > 0:
-            title = '{0}{1}正常 {2}提醒 {3}异常）'.format(title_prefix, host_normal, host_warning, host_error)
-        else:
-            title = '{0}{1}正常 {2}异常）'.format(title_prefix, host_normal, host_error)
+        title_prefix = '📊 {0}-全部主机概览报告'.format(jh.getConfig('title'))
+        title = title_prefix
+        title = title_alert_prefix + title
         overview_payload = {
             'title': title,
             'title_prefix': title_prefix,
