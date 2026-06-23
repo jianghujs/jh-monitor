@@ -172,6 +172,11 @@ class HostReportSender(HostReportAnalyser):
         self._es.index(index_name, doc_id, document=document)
         self.log_tool.warn('[report-delivery] 跳过发送', index=index_name, doc_id=doc_id, reason=error_message)
 
+    def _is_report_already_sent(self, document):
+        """判断报告是否已经成功发送，避免调度窗口内重复投递。"""
+        delivery = normalize_delivery_state(document.get('delivery', {}) if isinstance(document, dict) else {})
+        return delivery.get('status') == 'success' and bool(delivery.get('last_sent_time'))
+
     def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None):
         """执行发送阶段：先发总览，再发异常单机报告。"""
         window = self.get_report_window(report_date)
@@ -241,19 +246,28 @@ class HostReportSender(HostReportAnalyser):
         single_failed = 0
         single_skipped = 0
 
-        overview_success, overview_error = self._send_report_document(
-            OVERVIEW_REPORT_INDEX,
-            overview_doc_id,
-            overview_document,
-            title_prefix=overview_document.get('title', '{0}-全部主机概览报告'.format(jh.getConfig('title')))
-        )
-        if not overview_success:
-            return {
-                'status': 'failed',
-                'reason': 'overview_send_failed',
-                'error': overview_error,
-                'report_date': window['report_date']
-            }
+        overview_already_sent = self._is_report_already_sent(overview_document)
+        overview_success = True
+        if overview_already_sent:
+            self.log_tool.step(
+                '[report-delivery] 总览报告已发送，跳过重复发送',
+                doc_id=overview_doc_id,
+                last_sent_time=value_tool.getNested(overview_document, ['delivery', 'last_sent_time'], ''),
+            )
+        else:
+            overview_success, overview_error = self._send_report_document(
+                OVERVIEW_REPORT_INDEX,
+                overview_doc_id,
+                overview_document,
+                title_prefix=overview_document.get('title', '{0}-全部主机概览报告'.format(jh.getConfig('title')))
+            )
+            if not overview_success:
+                return {
+                    'status': 'failed',
+                    'reason': 'overview_send_failed',
+                    'error': overview_error,
+                    'report_date': window['report_date']
+                }
 
         # 概览发送成功后等待 5 秒，再开始发送单机异常报告，避免与概览邮件混在一起
         if len(single_documents) > 0:
@@ -313,6 +327,7 @@ class HostReportSender(HostReportAnalyser):
             'status': 'ok' if all_done else 'partial',
             'report_date': window['report_date'],
             'overview_sent': overview_success,
+            'overview_skipped': overview_already_sent,
             'single_success': single_success,
             'single_failed': single_failed,
             'single_skipped': single_skipped,
