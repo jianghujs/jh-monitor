@@ -624,12 +624,114 @@ class HostReportAnalyser(object):
             'load_stats': load_stats,
         }
 
+    def _get_latest_rsyncd_check_doc(self, rsyncd_check_docs):
+        if not rsyncd_check_docs:
+            return None
+        return sorted(
+            rsyncd_check_docs,
+            key=lambda item: value_tool.safeInt(item.get('add_timestamp', 0), value_tool.parseTime(item.get('add_time', '')))
+        )[-1]
+
+    def _build_rsyncd_check_section(self, rsyncd_check_docs, window, validation_errors):
+        """基于 collector 执行 tool_check.py 的结果生成 Rsyncd 报告段落。"""
+        latest_check = self._get_latest_rsyncd_check_doc(rsyncd_check_docs)
+        if not latest_check:
+            return {
+                'tips': [],
+                'summary_names': [],
+                'error_tips': []
+            }
+
+        check_status = str(latest_check.get('status', '') or '')
+        message = latest_check.get('message', '') or ''
+        add_time = latest_check.get('add_time', '') or '无'
+        execute_ok = bool(latest_check.get('execute_ok'))
+        result = latest_check.get('result') if isinstance(latest_check.get('result'), dict) else {}
+
+        desc_parts = [
+            '检查时间：{0}'.format(value_tool.escapeHtml(add_time)),
+            '执行状态：{0}'.format(
+                '<span style="color: green">成功</span>' if execute_ok else '<span style="color: red">异常</span>'
+            )
+        ]
+        if message:
+            color = 'auto' if check_status in ('normal', 'skipped') else 'red'
+            desc_parts.append('说明：<span style="color: {0}">{1}</span>'.format(color, value_tool.escapeHtml(message)))
+
+        summary_names = []
+        error_tips = []
+        if check_status == 'abnormal' or (latest_check.get('tool_check_exists') is False and latest_check.get('rsyncd_server_exists')):
+            summary_names.append('Rsyncd')
+            error_tips.append('Rsyncd检查异常：' + (message or 'tool_check.py 执行异常'))
+            validation_errors.append('rsyncd_tool_check_abnormal')
+
+        if execute_ok and isinstance(result, dict):
+            send_count = value_tool.safeInt(result.get('send_count', 0))
+            open_count = value_tool.safeInt(result.get('send_open_count', 0))
+            realtime_delays = value_tool.safeInt(result.get('realtime_delays', 0))
+            desc_parts.append('任务数量：启用 {0} / 总数 {1}'.format(open_count, send_count))
+            desc_parts.append('实时同步延迟文件数：{0}'.format(
+                '<span style="color: orange">{0}</span>'.format(realtime_delays) if realtime_delays > 0 else str(realtime_delays)
+            ))
+
+            realtime_ok = result.get('realtime_format_ok', True)
+            realtime_reason = result.get('realtime_format_reason', '') or ''
+            if realtime_ok is False:
+                desc_parts.append('实时同步状态：<span style="color: red">异常（{0}）</span>'.format(value_tool.escapeHtml(realtime_reason)))
+                summary_names.append('实时备份')
+                error_tips.append('实时同步状态异常：' + realtime_reason)
+                validation_errors.append('rsyncd_realtime_abnormal')
+            else:
+                desc_parts.append('实时同步状态：<span style="color: auto">正常</span>')
+
+            if realtime_delays > 0:
+                error_tips.append('实时备份文件延迟{0}个'.format(realtime_delays))
+
+            fixtime_abnormal_tasks = result.get('fixtime_abnormal_tasks', []) or []
+            if len(fixtime_abnormal_tasks) > 0:
+                names = []
+                details = []
+                for task in fixtime_abnormal_tasks:
+                    task_name = str(task.get('name', '') or '')
+                    reason = str(task.get('reason', '') or '')
+                    names.append(task_name)
+                    details.append('{0}（{1}）'.format(task_name, reason))
+                desc_parts.append('定时同步异常：<span style="color: red">{0}</span>'.format(value_tool.escapeHtml('、'.join(details))))
+                summary_names.extend([name for name in names if name])
+                error_tips.append('定时同步状态异常：' + '；'.join(details))
+                validation_errors.append('rsyncd_fixtime_abnormal')
+            else:
+                desc_parts.append('定时同步状态：<span style="color: auto">正常</span>')
+
+            for item in result.get('send_open_fixtime_list', []) or []:
+                item_name = str(item.get('name', '') or '')
+                last_sync_at = str(item.get('last_sync_at', '') or '无')
+                reason = str(item.get('log_format_reason', '') or '')
+                line = '- {0}：{1}'.format(value_tool.escapeHtml(item_name), value_tool.escapeHtml(last_sync_at))
+                if item.get('log_format_ok') is False:
+                    line += ' <span style="color: red">[同步异常：{0}]</span>'.format(value_tool.escapeHtml(reason))
+                desc_parts.append(line)
+
+        return {
+            'tips': [{'name': 'Rsyncd', 'desc': '<br/>'.join(desc_parts)}],
+            'summary_names': summary_names,
+            'error_tips': error_tips
+        }
+
     def _build_backup_section(self, latest_doc, xtrabackup_docs, xtrabackup_inc_docs, backup_docs, window, validation_errors):
         """生成备份状态段落，并校验备份证据是否完整。"""
         backup_tips = []
         summary_names = []
         error_tips = []
         runtime_backup = latest_doc.get('backup', {}) if isinstance(latest_doc, dict) else {}
+        rsyncd_check_docs = [
+            doc for doc in backup_docs
+            if str(doc.get('collector_source', '') or '') == 'jh-panel-rsyncd-tool-check'
+        ]
+        normal_backup_docs = [
+            doc for doc in backup_docs
+            if str(doc.get('collector_source', '') or '') != 'jh-panel-rsyncd-tool-check'
+        ]
 
         xtrabackup_runtime = runtime_backup.get('xtrabackup', {}) if isinstance(runtime_backup, dict) else {}
         xtrabackup_summary = self._merge_backup_summary(xtrabackup_runtime, self._summarize_backup_rows(xtrabackup_docs))
@@ -688,12 +790,17 @@ class HostReportAnalyser(object):
                 summary_names.append('MySQL Dump')
                 validation_errors.append('missing_mysql_dump_evidence')
 
-        if len(backup_docs) > 0:
-            latest_backup_event = sorted(backup_docs, key=lambda item: value_tool.parseTime(item.get('add_time', '')))[-1]
+        rsyncd_section = self._build_rsyncd_check_section(rsyncd_check_docs, window, validation_errors)
+        backup_tips.extend(rsyncd_section.get('tips', []))
+        summary_names.extend(rsyncd_section.get('summary_names', []))
+        error_tips.extend(rsyncd_section.get('error_tips', []))
+
+        if len(normal_backup_docs) > 0:
+            latest_backup_event = sorted(normal_backup_docs, key=lambda item: value_tool.parseTime(item.get('add_time', '')))[-1]
             event_message = latest_backup_event.get('message', '') or latest_backup_event.get('filename', '') or latest_backup_event.get('path', '') or '存在备份事件记录'
             backup_tips.append({
                 'name': '备份事件',
-                'desc': '窗口内事件数：{0}<br/>{1}'.format(len(backup_docs), value_tool.escapeHtml(event_message))
+                'desc': '窗口内事件数：{0}<br/>{1}'.format(len(normal_backup_docs), value_tool.escapeHtml(event_message))
             })
 
         summary_tips = []
@@ -1341,7 +1448,6 @@ class HostReportAnalyser(object):
         xtrabackup_docs = host_group.get('xtrabackup', []) or []
         xtrabackup_inc_docs = host_group.get('xtrabackup_inc', []) or []
         backup_docs = host_group.get('backup', []) or []
-
         validation_errors = []
         if len(status_docs) == 0:
             validation_errors.append('missing_system_status')

@@ -5,6 +5,7 @@ import glob
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -153,6 +154,96 @@ def export_status_payload(output_dir, payload, file_prefix='host-debian-system-s
     return output_path
 
 
+PANEL_DIR = '/www/server/jh-panel'
+RSYNCD_SERVER_DIR = '/www/server/rsyncd'
+RSYNCD_PLUGIN_DIR = os.path.join(PANEL_DIR, 'plugins', 'rsyncd')
+RSYNCD_TOOL_CHECK_FILE = os.path.join(RSYNCD_PLUGIN_DIR, 'tool_check.py')
+
+
+def export_rsyncd_tool_check(output_dir, host_meta):
+    """Try panel rsyncd tool_check.py and export one status row.
+
+    Some hosts have old jh-panel code and do not have plugins/rsyncd/tool_check.py.
+    This function must never break the collector: missing panel/plugin/tool or execution
+    failures are exported as abnormal/skipped rows with a clear message.
+    """
+    now = datetime.datetime.now()
+    row = {
+        'host_id': host_meta['host_id'],
+        'host_name': host_meta['host_name'],
+        'host_ip': host_meta['host_ip'],
+        'add_time': now.strftime('%Y-%m-%d %H:%M:%S'),
+        'add_timestamp': now.timestamp(),
+        'collector_source': 'jh-panel-rsyncd-tool-check',
+        'panel_dir': PANEL_DIR,
+        'plugin_dir': RSYNCD_PLUGIN_DIR,
+        'tool_check_file': RSYNCD_TOOL_CHECK_FILE,
+        'panel_exists': os.path.isdir(PANEL_DIR),
+        'rsyncd_server_exists': os.path.isdir(RSYNCD_SERVER_DIR),
+        'rsyncd_plugin_exists': os.path.isdir(RSYNCD_PLUGIN_DIR),
+        'tool_check_exists': os.path.isfile(RSYNCD_TOOL_CHECK_FILE),
+        'execute_ok': False,
+        'status': 'skipped',
+        'message': '',
+        'result': None,
+        'stdout': '',
+        'stderr': ''
+    }
+
+    if not row['panel_exists']:
+        row['message'] = '未检测到江湖面板目录，跳过 rsyncd 检查'
+    elif not row['rsyncd_server_exists'] and not row['rsyncd_plugin_exists']:
+        row['message'] = '未检测到 rsyncd 服务目录或面板 rsyncd 插件，跳过检查'
+    elif not row['tool_check_exists']:
+        row['status'] = 'abnormal'
+        row['message'] = '检测到江湖面板/rsyncd，但缺少 plugins/rsyncd/tool_check.py，可能面板代码未更新'
+    else:
+        try:
+            log('run rsyncd tool_check: %s' % RSYNCD_TOOL_CHECK_FILE)
+            proc = subprocess.run(
+                ['python3', RSYNCD_TOOL_CHECK_FILE, 'get_info'],
+                cwd=PANEL_DIR,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=120,
+                universal_newlines=True
+            )
+            row['stdout'] = (proc.stdout or '').strip()[-8000:]
+            row['stderr'] = (proc.stderr or '').strip()[-8000:]
+            if proc.returncode != 0:
+                row['status'] = 'abnormal'
+                row['message'] = '执行 rsyncd tool_check.py 失败，returncode=%s' % proc.returncode
+            else:
+                try:
+                    result = json.loads((proc.stdout or '').strip() or 'null')
+                    row['result'] = result
+                    row['execute_ok'] = True
+                    if isinstance(result, dict) and result.get('status') is False:
+                        row['status'] = 'abnormal'
+                        row['message'] = result.get('msg') or 'rsyncd tool_check.py 返回异常状态'
+                    else:
+                        row['status'] = 'normal'
+                        row['message'] = 'rsyncd tool_check.py 执行成功'
+                except Exception as e:
+                    row['status'] = 'abnormal'
+                    row['message'] = 'rsyncd tool_check.py 执行成功，但输出不是合法 JSON：%s' % e
+        except subprocess.TimeoutExpired as e:
+            row['status'] = 'abnormal'
+            row['message'] = '执行 rsyncd tool_check.py 超时'
+            row['stdout'] = ((e.stdout or '') if isinstance(e.stdout, str) else '').strip()[-8000:]
+            row['stderr'] = ((e.stderr or '') if isinstance(e.stderr, str) else '').strip()[-8000:]
+        except Exception as e:
+            row['status'] = 'abnormal'
+            row['message'] = '执行 rsyncd tool_check.py 异常：%s' % e
+            row['stderr'] = traceback.format_exc()[-8000:]
+
+    file_date = now.strftime('%Y%m%d')
+    output_path = os.path.join(output_dir, 'host-debian-backup-%s.ndjson' % file_date)
+    append_ndjson(output_path, [row])
+    log('rsyncd tool_check exported to backup index: status=%s message=%s path=%s' % (row['status'], row['message'], output_path))
+    return output_path
+
+
 def cleanup_old_files(output_dir, retention_days):
     now_ts = datetime.datetime.now().timestamp()
     expire_ts = now_ts - int(retention_days) * 86400
@@ -211,6 +302,8 @@ def run(output_dir, retention_days):
         from get_debian_system_status import collect_extra_exports as collect_debian_extra_exports
         log('collect debian extra exports')
         created_files.extend(collect_debian_extra_exports(output_dir, state, host_meta))
+        log('collect rsyncd tool_check')
+        created_files.append(export_rsyncd_tool_check(output_dir, host_meta))
     else:
         log('skip debian extra exports on pve host')
 
