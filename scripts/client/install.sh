@@ -370,6 +370,14 @@ elif [ "$action" == "install" ]; then
 
     # 配置filebeat
     config_filebeat
+elif [ "$action" == "update" ]; then
+    confirm_action "$action" "$monitor_url"
+
+    # 更新日报采集脚本与 cron
+    install_report_collector
+
+    # 更新 filebeat 配置
+    config_filebeat
 elif [ "$action" == "set_user_permission" ]; then
     confirm_action "$action" "$monitor_url"
     # 仅初始化ansible_user权限相关设置

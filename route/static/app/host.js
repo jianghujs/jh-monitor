@@ -1146,7 +1146,7 @@ function submitChangeHostGroup() {
 function openHostAdd() {
   layer.open({
     type: 1,
-    area: ['640px', '600px'],
+    area: ['640px', '700px'],
     title: '添加主机',
     closeBtn: 1,
     shift: 0,
@@ -1179,19 +1179,43 @@ function openHostAdd() {
               <button class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded-r">Windows</button>
             </div>
           </div>
-          <h3 class="font-medium mb-4">安装命令</h3>
           <div class="mb-4">
-            <label class="block mb-4">国际源</label>
-            <div class="flex items-center bg-gray-200 p-5 rounded">
-              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGithub"></div>
-              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGithub')">复制</button>
+            <label class="block font-medium mb-4">命令类型</label>
+            <div class="flex items-center rounded">
+              <button id="clientCommandModeInstall" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-l" onclick="setClientCommandMode('install')">安装</button>
+              <button id="clientCommandModeUpdate" class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded-r" onclick="setClientCommandMode('update')">更新</button>
             </div>
           </div>
-          <div class="mb-4">
-            <label class="block mb-4">国内源</label>
-            <div class="flex items-center bg-gray-200 p-5 rounded">
-              <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGitee"></div>
-              <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGitee')">复制</button>
+          <div id="clientInstallCommandBox">
+            <div class="mb-4">
+              <label class="block mb-4">国际源</label>
+              <div class="flex items-center bg-gray-200 p-5 rounded">
+                <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGithub"></div>
+                <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGithub')">复制</button>
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block mb-4">国内源</label>
+              <div class="flex items-center bg-gray-200 p-5 rounded">
+                <div class="flex-1 overflow-x-auto break-words" id="clientInstallShellLANOfGitee"></div>
+                <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientInstallShellLANOfGitee')">复制</button>
+              </div>
+            </div>
+          </div>
+          <div id="clientUpdateCommandBox" hidden>
+            <div class="mb-4">
+              <label class="block mb-4">国际源</label>
+              <div class="flex items-center bg-gray-200 p-5 rounded">
+                <div class="flex-1 overflow-x-auto break-words" id="clientUpdateShellLANOfGithub"></div>
+                <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientUpdateShellLANOfGithub')">复制</button>
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block mb-4">国内源</label>
+              <div class="flex items-center bg-gray-200 p-5 rounded">
+                <div class="flex-1 overflow-x-auto break-words" id="clientUpdateShellLANOfGitee"></div>
+                <button class="ml-2 bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded" onclick="copyClientInstallShellLAN('clientUpdateShellLANOfGitee')">复制</button>
+              </div>
             </div>
           </div>
           <div class="mb-4" hidden>
@@ -1221,8 +1245,22 @@ function openHostAdd() {
     if (rdata.status){
       $("#clientInstallShellLANOfGithub").html(rdata.data.github);
       $("#clientInstallShellLANOfGitee").html(rdata.data.gitee);
+      $("#clientUpdateShellLANOfGithub").html(rdata.data.github_update || '');
+      $("#clientUpdateShellLANOfGitee").html(rdata.data.gitee_update || '');
     }
   });
+}
+
+function setClientCommandMode(mode) {
+  var isUpdate = mode === 'update';
+  $('#clientInstallCommandBox').prop('hidden', isUpdate);
+  $('#clientUpdateCommandBox').prop('hidden', !isUpdate);
+  $('#clientCommandModeInstall')
+    .toggleClass('bg-green-600 hover:bg-green-700', !isUpdate)
+    .toggleClass('bg-gray-700 hover:bg-gray-800', isUpdate);
+  $('#clientCommandModeUpdate')
+    .toggleClass('bg-green-600 hover:bg-green-700', isUpdate)
+    .toggleClass('bg-gray-700 hover:bg-gray-800', !isUpdate);
 }
 
 /**

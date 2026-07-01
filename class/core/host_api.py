@@ -474,15 +474,16 @@ class host_api:
         return jh.getJson(log_detail)
 
     def getClientInstallShellLanApi(self):
-        client_install_shell = f"curl -sSO https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh && bash install.sh install http://{jh.getHostAddr()}:10844"
         server_ip = jh.getHostAddr()
         github_script_url = "https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh"
         gitee_script_url = "https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/client/install.sh"
-        command_template = "wget -O /tmp/install.sh %s && bash /tmp/install.sh install http://%s:10844"
-        command_template_cn = "wget -O /tmp/install.sh %s && bash /tmp/install.sh install http://%s:10844 cn"
+        command_template = "wget -O /tmp/install.sh %s && bash /tmp/install.sh %s http://%s:10844"
+        command_template_cn = "wget -O /tmp/install.sh %s && bash /tmp/install.sh %s http://%s:10844 cn"
         return jh.returnJson(True, 'ok', {
-            'github': command_template % (github_script_url, server_ip),
-            'gitee': command_template_cn % (gitee_script_url, server_ip)
+            'github': command_template % (github_script_url, 'install', server_ip),
+            'gitee': command_template_cn % (gitee_script_url, 'install', server_ip),
+            'github_update': command_template % (github_script_url, 'update', server_ip),
+            'gitee_update': command_template_cn % (gitee_script_url, 'update', server_ip)
         })
 
     def alarmApi(self):
