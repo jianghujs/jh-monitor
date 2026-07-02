@@ -70,9 +70,9 @@ DEFAULT_REPORT_THRESHOLDS = {
 }
 
 RAW_STATUS_INDEX = 'host-*-system-status-*'
-RAW_XTRABACKUP_INDEX = 'host-debian-xtrabackup-*'
-RAW_XTRABACKUP_INC_INDEX = 'host-debian-xtrabackup-inc-*'
-RAW_BACKUP_INDEX = 'host-debian-backup-*'
+RAW_XTRABACKUP_INDEX = 'host-*-xtrabackup-*'
+RAW_XTRABACKUP_INC_INDEX = 'host-*-xtrabackup-inc-*'
+RAW_BACKUP_INDEX = 'host-*-backup-*'
 SINGLE_REPORT_INDEX = 'host-report-single'
 OVERVIEW_REPORT_INDEX = 'host-report-overview'
 SINGLE_REPORT_DATA_STREAM_PREFIX = 'host-report-single'
@@ -735,14 +735,19 @@ class HostReportAnalyser(object):
 
         xtrabackup_runtime = runtime_backup.get('xtrabackup', {}) if isinstance(runtime_backup, dict) else {}
         xtrabackup_summary = self._merge_backup_summary(xtrabackup_runtime, self._summarize_backup_rows(xtrabackup_docs))
-        xtrabackup_enabled = bool(xtrabackup_runtime.get('enabled')) or len(xtrabackup_docs) > 0
-        if xtrabackup_enabled:
+        xtrabackup_enabled = bool(xtrabackup_runtime.get('enabled'))
+        xtrabackup_visible = xtrabackup_enabled or len(xtrabackup_docs) > 0 or bool(xtrabackup_summary.get('last_backup_time'))
+        if xtrabackup_visible:
             last_time = xtrabackup_summary.get('last_backup_time') or '无'
             count_in_window = value_tool.safeInt(xtrabackup_summary.get('count_in_timeframe', 0))
-            desc = '最后成功时间：{0}<br/>窗口内备份次数：{1}'.format(last_time, count_in_window)
+            desc = '状态：{0}<br/>最后成功时间：{1}<br/>窗口内备份次数：{2}'.format(
+                '<span style="color: auto">已启用</span>' if xtrabackup_enabled else '<span style="color: #999">未启用</span>',
+                last_time,
+                count_in_window
+            )
             backup_tips.append({'name': 'Xtrabackup', 'desc': desc})
             last_ts = value_tool.safeInt(xtrabackup_summary.get('last_backup_timestamp', 0), value_tool.parseTime(last_time))
-            if count_in_window <= 0 or last_ts < window['start_timestamp']:
+            if xtrabackup_enabled and (count_in_window <= 0 or last_ts < window['start_timestamp']):
                 summary_names.append('Xtrabackup')
                 validation_errors.append('missing_xtrabackup_evidence')
 
@@ -759,11 +764,13 @@ class HostReportAnalyser(object):
         inc_inc_runtime = xtrabackup_inc_runtime.get('inc', {}) if isinstance(xtrabackup_inc_runtime, dict) else {}
         inc_full_summary = self._merge_backup_summary(inc_full_runtime, self._summarize_backup_rows(inc_full_docs))
         inc_inc_summary = self._merge_backup_summary(inc_inc_runtime, self._summarize_backup_rows(inc_inc_docs))
-        xtrabackup_inc_enabled = bool(xtrabackup_inc_runtime.get('enabled')) or len(xtrabackup_inc_docs) > 0
-        if xtrabackup_inc_enabled:
+        xtrabackup_inc_enabled = bool(xtrabackup_inc_runtime.get('enabled'))
+        xtrabackup_inc_visible = xtrabackup_inc_enabled or len(xtrabackup_inc_docs) > 0 or bool(inc_full_summary.get('last_backup_time')) or bool(inc_inc_summary.get('last_backup_time'))
+        if xtrabackup_inc_visible:
             full_time = inc_full_summary.get('last_backup_time') or '无'
             inc_time = inc_inc_summary.get('last_backup_time') or '无'
-            desc = '全量：{0}<br/>增量：{1}<br/>窗口内全量/增量次数：{2}/{3}'.format(
+            desc = '状态：{0}<br/>全量：{1}<br/>增量：{2}<br/>窗口内全量/增量次数：{3}/{4}'.format(
+                '<span style="color: auto">已启用</span>' if xtrabackup_inc_enabled else '<span style="color: #999">未启用</span>',
                 full_time,
                 inc_time,
                 value_tool.safeInt(inc_full_summary.get('count_in_timeframe', 0)),
@@ -772,21 +779,26 @@ class HostReportAnalyser(object):
             backup_tips.append({'name': 'Xtrabackup增量', 'desc': desc})
             full_ok = value_tool.safeInt(inc_full_summary.get('count_in_timeframe', 0)) > 0 and value_tool.safeInt(inc_full_summary.get('last_backup_timestamp', 0), value_tool.parseTime(full_time)) >= window['start_timestamp']
             inc_ok = value_tool.safeInt(inc_inc_summary.get('count_in_timeframe', 0)) > 0 and value_tool.safeInt(inc_inc_summary.get('last_backup_timestamp', 0), value_tool.parseTime(inc_time)) >= window['start_timestamp']
-            if not (full_ok and inc_ok):
+            if xtrabackup_inc_enabled and not (full_ok and inc_ok):
                 summary_names.append('Xtrabackup增量')
                 validation_errors.append('missing_xtrabackup_inc_evidence')
 
         mysql_dump_runtime = runtime_backup.get('mysql_dump', {}) if isinstance(runtime_backup, dict) else {}
         mysql_dump_enabled = bool(mysql_dump_runtime.get('enabled'))
-        if mysql_dump_enabled:
+        mysql_dump_visible = mysql_dump_enabled or bool(mysql_dump_runtime.get('last_backup_time'))
+        if mysql_dump_visible:
             last_dump_time = mysql_dump_runtime.get('last_backup_time') or '无'
             dump_count = value_tool.safeInt(mysql_dump_runtime.get('count_in_timeframe', 0))
             abnormal_dump_files = value_tool.safeInt(mysql_dump_runtime.get('abnormal_files_in_timeframe', 0))
-            desc = '最后成功时间：{0}<br/>窗口内备份次数：{1}'.format(last_dump_time, dump_count)
+            desc = '状态：{0}<br/>最后成功时间：{1}<br/>窗口内备份次数：{2}'.format(
+                '<span style="color: auto">已启用</span>' if mysql_dump_enabled else '<span style="color: #999">未启用</span>',
+                last_dump_time,
+                dump_count
+            )
             if abnormal_dump_files > 0:
                 desc += '<br/><span style="color: orange">异常备份文件：{0}个</span>'.format(abnormal_dump_files)
             backup_tips.append({'name': 'MySQL Dump', 'desc': desc})
-            if dump_count <= 0:
+            if mysql_dump_enabled and dump_count <= 0:
                 summary_names.append('MySQL Dump')
                 validation_errors.append('missing_mysql_dump_evidence')
 
@@ -801,6 +813,12 @@ class HostReportAnalyser(object):
             backup_tips.append({
                 'name': '备份事件',
                 'desc': '窗口内事件数：{0}<br/>{1}'.format(len(normal_backup_docs), value_tool.escapeHtml(event_message))
+            })
+
+        if len(backup_tips) == 0:
+            backup_tips.append({
+                'name': '备份状态',
+                'desc': '<span style="color: #999">未检测到已启用备份任务或 rsyncd 检查数据</span>'
             })
 
         summary_tips = []
