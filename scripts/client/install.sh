@@ -186,7 +186,25 @@ add_server_ssh_cert(){
     fi
 }
 
+resolve_monitor_server_env() {
+    if [ -n "$SERVER_IP" ]; then
+        export SERVER_IP
+        export SERVER_PORT
+        return 0
+    fi
+
+    if [ -n "$monitor_url" ]; then
+        SERVER_IP=$(echo "${monitor_url}" | cut -d'/' -f3 | cut -d':' -f1)
+        SERVER_PORT=$(echo "${monitor_url}" | awk -F ":" '{print $3}')
+        export SERVER_IP
+        export SERVER_PORT
+        echo "已从云监控地址解析ELK服务端: ${SERVER_IP}${SERVER_PORT:+:${SERVER_PORT}}"
+    fi
+}
+
+
 config_filebeat() {
+    resolve_monitor_server_env
     export JH_MONITOR_HOST_ID_FILE="$HOST_ID_FILE"
     echo "开始下载最新 filebeat 安装脚本..."
     if wget -O /tmp/install_filebeat.sh "${RAW_BASE}/scripts/client/install/filebeat/install.sh"; then
@@ -344,11 +362,7 @@ if [ "$action" == "uninstall" ]; then
     echo "卸载逻辑待实现"
 elif [ "$action" == "install" ]; then
     confirm_action "$action" "$monitor_url"
-    SERVER_IP=$(echo "${monitor_url}" | cut -d'/' -f3 | cut -d':' -f1)
-    SERVER_PORT=$(echo "${monitor_url}" | awk -F ":" '{print $3}')
-
-    export SERVER_IP
-    export SERVER_PORT
+    resolve_monitor_server_env
 
     # 添加ansible用户
     add_ansible_user
@@ -372,6 +386,7 @@ elif [ "$action" == "install" ]; then
     config_filebeat
 elif [ "$action" == "update" ]; then
     confirm_action "$action" "$monitor_url"
+    resolve_monitor_server_env
 
     # 更新日报采集脚本与 cron
     install_report_collector
