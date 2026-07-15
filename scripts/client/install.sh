@@ -47,8 +47,9 @@ confirm_action() {
     echo "4. 配置服务端 SSH 公钥访问"
     echo "5. 通知服务端添加当前主机并保存 host_id"
     echo "6. 安装或更新数据收集定时任务"
-    echo "7. 配置数据收集定时任务"
-    echo "8. 配置 filebeat"
+    echo "7. 为 PVE 主机安装传感器依赖"
+    echo "8. 配置数据收集定时任务"
+    echo "9. 配置 filebeat"
     echo "-----------------------"
     echo "云监控地址: ${current_url:-未提供}"
     echo "当前操作: ${current_action}"
@@ -58,6 +59,46 @@ confirm_action() {
         echo "已取消执行"
         exit 0
     fi
+}
+
+install_pve_sensor_tools() {
+    if [ ! -d /etc/pve ]; then
+        echo "未检测到 PVE 环境，跳过传感器依赖安装。"
+        return 0
+    fi
+
+    echo "检测到 PVE 环境，开始安装传感器依赖（lm-sensors、ipmitool）..."
+
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq
+        apt-get install -y lm-sensors ipmitool
+        sensors-detect --auto >/dev/null 2>&1 || true
+        modprobe ipmi_devintf >/dev/null 2>&1 || true
+        modprobe ipmi_si >/dev/null 2>&1 || true
+        echo "PVE 传感器依赖安装完成。"
+        return 0
+    fi
+
+    if command -v dnf >/dev/null 2>&1; then
+        dnf install -y lm_sensors ipmitool
+        sensors-detect --auto >/dev/null 2>&1 || true
+        modprobe ipmi_devintf >/dev/null 2>&1 || true
+        modprobe ipmi_si >/dev/null 2>&1 || true
+        echo "PVE 传感器依赖安装完成。"
+        return 0
+    fi
+
+    if command -v yum >/dev/null 2>&1; then
+        yum install -y lm_sensors ipmitool
+        sensors-detect --auto >/dev/null 2>&1 || true
+        modprobe ipmi_devintf >/dev/null 2>&1 || true
+        modprobe ipmi_si >/dev/null 2>&1 || true
+        echo "PVE 传感器依赖安装完成。"
+        return 0
+    fi
+
+    echo "未找到可用包管理器，跳过 PVE 传感器依赖安装。"
+    return 0
 }
 
 add_ansible_user(){
@@ -379,6 +420,9 @@ elif [ "$action" == "install" ]; then
     # 通知服务端添加主机
     notify_server_add_host
 
+    # 为 PVE 主机安装传感器依赖
+    install_pve_sensor_tools
+
     # 安装或更新日报采集脚本与 cron
     install_report_collector
 
@@ -387,6 +431,9 @@ elif [ "$action" == "install" ]; then
 elif [ "$action" == "update" ]; then
     confirm_action "$action" "$monitor_url"
     resolve_monitor_server_env
+
+    # 为 PVE 主机安装传感器依赖
+    install_pve_sensor_tools
 
     # 更新日报采集脚本与 cron
     install_report_collector
