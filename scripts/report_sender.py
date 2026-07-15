@@ -195,6 +195,13 @@ class HostReportSender(HostReportAnalyser):
         elapsed_seconds = max(self.now_ts - last_sent_ts, 0)
         return elapsed_seconds < cooldown_seconds, elapsed_seconds
 
+    def _get_single_report_title_label(self, document):
+        """根据单机报告类型生成邮件标题后缀。"""
+        report_type = str(document.get('host_report_type', '') or '').lower()
+        if report_type == 'pve' or value_tool.safeBool(document.get('is_pve')):
+            return 'PVE硬件健康报告'
+        return '服务器报告'
+
     def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None, force_send=False):
         """执行发送阶段：先发总览，再发异常单机报告。"""
         window = self.get_report_window(report_date)
@@ -311,11 +318,12 @@ class HostReportSender(HostReportAnalyser):
                 time.sleep(sleep_seconds)
 
             single_icon = '🔴' if document.get('is_abnormal') else '🟢'
-            title = '{0} {1}-{2}({3})-服务器报告 {4}'.format(
+            title = '{0} {1}-{2}({3})-{4} {5}'.format(
                 single_icon,
                 jh.getConfig('title'),
                 document.get('host_name', ''),
                 document.get('host_ip', ''),
+                self._get_single_report_title_label(document),
                 window['report_date']
             )
             success, error_message = self._send_report_document(SINGLE_REPORT_INDEX, doc_id, document, title_prefix=title)

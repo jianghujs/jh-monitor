@@ -931,8 +931,24 @@ class HostReportAnalyser(object):
             })
         return mysqlinfo_tips
 
-    def _is_pve_host(self, host_row):
-        return value_tool.safeBool(host_row.get('is_pve'))
+    def _is_pve_status_doc(self, status_doc):
+        if not isinstance(status_doc, dict):
+            return False
+        if str(status_doc.get('log_index', '') or '') == 'host-pve-system-status':
+            return True
+        if str(value_tool.getNested(status_doc, ['system', 'system_type'], '') or '').lower() == 'pve':
+            return True
+        if isinstance(status_doc.get('pve'), dict):
+            return True
+        return False
+
+    def _is_pve_host(self, host_row, status_docs=None):
+        if value_tool.safeBool(host_row.get('is_pve')):
+            return True
+        for status_doc in status_docs or []:
+            if self._is_pve_status_doc(status_doc):
+                return True
+        return False
 
     def _format_pve_bytes(self, value):
         try:
@@ -1470,7 +1486,8 @@ class HostReportAnalyser(object):
         if len(status_docs) == 0:
             validation_errors.append('missing_system_status')
 
-        if self._is_pve_host(host_row):
+        is_pve_host = self._is_pve_host(host_row, status_docs)
+        if is_pve_host:
             latest_doc = status_docs[-1] if status_docs else {}
             report_payload, error_tips = self._build_pve_report_payload(host_row, latest_doc, window, validation_errors)
             summary_tips = report_payload.get('summary_tips', [])
@@ -1529,7 +1546,9 @@ class HostReportAnalyser(object):
         monitor_task_section = self._build_monitor_task_section(host_row, self.now_ts)
         monitor_task_results = monitor_task_section.get('monitor_task_results', [])
 
-        html_content = h_api.buildHostReportMessage(host_row, report_payload)
+        render_host_row = dict(host_row)
+        render_host_row['is_pve'] = 1 if is_pve_host else 0
+        html_content = h_api.buildHostReportMessage(render_host_row, report_payload)
         if not html_content or '暂无报告内容' in html_content:
             validation_errors.append('empty_html_content')
 
@@ -1561,12 +1580,14 @@ class HostReportAnalyser(object):
         site_title = jh.getConfig('title')
         document = {
             'report_type': 'single',
+            'host_report_type': 'pve' if is_pve_host else 'panel',
+            'is_pve': is_pve_host,
             'title': '{0} {1}-{2}({3})-{4}'.format(
                 single_icon,
                 site_title,
                 host_name,
                 host_ip,
-                'PVE硬件健康报告' if self._is_pve_host(host_row) else '服务器运行报告'
+                'PVE硬件健康报告' if is_pve_host else '服务器运行报告'
             ),
             'report_date': window['report_date'],
             'report_time': self._format_es_datetime(window['report_time']),

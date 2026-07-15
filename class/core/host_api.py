@@ -173,7 +173,8 @@ class host_api:
         return html
 
     def buildHostReportMessage(self, host_row, report_data):
-        is_pve = value_utils.safeBool(host_row.get('is_pve'))
+        report_type = str(report_data.get('host_report_type', '') if isinstance(report_data, dict) else '').lower()
+        is_pve = report_type == 'pve' or value_utils.safeBool(host_row.get('is_pve'))
         if is_pve:
             return self.renderPVEReportHtml(host_row, report_data)
         return self.renderHostReportHtml(host_row, report_data)
