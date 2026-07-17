@@ -39,7 +39,7 @@ from get_pve_hardware_report import (
     SMART_LIFE_CRIT,
     SMART_LIFE_WARN,
     all_fans_stopped,
-    has_stopped_cpu_fan,
+    get_fan_alert_state,
     determine_status,
     to_float,
     to_int,
@@ -1189,13 +1189,10 @@ class HostReportAnalyser(object):
             collect_errors.append('传感器：' + str(sensors.get('error')))
         else:
             temps = sensors.get('temperatures', [])
-            temp_has_warning = False
             if temps:
                 temp_lines = []
                 for temp in temps:
                     status = determine_status(temp.get('value', 0), thresholds['temp_warn'], thresholds['temp_crit'])
-                    if status in ('warning', 'critical'):
-                        temp_has_warning = True
                     color = 'red' if status == 'critical' else 'orange' if status == 'warning' else 'auto'
                     temp_lines.append("{0}: <span style='color: {1}'>{2}{3}</span>".format(
                         temp.get('name', '-'),
@@ -1206,11 +1203,14 @@ class HostReportAnalyser(object):
                 sensor_tips.append({'name': '温度传感器', 'desc': '<br/>'.join(temp_lines)})
 
             fans = sensors.get('fans', [])
-            if fans and (has_stopped_cpu_fan(fans) or (temp_has_warning and all_fans_stopped(fans))):
+            fan_alert_state = get_fan_alert_state(fans, temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            if fan_alert_state != 'normal':
                 fan_lines = []
                 for fan in fans:
                     value = fan.get('value', 0)
-                    if value == 0:
+                    if fan_alert_state == 'critical':
+                        color = 'red'
+                    elif value == 0:
                         color = 'orange'
                     elif value < 500:
                         color = 'orange'
