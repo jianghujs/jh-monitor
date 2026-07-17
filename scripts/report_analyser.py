@@ -1203,7 +1203,7 @@ class HostReportAnalyser(object):
                 sensor_tips.append({'name': '温度传感器', 'desc': '<br/>'.join(temp_lines)})
 
             fans = sensors.get('fans', [])
-            fan_alert_state = get_fan_alert_state(fans, temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            fan_alert_state = get_fan_alert_state(fans, temps, thresholds['temp_warn'], thresholds['temp_crit'])
             if fan_alert_state != 'normal':
                 fan_lines = []
                 for fan in fans:
