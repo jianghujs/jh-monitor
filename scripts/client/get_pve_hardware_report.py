@@ -267,21 +267,18 @@ def has_stopped_cpu_fan(fans: List[Dict[str, Any]]) -> bool:
     return any(is_cpu_fan_name(fan.get('name', '')) and to_int(fan.get('value', 0)) == 0 for fan in fans)
 
 
-def get_fan_alert_state(fans: List[Dict[str, Any]], temperatures: List[Dict[str, Any]], warn_threshold: float, crit_threshold: float) -> str:
+def get_fan_alert_state(fans: List[Dict[str, Any]], temperature_state: str) -> str:
     if not fans:
         return 'normal'
 
-    temp_statuses = [determine_temperature_status(to_float(temp.get('value', 0)), warn_threshold, crit_threshold) for temp in temperatures or []]
-    temp_has_warning = any(status == 'warning' for status in temp_statuses)
-    temp_has_critical = any(status == 'critical' for status in temp_statuses)
     all_stopped = all_fans_stopped(fans)
     cpu_stopped = has_stopped_cpu_fan(fans)
 
-    if temp_has_critical and all_stopped:
-        return 'critical'
     if cpu_stopped:
         return 'warning'
-    if temp_has_warning and all_stopped:
+    if all_stopped and temperature_state == 'critical':
+        return 'critical'
+    if all_stopped and temperature_state == 'warning':
         return 'warning'
     return 'normal'
 
@@ -1380,7 +1377,7 @@ class HardwareReporter:
             
             fans = sensors.get('fans', [])
             temp_alert_state = get_temperature_alert_state(sensors.get('temperatures', []), self.thresholds['temp_warn'], self.thresholds['temp_crit'])
-            fan_alert_state = get_fan_alert_state(fans, sensors.get('temperatures', []), self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            fan_alert_state = get_fan_alert_state(fans, temp_alert_state)
             if fan_alert_state != 'normal':
                 message = 'CPU风扇停转' if has_stopped_cpu_fan(fans) else '风扇停转且温度异常'
                 detail = '检测到 CPU 风扇转速为 0' if has_stopped_cpu_fan(fans) else f'检测到 {len(fans)} 个风扇转速为 0，同时存在温度异常'
@@ -1663,7 +1660,8 @@ class HardwareReporter:
         # 风扇
         fans = sensors.get('fans', [])
         temps = sensors.get('temperatures', [])
-        fan_alert_state = get_fan_alert_state(fans, temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+        temp_alert_state = get_temperature_alert_state(temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+        fan_alert_state = get_fan_alert_state(fans, temp_alert_state)
         if fan_alert_state != 'normal':
             self.log("  风扇传感器:")
             for fan in fans:
@@ -1987,22 +1985,23 @@ class HardwareReporter:
                     "desc": "<br/>".join(temp_lines)
                 })
             fans = sensors.get('fans', [])
-            temp_has_warning = any(
-                determine_temperature_status(temp.get('value', 0), self.thresholds['temp_warn'], self.thresholds['temp_crit']) != 'normal'
-                for temp in temps
-            )
-            if fans and (has_stopped_cpu_fan(fans) or (temp_has_warning and all_fans_stopped(fans))):
+            temp_alert_state = get_temperature_alert_state(temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            temp_alert_state = get_temperature_alert_state(temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            fan_alert_state = get_fan_alert_state(fans, temp_alert_state)
+            if fan_alert_state != 'normal':
                 fan_lines = []
                 for fan in fans:
                     value = fan.get('value', 0)
                     unit = fan.get('unit', '')
-                    if value == 0:
+                    if fan_alert_state == 'critical':
+                        color = 'red'
+                    elif value == 0:
                         color = 'orange'
                     elif value < 500:
                         color = 'orange'
                     else:
                         color = 'auto'
-                    fan_lines.append(f"{fan.get('name', '-')}: <span style='color: {color}'>{value} {unit}</span>")
+                fan_lines.append(f"{fan.get('name', '-')}: <span style='color: {color}'>{value} {unit}</span>")
                 sensor_tips.append({
                     "name": "风扇传感器",
                     "desc": "<br/>".join(fan_lines)
@@ -2324,7 +2323,8 @@ class HardwareReporter:
             
             # 风扇传感器
             fans = sensors.get('fans', [])
-            fan_alert_state = get_fan_alert_state(fans, temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            temp_alert_state = get_temperature_alert_state(temps, self.thresholds['temp_warn'], self.thresholds['temp_crit'])
+            fan_alert_state = get_fan_alert_state(fans, temp_alert_state)
             if fan_alert_state != 'normal':
                 for fan in fans:
                     value = fan['value']
