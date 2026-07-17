@@ -844,7 +844,8 @@ class HostReportAnalyser(object):
         site_rows = latest_doc.get('site', []) if isinstance(latest_doc, dict) else []
         for site in site_rows:
             site_name = site.get('name', '') or '未命名站点'
-            site_status = '<span>运行中</span>' if str(site.get('status', '')) == '1' else '<span style="color: orange">已停止</span>'
+            is_enabled = str(site.get('status', '')) == '1'
+            site_status = '<span>运行中</span>' if is_enabled else '<span style="color: #999">已停止</span>'
             cert_data = site.get('ssl_data') or {}
             ssl_type = site.get('ssl_type') or ''
             cert_status = '未配置'
@@ -852,21 +853,32 @@ class HostReportAnalyser(object):
                 cert_not_after = cert_data.get('notAfter', '0000-00-00')
                 cert_endtime = value_tool.safeInt(cert_data.get('endtime', 0))
                 if cert_endtime < 0:
-                    cert_status = '{0}到期，已过期<span style="color: red">{1}</span>天'.format(cert_not_after, abs(cert_endtime))
-                else:
-                    color = 'auto'
-                    if cert_endtime < 3:
-                        color = 'red'
-                    elif cert_endtime < self.thresholds['ssl_cert']:
-                        color = 'orange'
-                    cert_status = '将于{0}到期，还有<span style="color: {1}">{2}</span>天{3}'.format(
-                        cert_not_after,
-                        color,
-                        cert_endtime,
-                        '，到期后将自动续签' if ssl_type in ('lets', 'acme') else ''
-                    )
-                    if ssl_type not in ('lets', 'acme') and cert_endtime < self.thresholds['ssl_cert']:
+                    if is_enabled:
+                        cert_status = '{0}到期，已过期<span style="color: red">{1}</span>天'.format(cert_not_after, abs(cert_endtime))
                         site_warning_names.append(site_name)
+                    else:
+                        cert_status = '{0}到期，已过期{1}天'.format(cert_not_after, abs(cert_endtime))
+                else:
+                    if is_enabled:
+                        color = 'auto'
+                        if cert_endtime < 3:
+                            color = 'red'
+                        elif cert_endtime < self.thresholds['ssl_cert']:
+                            color = 'orange'
+                        cert_status = '将于{0}到期，还有<span style="color: {1}">{2}</span>天{3}'.format(
+                            cert_not_after,
+                            color,
+                            cert_endtime,
+                            '，到期后将自动续签' if ssl_type in ('lets', 'acme') else ''
+                        )
+                        if ssl_type not in ('lets', 'acme') and cert_endtime < self.thresholds['ssl_cert']:
+                            site_warning_names.append(site_name)
+                    else:
+                        cert_status = '将于{0}到期，还有{1}天{2}'.format(
+                            cert_not_after,
+                            cert_endtime,
+                            '，到期后将自动续签' if ssl_type in ('lets', 'acme') else ''
+                        )
             site_tips.append({'name': site_name, 'desc': '{0}（SSL证书{1}）'.format(site_status, cert_status)})
         if len(site_warning_names) > 0:
             summary_text = '、'.join(site_warning_names) + '域名证书需要及时更新'
