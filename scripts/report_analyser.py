@@ -639,6 +639,7 @@ class HostReportAnalyser(object):
         if not latest_check:
             return {
                 'tips': [],
+                'summary_tips': [],
                 'summary_names': [],
                 'error_tips': []
             }
@@ -660,6 +661,7 @@ class HostReportAnalyser(object):
             desc_parts.append('说明：<span style="color: {0}">{1}</span>'.format(color, value_tool.escapeHtml(message)))
 
         summary_names = []
+        summary_tips = []
         error_tips = []
         if check_status == 'abnormal' or (latest_check.get('tool_check_exists') is False and latest_check.get('rsyncd_server_exists')):
             summary_names.append('Rsyncd')
@@ -674,6 +676,8 @@ class HostReportAnalyser(object):
             desc_parts.append('实时同步延迟文件数：{0}'.format(
                 '<span style="color: orange">{0}</span>'.format(realtime_delays) if realtime_delays > 0 else str(realtime_delays)
             ))
+            if realtime_delays > 0:
+                summary_tips.append("<span style='color: orange;'>实时备份文件延迟{0}个</span>".format(realtime_delays))
 
             realtime_ok = result.get('realtime_format_ok', True)
             realtime_reason = result.get('realtime_format_reason', '') or ''
@@ -684,9 +688,6 @@ class HostReportAnalyser(object):
                 validation_errors.append('rsyncd_realtime_abnormal')
             else:
                 desc_parts.append('实时同步状态：<span style="color: auto">正常</span>')
-
-            if realtime_delays > 0:
-                error_tips.append('实时备份文件延迟{0}个'.format(realtime_delays))
 
             fixtime_abnormal_tasks = result.get('fixtime_abnormal_tasks', []) or []
             if len(fixtime_abnormal_tasks) > 0:
@@ -715,6 +716,7 @@ class HostReportAnalyser(object):
 
         return {
             'tips': [{'name': 'Rsyncd', 'desc': '<br/>'.join(desc_parts)}],
+            'summary_tips': summary_tips,
             'summary_names': summary_names,
             'error_tips': error_tips
         }
@@ -805,6 +807,7 @@ class HostReportAnalyser(object):
 
         rsyncd_section = self._build_rsyncd_check_section(rsyncd_check_docs, window, validation_errors)
         backup_tips.extend(rsyncd_section.get('tips', []))
+        summary_tips.extend(rsyncd_section.get('summary_tips', []))
         summary_names.extend(rsyncd_section.get('summary_names', []))
         error_tips.extend(rsyncd_section.get('error_tips', []))
 

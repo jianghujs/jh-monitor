@@ -334,7 +334,6 @@ class reportTools:
         # lsyncd实时同步延迟提示
         if rsyncd_info is not None and  len(rsyncd_info.get('send_open_realtime_list', [])) > 0 and rsyncd_info.get('realtime_delays', 0) > 0:
             summary_tips.append("<span style='color: orange;'>实时备份文件延迟%s个</span>" % rsyncd_info.get('realtime_delays', 0))
-            error_tips.append("实时备份文件延迟%s个" % rsyncd_info.get('realtime_delays', 0))
         
         # Keepalived概要信息
         keepalived_summary_tips = []
