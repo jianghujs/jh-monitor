@@ -724,6 +724,7 @@ class HostReportAnalyser(object):
     def _build_backup_section(self, latest_doc, xtrabackup_docs, xtrabackup_inc_docs, backup_docs, window, validation_errors):
         """生成备份状态段落，并校验备份证据是否完整。"""
         backup_tips = []
+        summary_tips = []
         summary_names = []
         error_tips = []
         runtime_backup = latest_doc.get('backup', {}) if isinstance(latest_doc, dict) else {}
@@ -825,7 +826,6 @@ class HostReportAnalyser(object):
                 'desc': '<span style="color: #999">未检测到已启用备份任务或 rsyncd 检查数据</span>'
             })
 
-        summary_tips = []
         if len(summary_names) > 0:
             summary_text = '、'.join(summary_names) + '备份状态异常'
             summary_tips.append("<span style='color: red;'>{0}</span>".format(summary_text))
