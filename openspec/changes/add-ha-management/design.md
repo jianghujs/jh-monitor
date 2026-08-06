@@ -8,7 +8,7 @@
 
 **Goals:**
 
-- 在云监控提供主备管理列表和组别详情，多标签展示主机列表、自检状态、切换状态、切换日志。
+- 在云监控提供主备管理列表和组别详情，多标签展示主机列表、自检状态、切换状态、切换日志；主备关系由插件注册上报，云监控页面不提供手动添加入口。
 - 在江湖面板提供 `ha_manager` 插件，完成对端绑定、云监控配置、本地自检、本地切换和日志查看。
 - 通过云监控保存期望状态，插件执行实际 offline/online 切换并上报实际状态。
 - 每次切换在云监控 `/www/server/jh-monitor/logs/ha_switch/` 生成日志文件，SQLite 只保存状态索引和日志地址。
@@ -29,6 +29,12 @@
 - Decision: 新增 HA pair/state/switch-run/callback 数据模型；现有 `host.is_master`、`backup_host_id` 等字段只作为兼容展示来源。
 - Rationale: 主备管理需要区分配置关系、期望状态、实际状态、切换状态和日志地址，单个布尔字段无法表达切换中、失败、双主、双备、采集失败等状态。
 - Alternatives considered: 直接复用 `host` 表字段。实现更快，但无法支持切换任务、日志追踪和双机房聚合上报。
+
+### 1.1 Plugin registers HA relationship, cloud monitor only displays and operates it
+
+- Decision: 主备关系创建入口放在 `ha_manager` 插件内。用户先在插件绑定对端 SSH，再在插件云监控配置里填写主备关系名称和云监控地址；插件按该名称注册或更新云监控中的 HA group。云监控页面只展示、切换、查看日志和配置回调，不提供手动添加关系按钮。
+- Rationale: 主备绑定依赖对端公网 IP、公钥和 SSH 测试，这些信息只应由需要跨机房采集的插件持有。云监控只接收插件注册结果，能减少云监控保存跨机房 SSH 凭据的风险，也让“关系名称”和“上报地址”与插件注册动作保持在同一流程。
+- Alternatives considered: 云监控提供添加关系入口。这个入口容易让用户误以为云监控负责绑定两台机器，但真实对端识别和 SSH 采集仍依赖插件，职责边界不清晰。
 
 ### 2. Keep cloud monitor as control plane and plugin as execution plane
 
@@ -72,8 +78,8 @@
 ## Migration Plan
 
 1. 先上线 UI 和 OpenSpec 规格，确认列表、详情页、插件交互和字段模型。
-2. 新增云监控 SQLite 表和管理 API，创建 HA pair/state/switch-run/callback 基础能力。
-3. 新增 `ha_manager` 插件配置、绑定、自检、状态快照和本地日志落盘。
+2. 新增云监控 SQLite 表和管理 API，创建 HA pair/state/switch-run/callback 基础能力，并支持插件注册或更新 HA pair。
+3. 新增 `ha_manager` 插件配置、绑定、主备关系名称、云监控地址、自检、状态快照和本地日志落盘。
 4. 接入 signed plugin APIs，先完成本机状态/日志上报。
 5. 实现 SSH 采集对端状态和日志增量，并完成聚合上报和幂等处理。
 6. 将 offline/online 脚本流程封装为非交互执行器，接入手动切换。

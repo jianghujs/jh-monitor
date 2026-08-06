@@ -29,6 +29,10 @@ The plugin SHALL provide a separate cloud monitor configuration tab.
 - **WHEN** the cloud monitor URL is configured and saved
 - **THEN** the plugin uses the configured polling and reporting intervals for cloud monitor communication
 
+#### Scenario: Operator saves cloud monitor registration
+- **WHEN** the operator enters an HA relationship name, configures cloud monitor URL, and saves the cloud monitor configuration
+- **THEN** the plugin registers or updates the HA relationship in cloud monitor using that relationship name as the business subject name, such as Jianghu Demo, Dev02, Dev03, or MD Xuanfeng, and includes local plus peer host information in subsequent reports
+
 ### Requirement: Plugin homepage SHALL support local manual switch
 The plugin SHALL allow operators to start a local manual switch from the plugin homepage.
 

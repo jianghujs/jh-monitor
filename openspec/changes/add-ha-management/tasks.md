@@ -1,7 +1,7 @@
 ## 1. Cloud Monitor UI Foundation
 
 - [ ] 1.1 Add `ha_management` to page routing whitelist and sidebar navigation.
-- [ ] 1.2 Create the HA management list page with compact table layout, search, summary counters, and row actions.
+- [ ] 1.2 Create the HA management list page with compact table layout, search, summary counters, and row actions; do not include an add relationship button.
 - [ ] 1.3 Implement HA group detail dialog with tabs for group overview, host list, health status, switch status, and switch logs.
 - [ ] 1.4 Ensure host list, health status, switch status, and switch logs render both HA hosts separately.
 - [ ] 1.5 Add UI states for normal, warning, switching, danger, empty list, and simulated refresh.
@@ -9,7 +9,7 @@
 ## 2. Cloud Monitor Data Model and APIs
 
 - [ ] 2.1 Add SQLite schema and migration/ensure logic for HA pair, HA host state, HA switch run, and HA callback records.
-- [ ] 2.2 Implement authenticated HA management APIs for list, detail, bind pair, update pair config, request switch, retry switch, cancel switch, read log, and callback config.
+- [ ] 2.2 Implement authenticated HA management APIs for list, detail, update pair config, request switch, retry switch, cancel switch, read log, and callback config.
 - [ ] 2.3 Implement switch run creation with desired master update, options persistence, status initialization, and log path allocation under `/www/server/jh-monitor/logs/ha_switch/`.
 - [ ] 2.4 Implement status derivation for normal, warning, switching, danger, unknown, drifted, double-master, and double-standby cases.
 - [ ] 2.5 Implement log file read by offset for the detail and log views.
@@ -17,11 +17,12 @@
 ## 3. Signed Plugin API
 
 - [ ] 3.1 Add signed public API middleware/helper for plugin requests using timestamp, nonce, body hash, and HMAC signature.
-- [ ] 3.2 Implement `/pub/ha_pull_desired_state` for plugin polling and phase assignment.
-- [ ] 3.3 Implement `/pub/ha_report_state` for actual role, online status, health status, collection status, and health details.
-- [ ] 3.4 Implement `/pub/ha_report_switch_event` for switch status and log event reporting with idempotency.
-- [ ] 3.5 Implement `/pub/ha_ack_switch_phase` for claiming, completing, and failing switch phases.
-- [ ] 3.6 Add nonce replay protection and clear error responses for invalid signatures, stale timestamps, unknown pair ids, and unknown host ids.
+- [ ] 3.2 Implement `/pub/ha_register_pair` for plugins to register or update HA relationship name, local host information, and peer host information.
+- [ ] 3.3 Implement `/pub/ha_pull_desired_state` for plugin polling and phase assignment.
+- [ ] 3.4 Implement `/pub/ha_report_state` for actual role, online status, health status, collection status, and health details.
+- [ ] 3.5 Implement `/pub/ha_report_switch_event` for switch status and log event reporting with idempotency.
+- [ ] 3.6 Implement `/pub/ha_ack_switch_phase` for claiming, completing, and failing switch phases.
+- [ ] 3.7 Add nonce replay protection and clear error responses for invalid signatures, stale timestamps, unknown pair ids, and unknown host ids.
 
 ## 4. Cloud Monitor Log Handling
 
@@ -37,7 +38,7 @@
 - [ ] 5.2 Implement plugin overview tab showing local role, desired role, peer binding, cloud monitor report state, health summary, and local switch action.
 - [ ] 5.3 Implement peer binding tab with peer public IP, SSH port, SSH user, peer public key, SSH test, and save binding action.
 - [ ] 5.4 Ensure `pair_id` is generated or received internally and is not exposed as a manual UI input.
-- [ ] 5.5 Implement cloud monitor tab with URL, poll interval, report interval, test, save, and clear actions; empty URL disables upload.
+- [ ] 5.5 Implement cloud monitor tab with HA relationship name, URL, poll interval, report interval, test, save/register, and clear actions; empty URL disables registration and upload.
 - [ ] 5.6 Implement plugin health and switch log tabs consistent with Jianghu panel plugin style.
 
 ## 6. Plugin Local State and Peer Aggregation
