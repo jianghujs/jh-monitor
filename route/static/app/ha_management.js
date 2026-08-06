@@ -237,11 +237,13 @@ function haDetailChecksHtml(pair) {
       '</tr>';
     });
     var dot = haHostStatusDot(pair, host);
+    var switchState = haHostSwitchState(pair, host);
+    var switchingMark = switchState.status === 'running' ? '<span class="ha-switching-state" title="' + haAttr(switchState.step) + '"><span class="ha-loading-icon"></span>切换中</span>' : '';
     var nameCls = host.online === 'online' ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
     return '<div class="ha-check-host-card">' +
       '<div class="ha-check-host-head">' + dot + haRoleMark(host.role) +
         '<span class="' + nameCls + '">' + haEscape(host.name) + '</span>' +
-        (index === 0 ? '<span class="ha-current-site-tag">本机房</span>' : '') +
+        (index === 0 ? '<span class="ha-current-site-tag">本机房</span>' : '') + switchingMark +
       '</div>' +
       '<table class="table table-hover ha-check-table"><colgroup><col><col class="ha-check-status-col"></colgroup><thead><tr><th>检查项</th><th class="ha-check-status-head">状态</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     '</div>';
