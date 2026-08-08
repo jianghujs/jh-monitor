@@ -36,6 +36,24 @@ c_api = config_api()
 app = Flask(__name__)
 
 class pub_api:
+    def _haApi(self):
+        from ha_api import ha_api
+        return ha_api()
+
+    def haRegisterPairApi(self):
+        return self._haApi().publicRegisterPair()
+
+    def haPullDesiredStateApi(self):
+        return self._haApi().publicPullDesiredState()
+
+    def haReportStateApi(self):
+        return self._haApi().publicReportState()
+
+    def haReportSwitchEventApi(self):
+        return self._haApi().publicReportSwitchEvent()
+
+    def haAckSwitchPhaseApi(self):
+        return self._haApi().publicAckSwitchPhase()
     
     def getPubKeyApi(self):
         if os.path.exists('/root/.ssh/id_rsa.pub'):

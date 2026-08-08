@@ -1,119 +1,34 @@
-var haPairs = [
-  {
-    pair_id: 'HA_JIANGHU_DEMO',
-    pair_name: '江湖演示',
-    status: 'danger',
-    status_text: '主机离线',
-    desired_master_host_id: 'H_DEMO_MEGA',
-    actual_master_host_id: 'H_DEMO_MEGA',
-    last_report_at: '2026-08-05 15:42:18',
-    switch_run_id: 'HSR_20260805153000_f7a2',
-    log_path: 'logs/ha_switch/2026-08/HSR_20260805153000_f7a2.log',
-    hosts: [
-      {host_id: 'H_DEMO_MEGA', name: '江湖演示@Mega', ip: '10.0.8.11', role: 'master', online: 'offline'},
-      {host_id: 'H_DEMO_POLARIS', name: '江湖演示@Polaris', ip: '10.8.8.11', role: 'standby', online: 'online'}
-    ],
-    health: {mysql: '未知', rsync: '同步正常', openresty: '备用正常'},
-    warnings: ['江湖演示@Mega 超过 5 分钟未上报', '建议确认业务流量后切换到 Polaris'],
-    log: [
-      '[2026-08-05 15:30:00] [system] [pending] 创建切换任务 HSR_20260805153000_f7a2',
-      '[2026-08-05 15:30:02] [H_DEMO_MEGA] [offline] [error] 插件失联，等待上报',
-      '[2026-08-05 15:42:18] [system] [danger] 当前主机离线，建议切换到备用机'
-    ].join('\n')
-  },
-  {
-    pair_id: 'HA_DEV02',
-    pair_name: 'Dev02',
-    status: 'warning',
-    status_text: '部分异常',
-    desired_master_host_id: 'H_DEV02_MEGA',
-    actual_master_host_id: 'H_DEV02_MEGA',
-    last_report_at: '2026-08-05 16:01:45',
-    switch_run_id: 'HSR_20260804190000_c1e9',
-    log_path: 'logs/ha_switch/2026-08/HSR_20260804190000_c1e9.log',
-    hosts: [
-      {host_id: 'H_DEV02_MEGA', name: 'Dev02@Mega', ip: '10.0.9.21', role: 'master', online: 'online'},
-      {host_id: 'H_DEV02_POLARIS', name: 'Dev02@Polaris', ip: '10.8.9.21', role: 'standby', online: 'online'}
-    ],
-    health: {mysql: '主从延迟 38s', rsync: 'lsyncd warning', openresty: '运行中'},
-    warnings: ['mysql 主从延迟超过提醒阈值', 'Rsync 状态异常提醒已触发'],
-    log: [
-      '[2026-08-04 19:00:00] [system] [success] 上次切换完成',
-      '[2026-08-05 16:01:45] [H_DEV02_MEGA] [warning] mysql 主从延迟 38s',
-      '[2026-08-05 16:01:45] [H_DEV02_MEGA] [warning] lsyncd 存在 warning 状态'
-    ].join('\n')
-  },
-  {
-    pair_id: 'HA_DEV03',
-    pair_name: 'Dev03',
-    status: 'normal',
-    status_text: '状态正常',
-    desired_master_host_id: 'H_DEV03_POLARIS',
-    actual_master_host_id: 'H_DEV03_POLARIS',
-    last_report_at: '2026-08-05 16:03:10',
-    switch_run_id: 'HSR_20260803101500_9bd3',
-    log_path: 'logs/ha_switch/2026-08/HSR_20260803101500_9bd3.log',
-    hosts: [
-      {host_id: 'H_DEV03_MEGA', name: 'Dev03@Mega', ip: '10.0.10.31', role: 'standby', online: 'online'},
-      {host_id: 'H_DEV03_POLARIS', name: 'Dev03@Polaris', ip: '10.8.10.31', role: 'master', online: 'online'}
-    ],
-    health: {mysql: '主从正常', rsync: '同步正常', openresty: '运行中'},
-    warnings: [],
-    log: [
-      '[2026-08-03 10:15:00] [system] [pending] 创建切换任务',
-      '[2026-08-03 10:16:12] [H_DEV03_MEGA] [offline] [success] 下线流程完成',
-      '[2026-08-03 10:21:08] [H_DEV03_POLARIS] [online] [success] 上线流程完成',
-      '[2026-08-03 10:21:20] [system] [success] 外部回调完成'
-    ].join('\n')
-  },
-  {
-    pair_id: 'HA_MD_XUANFENG',
-    pair_name: 'MD 旋风',
-    status: 'switching',
-    status_text: '上线中',
-    desired_master_host_id: 'H_MDXF_POLARIS',
-    actual_master_host_id: 'H_MDXF_MEGA',
-    last_report_at: '2026-08-05 16:04:02',
-    switch_run_id: 'HSR_20260805160000_7bc0',
-    log_path: 'logs/ha_switch/2026-08/HSR_20260805160000_7bc0.log',
-    hosts: [
-      {host_id: 'H_MDXF_MEGA', name: 'MD旋风@Mega', ip: '10.0.11.41', role: 'master', online: 'online'},
-      {host_id: 'H_MDXF_POLARIS', name: 'MD旋风@Polaris', ip: '10.8.11.41', role: 'standby', online: 'online'}
-    ],
-    health: {mysql: '提升为主中', rsync: '等待启动', openresty: '等待启动'},
-    warnings: ['正在执行备用机上线流程'],
-    log: [
-      '[2026-08-05 16:00:00] [system] [pending] 创建切换任务 HSR_20260805160000_7bc0',
-      '[2026-08-05 16:00:11] [H_MDXF_MEGA] [offline] [success] 下线流程完成',
-      '[2026-08-05 16:02:20] [H_MDXF_POLARIS] [online] [running] 将当前数据库提升为主',
-      '[2026-08-05 16:04:02] [H_MDXF_POLARIS] [online] [running] 调整计划任务'
-    ].join('\n')
-  },
-  {
-    pair_id: 'HA_JIANGHU_PLATFORM',
-    pair_name: '江湖平台',
-    status: 'warning',
-    status_text: '备用机离线',
-    desired_master_host_id: 'H_JH_PLATFORM_MEGA',
-    actual_master_host_id: 'H_JH_PLATFORM_MEGA',
-    last_report_at: '2026-08-05 16:08:33',
-    switch_run_id: 'HSR_20260802143000_5e21',
-    log_path: 'logs/ha_switch/2026-08/HSR_20260802143000_5e21.log',
-    hosts: [
-      {host_id: 'H_JH_PLATFORM_MEGA', name: '江湖平台@Mega', ip: '10.0.12.51', role: 'master', online: 'online'},
-      {host_id: 'H_JH_PLATFORM_POLARIS', name: '江湖平台@Polaris', ip: '10.8.12.51', role: 'standby', online: 'offline'}
-    ],
-    health: {mysql: '无主从配置（作为主）', rsync: '同步正常', openresty: '运行中'},
-    warnings: ['江湖平台@Polaris 超过 5 分钟未上报', '当前主机仍在线，备用机不可接管前不建议切换'],
-    log: [
-      '[2026-08-05 16:05:00] [H_JH_PLATFORM_MEGA] [report] [success] 主机状态上报正常',
-      '[2026-08-05 16:08:33] [H_JH_PLATFORM_POLARIS] [collect] [warning] 备用机插件离线或 SSH 采集失败',
-      '[2026-08-05 16:08:33] [system] [warning] 当前主机在线，备用机离线'
-    ].join('\n')
-  }
-];
-
+var haPairs = [];
 var haCurrentSearch = '';
+
+function haApi(action, data, callback) {
+  $.post('/ha/' + action, data || {}, function(res) {
+    if (typeof res === 'string') {
+      try { res = JSON.parse(res); } catch (e) { res = {status: false, msg: res}; }
+    }
+    if (!res || !res.status) {
+      layer.msg((res && res.msg) || 'HA接口请求失败', {icon: 2});
+      if (callback) callback(null, res || {});
+      return;
+    }
+    if (callback) callback(res.data || {}, res);
+  }, 'json').fail(function() {
+    layer.msg('HA接口连接失败', {icon: 2});
+    if (callback) callback(null, {status: false});
+  });
+}
+
+function haLoadPairs(callback) {
+  haApi('get_list', {}, function(data) {
+    if (data && $.isArray(data.list)) {
+      haPairs = data.list;
+    } else {
+      haPairs = [];
+    }
+    haRenderList(haCurrentSearch);
+    if (callback) callback();
+  });
+}
 
 function haText(value, fallback) {
   var text = normalizeText(value);
@@ -181,7 +96,7 @@ var haCheckTemplate = [
   {group: '数据库', name: 'MySQL 主从状态', master: '无主从配置（作为主）', standby: '作为从库（复制链路正常）'}
 ];
 
-function haMockHostChecks(pair, host) {
+function haBuildHostChecks(pair, host) {
   var isMaster = host.role === 'master';
   var isOffline = host.online !== 'online';
   var isSwitching = pair.status === 'switching';
@@ -219,7 +134,7 @@ function haCheckStatusIcon(status) {
 
 function haDetailChecksHtml(pair) {
   var hostCards = pair.hosts.map(function(host, index) {
-    var checks = haMockHostChecks(pair, host);
+    var checks = haBuildHostChecks(pair, host);
     var rows = '';
     var currentGroup = '';
     haCheckTemplate.forEach(function(item) {
@@ -402,7 +317,7 @@ function haRenderList(search) {
   }).filter(function(pair) {
     if (!keyword) return true;
     var haystack = [pair.pair_name, pair.pair_id, pair.status_text]
-      .concat(pair.hosts.map(function(host) { return host.name + ' ' + host.ip; }))
+      .concat(pair.hosts.map(function(host) { return host.name + ' ' + host.host_id + ' ' + host.ip; }))
       .join(' ').toLowerCase();
     return haystack.indexOf(keyword) !== -1;
   });
@@ -440,7 +355,7 @@ function haSwitchOptionsHtml(pair, target) {
     '</label>';
   }).join('') + '</div>';
   return '<div class="pd15">' +
-    '<div class="c6 mb10">选择要切换为主机的目标主机。本阶段仅模拟创建切换任务。</div>' +
+    '<div class="c6 mb10">选择要切换为主机的目标主机，确认后云监控会创建切换任务并等待插件领取执行。</div>' +
     hostSelect +
     '<div class="ha-switch-options"><div class="ha-switch-options-title">切换选项</div>' +
       '<div class="ha-option-grid">' +
@@ -472,32 +387,31 @@ function haOpenSwitchDialog(pairId) {
     title: '手动切换 - ' + pair.pair_name,
     area: ['750px', '500px'],
     content: haSwitchOptionsHtml(pair, target),
-    btn: ['确认发起模拟切换', '取消'],
+    btn: ['确认发起切换', '取消'],
     success: function() {
       haToggleSyncOptions();
     },
     yes: function(index) {
       var selectedHostId = $('[name=haSwitchTargetHost]:checked').val();
       target = haFindHost(pair, selectedHostId) || target;
-      pair.status = 'switching';
-      pair.status_text = '下线中';
-      pair.desired_master_host_id = target.host_id;
-      pair.switch_run_id = 'HSR_' + haBuildRunId();
-      pair.log_path = 'logs/ha_switch/2026-08/' + pair.switch_run_id + '.log';
-      pair.warnings = ['已创建切换任务，等待旧主机执行下线流程'];
-      pair.log = '[2026-08-05 16:10:00] [system] [pending] 创建切换任务 ' + pair.switch_run_id + '\n' +
-        '[2026-08-05 16:10:01] [system] [running] 等待旧主机插件领取 offline 阶段';
-      layer.close(index);
-      haRenderList(haCurrentSearch);
-      layer.msg('UI 预览：已创建模拟切换任务', {icon: 1});
+      var payload = {
+        pair_id: pair.pair_id,
+        target_host_id: target.host_id,
+        sync_files: $('#haSyncFiles').is(':checked') ? 1 : 0,
+        run_checksum: $('#haRunChecksum').is(':checked') ? 1 : 0,
+        allow_checksum_diff: $('#haAllowChecksumDiff').is(':checked') ? 1 : 0,
+        restore_site_setting: $('#haRestoreSite').is(':checked') ? 1 : 0,
+        restore_plugin_setting: $('#haRestorePlugin').is(':checked') ? 1 : 0,
+        run_xtrabackup_inc_restore: $('#haRunXtrabackup').is(':checked') ? 1 : 0
+      };
+      haApi('request_switch', payload, function(data) {
+        if (!data) return;
+        layer.close(index);
+        layer.msg('切换任务已创建', {icon: 1});
+        haLoadPairs();
+      });
     }
   });
-}
-
-function haBuildRunId() {
-  var d = new Date();
-  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
-  return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '_' + Math.random().toString(16).slice(2, 6);
 }
 
 function haOpenDetailDialog(pairId) {
@@ -507,6 +421,7 @@ function haOpenDetailDialog(pairId) {
     {title: '组别概览', tab: 'summary'},
     {title: '主机列表', tab: 'hosts'},
     {title: '自检状态', tab: 'health'},
+    {title: '切换状态', tab: 'switch'},
     {title: '切换日志', tab: 'log'}
   ];
   var html = '<div class="bt-form ha-detail-shell">' +
@@ -536,6 +451,7 @@ function haRenderDetailTab(pairId, tab, el) {
   var html = '';
   if (tab === 'hosts') html = haDetailHostsHtml(pair);
   else if (tab === 'health') html = haDetailChecksHtml(pair);
+  else if (tab === 'switch') html = haDetailSwitchHtml(pair);
   else if (tab === 'log') html = haDetailLogHtml(pair);
   else html = haDetailSummaryHtml(pair);
   $('#haDetailCon').html(html);
@@ -565,10 +481,10 @@ function haDetailHostsHtml(pair) {
     '<div class="monitor-task-section-title">主机列表</div>' +
     '<table class="table table-hover" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th></tr></thead><tbody>' +
       pair.hosts.map(function(host) {
-        return '<tr><td>' + haEscape(host.name) + '</td><td>' + haEscape(host.ip) + '</td><td>' + haRoleMark(host.role) + haEscape(host.role) + '</td><td>' + (host.online === 'online' ? '<span class="ha-online">在线</span>' : '<span class="ha-offline">离线</span>') + '</td></tr>';
+        return '<tr><td><div class="ha-main">' + haEscape(host.name) + '</div><div class="ha-sub">' + haEscape(host.host_id || '') + '</div></td><td>' + haEscape(host.ip) + '</td><td>' + haRoleMark(host.role) + haEscape(host.role) + '</td><td>' + (host.online === 'online' ? '<span class="ha-online">在线</span>' : '<span class="ha-offline">离线</span>') + '</td></tr>';
       }).join('') +
     '</tbody></table>' +
-    '<div class="ha-muted">后续接入真实 API 后，可在这里扩展主机 ID、插件版本、最近心跳、实际角色来源等信息。</div>' +
+    '<div class="ha-muted">主机数据来自 ha_manager 插件注册和状态上报。</div>' +
     '</div>';
 }
 
@@ -624,6 +540,15 @@ function haDetailLogHtml(pair) {
 function haOpenLogDialog(pairId) {
   var pair = haFindPair(pairId);
   if (!pair) return layer.msg('主备关系不存在', {icon: 2});
+  if (pair.switch_run_id) {
+    haApi('read_log', {switch_run_id: pair.switch_run_id, offset: 0}, function(data) {
+      if (!data) return;
+      pair.log = data.content || '';
+      pair.log_path = data.log_path || pair.log_path;
+      haOpenLogDialog(pairId);
+    });
+    return;
+  }
   var html = '<div class="pd15">' +
     '<div class="ha-muted mb10">日志文件: ' + haEscape(pair.log_path) + '</div>' +
     '<div class="ha-log-box">' + haEscape(pair.log || '暂无日志') + '</div>' +
@@ -633,23 +558,22 @@ function haOpenLogDialog(pairId) {
     title: '切换日志 - ' + pair.switch_run_id,
     area: ['820px', '520px'],
     content: html,
-    btn: ['模拟追加日志', '关闭'],
+    btn: ['刷新', '关闭'],
     yes: function() {
-      pair.log += '\n[2026-08-05 16:10:15] [mock] [running] UI 预览追加日志，后续由插件 API 写入';
-      $('.ha-log-box').text(pair.log);
-      var box = $('.ha-log-box')[0];
-      if (box) box.scrollTop = box.scrollHeight;
+      layer.closeAll();
+      haOpenLogDialog(pairId);
     }
   });
 }
 
-function haRefreshMock() {
-  layer.msg('UI 预览：已刷新模拟状态', {icon: 1});
-  haRenderList(haCurrentSearch);
+function haRefreshList() {
+  haLoadPairs(function() {
+    layer.msg('已刷新主备状态', {icon: 1});
+  });
 }
 
 $(function() {
   setTimeout(function() {
-    haRenderList('');
+    haLoadPairs();
   }, 200);
 });
