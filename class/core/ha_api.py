@@ -400,6 +400,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             for row in rows[1:]:
                 if self._hostStateScore(row) > self._hostStateScore(selected):
                     selected = row
+            local_rows = [row for row in rows if row.get('collect_method') == 'local']
+            if local_rows:
+                selected = local_rows[0]
+                for row in local_rows[1:]:
+                    if self._hostStateScore(row) > self._hostStateScore(selected):
+                        selected = row
             item = dict(selected)
             alias_ids = []
             alias_names = []
@@ -769,7 +775,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         host_id = self._safeText(host.get('host_id'), 128)
         host_name = self._safeText(host.get('host_name') or host.get('name') or host_id, 128)
         host_ip = self._safeText(host.get('host_ip') or host.get('ip'), 64)
-        exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id').find()
+        collect_method = self._safeText(host.get('collect_method') or '', 32)
+        report_host_id = self._safeText(host.get('report_host_id') or '', 128)
+        exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id,collect_method').find()
+        if collect_method == 'ssh_peer' and isinstance(exists, dict) and exists.get('collect_method') == 'local':
+            source = '{0}:{1}:{2}'.format(report_host_id, host_ip, host_id)
+            host_id = 'H_ALIAS_' + hashlib.sha1(source.encode('utf-8')).hexdigest()[:8].upper()
+            exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id,collect_method').find()
         values = (
             host_name,
             host_ip,
@@ -777,8 +789,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._safeText(host.get('online_status') or host.get('online') or 'unknown', 32),
             self._safeText(host.get('health_status') or 'unknown', 32),
             self._safeText(host.get('collect_status') or 'unknown', 32),
-            self._safeText(host.get('collect_method') or '', 32),
-            self._safeText(host.get('report_host_id') or '', 128),
+            collect_method,
+            report_host_id,
             self._safeText(host.get('site_scope') or '', 32),
             json.dumps(host.get('health_detail') or {}, ensure_ascii=False),
             self._safeText(host.get('switch_run_id') or '', 128),
@@ -824,7 +836,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         hosts = payload.get('hosts') if isinstance(payload.get('hosts'), list) else [payload]
         for host in hosts:
             self._upsertState(pair_id, host, host.get('role') or host.get('actual_role') or 'unknown', now)
-        states = self._getStates(pair_id)
+        states = self._displayStates(self._getStates(pair_id))
         pair = self._getPair(pair_id)
         status, status_text = self.deriveStatus(pair, states)
         actual = ''

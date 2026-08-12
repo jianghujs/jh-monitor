@@ -225,20 +225,33 @@ function haOnlineLabel(host) {
   return '<span class="ha-muted">待上报</span>';
 }
 
+function haCollectMethodText(method) {
+  if (method === 'local') return '本机插件';
+  if (method === 'ssh_peer') return 'SSH采集对端';
+  return method || '插件上报';
+}
+
+function haDisplayCollectMethod(host) {
+  var methods = host.host_alias_collect_methods || [];
+  if (host.collect_method === 'local' || methods.indexOf('local') !== -1) return 'local';
+  return host.collect_method || '';
+}
+
 function haCollectLabel(host) {
+  var method = haDisplayCollectMethod(host);
   if (host.collect_status === 'success') {
-    return '<div><span class="ha-online">正常</span></div><div class="ha-sub">' + haEscape(host.collect_method || '插件上报') + '</div>';
+    return '<div><span class="ha-online">正常</span></div><div class="ha-sub">' + haEscape(haCollectMethodText(method)) + '</div>';
   }
-  if (host.collect_method === 'ssh_peer' && host.collect_status === 'partial') {
+  if (method === 'ssh_peer' && host.collect_status === 'partial') {
     return '<div><span class="ha-pill-warning ha-status-pill">部分成功</span></div><div class="ha-sub">SSH 已连接，日志采集不完整</div>';
   }
   if (host.collect_status === 'failed') {
-    return '<div><span class="ha-offline">SSH采集异常</span></div><div class="ha-sub">' + haEscape(host.collect_method || '--') + '</div>';
+    return '<div><span class="ha-offline">SSH采集异常</span></div><div class="ha-sub">' + haEscape(haCollectMethodText(method || '--')) + '</div>';
   }
   if (haHostLooksHealthy(host)) {
     return '<div><span class="ha-online">正常</span></div><div class="ha-sub">自检通过</div>';
   }
-  return '<div><span class="ha-muted">待上报</span></div><div class="ha-sub">' + haEscape(host.collect_method || '--') + '</div>';
+  return '<div><span class="ha-muted">待上报</span></div><div class="ha-sub">' + haEscape(haCollectMethodText(method || '--')) + '</div>';
 }
 
 function haHostLine(pair, host, index) {
@@ -264,6 +277,25 @@ function haHostsCell(pair) {
 
 function haHealthItem(label, value) {
   return '<div class="ha-health-item"><div class="ha-health-label">' + haEscape(label) + '</div><div class="ha-health-value" title="' + haAttr(value) + '">' + haEscape(value) + '</div></div>';
+}
+
+function haDetailMetric(label, value, extraCls) {
+  return '<div class="ha-detail-metric ' + (extraCls || '') + '"><div class="ha-detail-metric-label">' + haEscape(label) + '</div><div class="ha-detail-metric-value" title="' + haAttr(value || '--') + '">' + haEscape(value || '--') + '</div></div>';
+}
+
+function haDetailHostCard(pair, host, index) {
+  var isMaster = host.role === 'master';
+  var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag">本机房</span>' : '';
+  var roleText = isMaster ? '当前主机' : (host.role === 'standby' ? '当前备机' : '角色未知');
+  var cls = isMaster ? 'ha-detail-host-card is-master' : 'ha-detail-host-card';
+  return '<div class="' + cls + '">' +
+    '<div class="ha-detail-host-top">' +
+      '<div class="ha-detail-host-title">' + haHostStatusDot(pair, host) + haRoleMark(host.role) + '<span title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span></div>' +
+      currentMark +
+    '</div>' +
+    '<div class="ha-detail-host-ip">' + haEscape(host.ip || '--') + '</div>' +
+    '<div class="ha-detail-host-meta"><span>' + haEscape(roleText) + '</span><span>' + haEscape(haCollectMethodText(haDisplayCollectMethod(host))) + '</span><span>' + haEscape(host.last_report_at || '未上报') + '</span></div>' +
+  '</div>';
 }
 
 function haHostHealth(pair, host, index) {
@@ -564,25 +596,29 @@ function haDetailSummaryHtml(pair) {
   var desiredMaster = haFindHost(pair, pair.desired_master_host_id) || {};
   var warnings = pair.warnings && pair.warnings.length ? pair.warnings.join('；') : '无待处理提醒';
   var statusText = pair.status_text || haStatusLabel(pair.status);
+  var hostCards = (pair.hosts || []).map(function(host, index) { return haDetailHostCard(pair, host, index); }).join('');
   return '<div class="ha-detail-section">' +
-    '<div class="monitor-task-section-title">组别概览</div>' +
-    '<table class="table table-hover" style="margin-bottom:10px"><tbody>' +
-    '<tr><td width="130">主备关系</td><td>' + haEscape(pair.pair_name) + '</td></tr>' +
-    '<tr><td>状态</td><td><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(statusText) + '">' + haStatusLabel(pair.status) + '</span><span class="ha-status-desc" title="' + haAttr(statusText) + '">' + haEscape(statusText) + '</span></td></tr>' +
-    '<tr><td>实际主机</td><td>' + haEscape(actualMaster.name || '--') + ' / ' + haEscape(actualMaster.ip || '--') + '</td></tr>' +
-    '<tr><td>期望主机</td><td>' + haEscape(desiredMaster.name || '--') + ' / ' + haEscape(desiredMaster.ip || '--') + '</td></tr>' +
-    '<tr><td>切换任务</td><td>' + haEscape(pair.switch_run_id) + '</td></tr>' +
-    '<tr><td>日志路径</td><td>' + haEscape(pair.log_path) + '</td></tr>' +
-    '<tr><td>最近上报</td><td>' + haEscape(pair.last_report_at) + '</td></tr>' +
-    '<tr><td>提醒摘要</td><td>' + haEscape(warnings) + '</td></tr>' +
-    '</tbody></table>' +
+    '<div class="ha-detail-status-band ' + haStatusClass(pair.status) + '">' +
+      '<div><div class="ha-detail-kicker">组别概览</div><div class="ha-detail-title">' + haEscape(pair.pair_name) + '</div><div class="ha-detail-id">' + haEscape(pair.pair_id) + '</div></div>' +
+      '<div class="ha-detail-status-main"><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(statusText) + '">' + haStatusLabel(pair.status) + '</span><div class="ha-detail-status-text" title="' + haAttr(statusText) + '">' + haEscape(statusText) + '</div></div>' +
+    '</div>' +
+    '<div class="ha-detail-metrics">' +
+      haDetailMetric('实际主机', (actualMaster.name || '--') + ' / ' + (actualMaster.ip || '--'), 'is-actual') +
+      haDetailMetric('期望主机', (desiredMaster.name || '--') + ' / ' + (desiredMaster.ip || '--'), 'is-desired') +
+      haDetailMetric('最近上报', pair.last_report_at || '--', '') +
+      haDetailMetric('当前任务', pair.switch_run_id || '无执行中任务', '') +
+    '</div>' +
+    '<div class="ha-detail-host-grid">' + hostCards + '</div>' +
+    '<div class="ha-detail-note"><span>提醒摘要</span><div title="' + haAttr(warnings) + '">' + haEscape(warnings) + '</div></div>' +
     '</div>';
 }
 
 function haDetailHostsHtml(pair) {
+  var cards = (pair.hosts || []).map(function(host, index) { return haDetailHostCard(pair, host, index); }).join('');
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">主机列表</div>' +
-    '<table class="table table-hover" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th><th>采集状态</th><th>最近上报</th></tr></thead><tbody>' +
+    '<div class="ha-detail-host-grid mb12">' + cards + '</div>' +
+    '<table class="table table-hover ha-detail-data-table" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th><th>采集状态</th><th>最近上报</th></tr></thead><tbody>' +
       pair.hosts.map(function(host) {
         return '<tr><td><div class="ha-main">' + haEscape(host.name) + '</div><div class="ha-sub">' + haEscape(host.host_id || '') + '</div></td>' +
           '<td>' + haEscape(host.ip) + '</td>' +
@@ -609,17 +645,18 @@ function haDetailSwitchHtml(pair) {
       '<td>' + haEscape(pair.log_path) + '</td>' +
     '</tr>';
   }).join('');
+  var phaseText = run.current_phase || (pair.status === 'switching' ? pair.status_text : '无执行中任务');
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">步骤摘要</div>' +
-    '<div class="ha-health-row">' +
+    '<div class="ha-health-row ha-detail-switch-row">' +
       haHealthItem('任务状态', run.status || (pair.status === 'switching' ? 'running' : '无执行中任务')) +
-      haHealthItem('当前阶段', run.current_phase || (pair.status === 'switching' ? pair.status_text : '无执行中任务')) +
+      haHealthItem('当前阶段', phaseText) +
       haHealthItem('回调状态', run.callback_status || pair.callback_status || '未触发') +
     '</div>' +
-    '<table class="table table-hover mtb15 ha-switch-detail-table"><thead><tr><th width="190">主机</th><th width="80">阶段</th><th width="90">状态</th><th>当前步骤</th><th>下一步</th><th width="210">日志文件</th></tr></thead><tbody>' + hostRows + '</tbody></table>' +
-    '<table class="table table-hover mtb15"><tbody>' +
+    '<table class="table table-hover mtb15 ha-switch-detail-table ha-detail-data-table"><thead><tr><th width="190">主机</th><th width="80">阶段</th><th width="90">状态</th><th>当前步骤</th><th>下一步</th><th width="210">日志文件</th></tr></thead><tbody>' + hostRows + '</tbody></table>' +
+    '<table class="table table-hover mtb15 ha-detail-data-table"><tbody>' +
       '<tr><td width="130">切换任务</td><td>' + haEscape(pair.switch_run_id) + '</td></tr>' +
-      '<tr><td>当前阶段</td><td>' + haEscape(run.current_phase || (pair.status === 'switching' ? pair.status_text : '无执行中任务')) + '</td></tr>' +
+      '<tr><td>当前阶段</td><td>' + haEscape(phaseText) + '</td></tr>' +
       '<tr><td>当前步骤</td><td>' + haEscape(run.current_step || '--') + '</td></tr>' +
       '<tr><td>下一步</td><td>' + haEscape(run.next_step || '--') + '</td></tr>' +
       '<tr><td>最后错误</td><td>' + haEscape(run.last_error || '--') + '</td></tr>' +

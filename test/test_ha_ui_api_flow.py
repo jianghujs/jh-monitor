@@ -138,6 +138,45 @@ def main():
         assert len(pair['hosts']) == 2, pair
         assert [x['site_scope'] for x in pair['hosts']] == ['local', 'local'], pair
 
+    dual_report_pair_id = pair_id + '_DUAL_REPORT'
+    cleanup_pair_ids.append(dual_report_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (dual_report_pair_id, 'DualReport', 'H_DUAL_B', api_secret, 'unknown', '等待插件上报', now, now))
+    api._upsertState(dual_report_pair_id, {'host_id': 'H_DUAL_A', 'host_name': 'Dual-A', 'host_ip': '10.10.5.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'report_host_id': 'H_DUAL_A', 'site_scope': 'local'}, 'standby', now)
+    api._upsertState(dual_report_pair_id, {'host_id': 'H_DUAL_B_ALIAS', 'host_name': 'Dual-B via A', 'host_ip': '10.10.5.2', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_DUAL_A', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(dual_report_pair_id, {'host_id': 'H_DUAL_B', 'host_name': 'Dual-B', 'host_ip': '10.10.5.2', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'report_host_id': 'H_DUAL_B', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(dual_report_pair_id, {'host_id': 'H_DUAL_A_ALIAS', 'host_name': 'Dual-A via B', 'host_ip': '10.10.5.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_DUAL_B', 'site_scope': 'local'}, 'standby', now)
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair = [x for x in res['data']['list'] if x['pair_id'] == dual_report_pair_id][0]
+        assert len(pair['hosts']) == 2, pair
+        assert pair['actual_master_host_id'] == 'H_DUAL_B', pair
+        assert pair['desired_master_host_id'] == 'H_DUAL_B', pair
+        assert pair['status'] == 'normal', pair
+        assert all([x['site_scope'] == 'local' for x in pair['hosts']]), pair
+        assert all([x['collect_method'] == 'local' for x in pair['hosts']]), pair
+        host_a = [x for x in pair['hosts'] if x['ip'] == '10.10.5.1'][0]
+        host_b = [x for x in pair['hosts'] if x['ip'] == '10.10.5.2'][0]
+        assert 'local' in host_a['host_alias_collect_methods'], host_a
+        assert 'ssh_peer' in host_a['host_alias_collect_methods'], host_a
+        assert 'local' in host_b['host_alias_collect_methods'], host_b
+        assert 'ssh_peer' in host_b['host_alias_collect_methods'], host_b
+
+    dual_real_id_pair_id = pair_id + '_DUAL_REAL_ID'
+    cleanup_pair_ids.append(dual_real_id_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (dual_real_id_pair_id, 'DualRealId', 'H_REAL_B', api_secret, 'unknown', '等待插件上报', now, now))
+    api._upsertState(dual_real_id_pair_id, {'host_id': 'H_REAL_A', 'host_name': 'Real-A', 'host_ip': '10.10.6.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'report_host_id': 'H_REAL_A', 'site_scope': 'local'}, 'standby', now)
+    api._upsertState(dual_real_id_pair_id, {'host_id': 'H_REAL_B', 'host_name': 'Real-B', 'host_ip': '10.10.6.2', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'report_host_id': 'H_REAL_B', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(dual_real_id_pair_id, {'host_id': 'H_REAL_A', 'host_name': 'Real-A via B', 'host_ip': '10.10.6.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_REAL_B', 'site_scope': 'local'}, 'standby', now)
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair = [x for x in res['data']['list'] if x['pair_id'] == dual_real_id_pair_id][0]
+        assert len(pair['hosts']) == 2, pair
+        host_a = [x for x in pair['hosts'] if x['ip'] == '10.10.6.1'][0]
+        assert host_a['collect_method'] == 'local', host_a
+        assert 'ssh_peer' in host_a['host_alias_collect_methods'], host_a
+
     health_payload = {
         'pair_id': pair_id,
         'hosts': [{
