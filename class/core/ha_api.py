@@ -27,7 +27,7 @@ class ha_api:
 
     state_fields = (
         'id,pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,'
-        'collect_method,report_host_id,health_detail,switch_run_id,switch_phase,switch_status,'
+        'collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,'
         'current_step,next_step,last_error,log_path,last_report_at,addtime,update_time'
     )
 
@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS ha_host_state (
   collect_status TEXT DEFAULT 'unknown',
   collect_method TEXT,
   report_host_id TEXT,
+  site_scope TEXT,
   health_detail TEXT,
   switch_run_id TEXT,
   switch_phase TEXT,
@@ -204,7 +205,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'pair_id': 'TEXT', 'host_id': 'TEXT', 'host_name': 'TEXT', 'host_ip': 'TEXT',
                 'role': 'TEXT', 'online_status': "TEXT DEFAULT 'unknown'", 'health_status': "TEXT DEFAULT 'unknown'",
                 'collect_status': "TEXT DEFAULT 'unknown'", 'collect_method': 'TEXT', 'report_host_id': 'TEXT',
-                'health_detail': 'TEXT', 'switch_run_id': 'TEXT', 'switch_phase': 'TEXT', 'switch_status': 'TEXT',
+                'site_scope': 'TEXT', 'health_detail': 'TEXT', 'switch_run_id': 'TEXT', 'switch_phase': 'TEXT', 'switch_status': 'TEXT',
                 'current_step': 'TEXT', 'next_step': 'TEXT', 'last_error': 'TEXT', 'log_path': 'TEXT',
                 'last_report_at': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
             },
@@ -452,6 +453,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'collect_status': row.get('collect_status') or 'unknown',
             'collect_method': row.get('collect_method') or '',
             'report_host_id': row.get('report_host_id') or '',
+            'site_scope': row.get('site_scope') or '',
             'health_detail': detail,
             'script_checks': script_checks,
             'switch_run_id': row.get('switch_run_id') or '',
@@ -777,6 +779,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._safeText(host.get('collect_status') or 'unknown', 32),
             self._safeText(host.get('collect_method') or '', 32),
             self._safeText(host.get('report_host_id') or '', 128),
+            self._safeText(host.get('site_scope') or '', 32),
             json.dumps(host.get('health_detail') or {}, ensure_ascii=False),
             self._safeText(host.get('switch_run_id') or '', 128),
             self._safeText(host.get('switch_phase') or '', 64),
@@ -790,11 +793,11 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         )
         if isinstance(exists, dict) and exists.get('id'):
             jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
-                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,update_time', values
+                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,update_time', values
             )
         else:
             jh.M('ha_host_state').add(
-                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,addtime,update_time',
+                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,addtime,update_time',
                 (pair_id, host_id) + values + (now,)
             )
 

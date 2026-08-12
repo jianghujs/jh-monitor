@@ -110,8 +110,8 @@ def main():
     single_local_pair_id = pair_id + '_SINGLE_LOCAL'
     cleanup_pair_ids.append(single_local_pair_id)
     jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (single_local_pair_id, 'SingleLocal', 'H_REMOTE_B', api_secret, 'unknown', '等待插件上报', now, now))
-    api._upsertState(single_local_pair_id, {'host_id': 'H_LOCAL_A', 'host_name': 'SingleLocal-A', 'host_ip': '10.10.3.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'standby', now)
-    api._upsertState(single_local_pair_id, {'host_id': 'H_REMOTE_B', 'host_name': 'SingleLocal-B', 'host_ip': '10.10.3.2', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_LOCAL_A', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'master', now)
+    api._upsertState(single_local_pair_id, {'host_id': 'H_LOCAL_A', 'host_name': 'SingleLocal-A', 'host_ip': '10.10.3.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'standby', now)
+    api._upsertState(single_local_pair_id, {'host_id': 'H_REMOTE_B', 'host_name': 'SingleLocal-B', 'host_ip': '10.10.3.2', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_LOCAL_A', 'site_scope': 'remote', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'master', now)
     with app.test_request_context('/ha/get_list', method='POST'):
         res = _json(api.getListApi())
         assert res['status']
@@ -124,6 +124,19 @@ def main():
         assert remote['collect_method'] == 'ssh_peer', remote
         assert remote['collect_status'] == 'success', remote
         assert remote['online_status'] == 'online', remote
+        assert remote['site_scope'] == 'remote', remote
+
+    same_site_pair_id = pair_id + '_SAME_SITE'
+    cleanup_pair_ids.append(same_site_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (same_site_pair_id, 'SameSite', 'H_SITE_A', api_secret, 'unknown', '等待插件上报', now, now))
+    api._upsertState(same_site_pair_id, {'host_id': 'H_SITE_A', 'host_name': 'SameSite-A', 'host_ip': '10.10.4.1', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(same_site_pair_id, {'host_id': 'H_SITE_B', 'host_name': 'SameSite-B', 'host_ip': '10.10.4.2', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_SITE_A', 'site_scope': 'local'}, 'standby', now)
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair = [x for x in res['data']['list'] if x['pair_id'] == same_site_pair_id][0]
+        assert len(pair['hosts']) == 2, pair
+        assert [x['site_scope'] for x in pair['hosts']] == ['local', 'local'], pair
 
     health_payload = {
         'pair_id': pair_id,

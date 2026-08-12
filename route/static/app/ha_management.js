@@ -207,6 +207,7 @@ function haHostLooksHealthy(host) {
 }
 
 function haIsCurrentDatacenterHost(pair, host, index) {
+  if (host.site_scope) return host.site_scope === 'local';
   var methods = host.host_alias_collect_methods || [];
   if (host.collect_method === 'local' || methods.indexOf('local') !== -1) return true;
   var hasLocal = false;
