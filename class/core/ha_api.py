@@ -832,7 +832,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if state.get('role') == 'master':
                 actual = state.get('host_id')
                 break
-        jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('actual_master_host_id,status,status_text,last_report_at,update_time', (actual, status, status_text, now, now))
+        desired = self._safeText(payload.get('desired_master_host_id') or '', 128)
+        if desired:
+            pair['desired_master_host_id'] = desired
+            status, status_text = self.deriveStatus(pair, states)
+            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('desired_master_host_id,actual_master_host_id,status,status_text,last_report_at,update_time', (desired, actual, status, status_text, now, now))
+        else:
+            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('actual_master_host_id,status,status_text,last_report_at,update_time', (actual, status, status_text, now, now))
         return jh.returnJson(True, '状态已上报')
 
     def publicReportSwitchEvent(self):

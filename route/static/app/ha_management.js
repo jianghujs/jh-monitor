@@ -563,11 +563,12 @@ function haDetailSummaryHtml(pair) {
   var actualMaster = haFindHost(pair, pair.actual_master_host_id) || {};
   var desiredMaster = haFindHost(pair, pair.desired_master_host_id) || {};
   var warnings = pair.warnings && pair.warnings.length ? pair.warnings.join('；') : '无待处理提醒';
+  var statusText = pair.status_text || haStatusLabel(pair.status);
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">组别概览</div>' +
     '<table class="table table-hover" style="margin-bottom:10px"><tbody>' +
     '<tr><td width="130">主备关系</td><td>' + haEscape(pair.pair_name) + '</td></tr>' +
-    '<tr><td>状态</td><td><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(pair.status_text || '') + '">' + haStatusLabel(pair.status) + '</span></td></tr>' +
+    '<tr><td>状态</td><td><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(statusText) + '">' + haStatusLabel(pair.status) + '</span><span class="ha-status-desc" title="' + haAttr(statusText) + '">' + haEscape(statusText) + '</span></td></tr>' +
     '<tr><td>实际主机</td><td>' + haEscape(actualMaster.name || '--') + ' / ' + haEscape(actualMaster.ip || '--') + '</td></tr>' +
     '<tr><td>期望主机</td><td>' + haEscape(desiredMaster.name || '--') + ' / ' + haEscape(desiredMaster.ip || '--') + '</td></tr>' +
     '<tr><td>切换任务</td><td>' + haEscape(pair.switch_run_id) + '</td></tr>' +
