@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+import atexit
 
 ROOT = '/www/server/jh-monitor'
 sys.path.insert(0, ROOT)
@@ -13,6 +14,32 @@ sys.path.insert(0, os.path.join(ROOT, 'class/core'))
 
 from route import app
 from ha_api import ha_api
+import jh
+
+
+def _cleanup_pairs(pair_ids):
+    api = ha_api()
+    api.ensureHaSchema()
+    for pair_id in sorted(set([x for x in pair_ids if x])):
+        runs = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).field('switch_run_id,log_path').select()
+        run_ids = []
+        if isinstance(runs, list):
+            for run in runs:
+                if not isinstance(run, dict):
+                    continue
+                if run.get('switch_run_id'):
+                    run_ids.append(run.get('switch_run_id'))
+                log_path = run.get('log_path') or ''
+                if log_path.startswith(api.LOG_ROOT) and os.path.isfile(log_path):
+                    os.remove(log_path)
+        jh.M('ha_switch_event').where('pair_id=?', (pair_id,)).delete()
+        for switch_run_id in run_ids:
+            jh.M('ha_switch_event').where('switch_run_id=?', (switch_run_id,)).delete()
+        jh.M('ha_callback_record').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_host_state').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_api_nonce').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_pair').where('pair_id=?', (pair_id,)).delete()
 
 
 def _headers(secret, payload, nonce):
@@ -69,12 +96,15 @@ def _assert_pair(api, pair_id):
 def main():
     api = ha_api()
     assert api.ensureHaSchema()
+    cleanup_pair_ids = []
+    atexit.register(_cleanup_pairs, cleanup_pair_ids)
     suffix = str(int(time.time()))
     secret = 'dual-secret-' + suffix
     host_a = {'host_id': 'H_DC_A', 'host_name': 'DC-A', 'host_ip': '10.20.1.1', 'role': 'master', 'online_status': 'online'}
     host_b = {'host_id': 'H_DC_B', 'host_name': 'DC-B', 'host_ip': '10.20.2.1', 'role': 'standby', 'online_status': 'online'}
     pair_a = 'HA_DUAL_A_' + suffix
     pair_b = 'HA_DUAL_B_' + suffix
+    cleanup_pair_ids.extend([pair_a, pair_b])
     _register(api, pair_a, secret, host_a, host_b)
     _register(api, pair_b, secret, host_b, host_a)
 

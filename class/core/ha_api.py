@@ -262,13 +262,187 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         rows = jh.M('ha_host_state').where('pair_id=?', (pair_id,)).field(self.state_fields).select()
         return rows if isinstance(rows, list) else []
 
-    def _normalizeHost(self, row):
+    def _getEvents(self, switch_run_id, limit=500):
+        if not switch_run_id:
+            return []
+        rows = jh.M('ha_switch_event').where('switch_run_id=?', (switch_run_id,)).field(
+            'id,switch_run_id,pair_id,event_id,origin_host_id,report_host_id,collect_method,seq,phase,step,status,log_text,addtime'
+        ).order('seq asc,id asc').limit(str(max(1, int(limit)))).select()
+        return rows if isinstance(rows, list) else []
+
+    def _normalizeCheckStatus(self, status):
+        status = self._safeText(status, 32).lower()
+        if status in ('ok', 'success', 'normal', 'pass', 'passed'):
+            return 'pass'
+        if status in ('warn', 'warning'):
+            return 'warning'
+        if status in ('fail', 'failed', 'error', 'danger'):
+            return 'failed'
+        if status in ('skip', 'skipped'):
+            return 'skipped'
+        return status or 'unknown'
+
+    def _normalizeScriptChecks(self, detail):
+        if not isinstance(detail, dict):
+            return []
+        raw = detail.get('script_checks')
+        if raw is None:
+            raw = detail.get('checks')
+        if isinstance(raw, dict):
+            items = []
+            for group, checks in raw.items():
+                if isinstance(checks, list):
+                    for check in checks:
+                        if isinstance(check, dict):
+                            item = dict(check)
+                            item.setdefault('group', group)
+                            items.append(item)
+                elif isinstance(checks, dict):
+                    item = dict(checks)
+                    item.setdefault('group', group)
+                    items.append(item)
+            raw = items
+        if not isinstance(raw, list):
+            return []
+        result = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = self._safeText(item.get('name') or item.get('title') or item.get('key'), 128)
+            if not name:
+                continue
+            result.append({
+                'group': self._safeText(item.get('group') or item.get('category') or '其他', 64) or '其他',
+                'name': name,
+                'expected': self._safeText(item.get('expected') or item.get('expect') or '', 255),
+                'actual': self._safeText(item.get('actual') or item.get('value') or item.get('text') or '', 255),
+                'status': self._normalizeCheckStatus(item.get('status')),
+                'message': self._safeText(item.get('message') or item.get('msg') or item.get('summary') or '', 512)
+            })
+        return result
+
+    def _normalizeRun(self, run):
+        if not isinstance(run, dict) or not run.get('switch_run_id'):
+            return {}
+        options = self._jsonLoads(run.get('options_json'), {})
+        summary = self._jsonLoads(run.get('step_summary'), [])
+        return {
+            'switch_run_id': run.get('switch_run_id') or '',
+            'pair_id': run.get('pair_id') or '',
+            'old_master_host_id': run.get('old_master_host_id') or '',
+            'new_master_host_id': run.get('new_master_host_id') or '',
+            'desired_master_host_id': run.get('desired_master_host_id') or '',
+            'options': options if isinstance(options, dict) else {},
+            'status': run.get('status') or '',
+            'current_phase': run.get('current_phase') or '',
+            'current_step': run.get('current_step') or '',
+            'next_step': run.get('next_step') or '',
+            'last_error': run.get('last_error') or '',
+            'step_summary': summary if isinstance(summary, list) else [],
+            'log_path': run.get('log_path') or '',
+            'callback_status': run.get('callback_status') or '',
+            'callback_error': run.get('callback_error') or '',
+            'addtime': run.get('addtime') or '',
+            'update_time': run.get('update_time') or '',
+            'finish_time': run.get('finish_time') or ''
+        }
+
+    def _normalizeEvent(self, row):
+        return {
+            'event_id': row.get('event_id') or '',
+            'switch_run_id': row.get('switch_run_id') or '',
+            'pair_id': row.get('pair_id') or '',
+            'origin_host_id': row.get('origin_host_id') or '',
+            'report_host_id': row.get('report_host_id') or '',
+            'collect_method': row.get('collect_method') or '',
+            'seq': self._safeInt(row.get('seq'), 0),
+            'phase': row.get('phase') or '',
+            'step': row.get('step') or '',
+            'status': row.get('status') or '',
+            'log_text': row.get('log_text') or '',
+            'addtime': row.get('addtime') or ''
+        }
+
+    def _isPlaceholderHost(self, row):
+        host_id = row.get('host_id') or ''
+        host_name = row.get('host_name') or ''
+        collect_method = row.get('collect_method') or ''
+        return (host_id.startswith('H_PEER_') or host_name.startswith('对端 ')) and collect_method == ''
+
+    def _hostStateScore(self, row):
+        detail = self._jsonLoads(row.get('health_detail'), {})
+        score = 0
+        if row.get('online_status') == 'online':
+            score += 100
+        if row.get('collect_status') == 'success':
+            score += 50
+        if row.get('collect_method') == 'local':
+            score += 30
+        elif row.get('collect_method') == 'ssh_peer':
+            score += 20
+        if isinstance(detail, dict) and detail:
+            score += 10
+        if isinstance(detail, dict) and detail.get('script_checks'):
+            score += 20
+        if self._isPlaceholderHost(row):
+            score -= 100
+        return score
+
+    def _displayStates(self, states):
+        grouped = {}
+        for row in states:
+            key = row.get('host_ip') or row.get('host_id') or str(row.get('id'))
+            grouped.setdefault(key, []).append(row)
+        result = []
+        for rows in grouped.values():
+            selected = rows[0]
+            for row in rows[1:]:
+                if self._hostStateScore(row) > self._hostStateScore(selected):
+                    selected = row
+            item = dict(selected)
+            alias_ids = []
+            alias_names = []
+            alias_roles = []
+            alias_collect_methods = []
+            for row in rows:
+                if row.get('host_id') and row.get('host_id') not in alias_ids:
+                    alias_ids.append(row.get('host_id'))
+                if row.get('host_name') and row.get('host_name') not in alias_names:
+                    alias_names.append(row.get('host_name'))
+                if row.get('role') and row.get('role') not in alias_roles:
+                    alias_roles.append(row.get('role'))
+                if row.get('collect_method') and row.get('collect_method') not in alias_collect_methods:
+                    alias_collect_methods.append(row.get('collect_method'))
+            item['_alias_host_ids'] = alias_ids
+            item['_alias_host_names'] = alias_names
+            item['_alias_roles'] = alias_roles
+            item['_alias_collect_methods'] = alias_collect_methods
+            result.append(item)
+        return result
+
+    def _displayHostName(self, row, pair=None):
+        name = row.get('host_name') or row.get('host_id') or ''
+        ip = row.get('host_ip') or ''
+        pair_name = pair.get('pair_name') if isinstance(pair, dict) else ''
+        if pair_name and ip and (not name or name.startswith('对端 ')):
+            last = ip.split('.')[-1] if '.' in ip else ip
+            return pair_name + '-' + last
+        return name
+
+    def _normalizeHost(self, row, pair=None):
         detail = self._jsonLoads(row.get('health_detail'), {})
         role = row.get('role') or 'unknown'
+        script_checks = self._normalizeScriptChecks(detail)
+        display_name = self._displayHostName(row, pair)
         return {
             'host_id': row.get('host_id') or '',
-            'name': row.get('host_name') or row.get('host_id') or '',
-            'host_name': row.get('host_name') or row.get('host_id') or '',
+            'host_alias_ids': row.get('_alias_host_ids') or [row.get('host_id') or ''],
+            'host_alias_names': row.get('_alias_host_names') or [row.get('host_name') or row.get('host_id') or ''],
+            'host_alias_roles': row.get('_alias_roles') or [role],
+            'host_alias_collect_methods': row.get('_alias_collect_methods') or ([row.get('collect_method')] if row.get('collect_method') else []),
+            'name': display_name,
+            'host_name': display_name,
+            'raw_host_name': row.get('host_name') or row.get('host_id') or '',
             'ip': row.get('host_ip') or '',
             'host_ip': row.get('host_ip') or '',
             'role': role,
@@ -279,6 +453,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'collect_method': row.get('collect_method') or '',
             'report_host_id': row.get('report_host_id') or '',
             'health_detail': detail,
+            'script_checks': script_checks,
             'switch_run_id': row.get('switch_run_id') or '',
             'switch_phase': row.get('switch_phase') or '',
             'switch_status': row.get('switch_status') or '',
@@ -297,7 +472,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
         if not states:
             return 'unknown', '等待插件上报'
-        masters = [x for x in states if x.get('role') == 'master']
+        masters = [x for x in states if x.get('role') == 'master' or 'master' in (x.get('_alias_roles') or [])]
         online = dict([(x.get('host_id'), x.get('online_status')) for x in states])
         warnings = []
         danger = []
@@ -310,20 +485,20 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if last_report_at:
                 try:
                     ts = time.mktime(time.strptime(last_report_at, '%Y-%m-%d %H:%M:%S'))
-                    if int(time.time() - ts) > self.REPORT_LOST_SECONDS and item.get('role') == 'master':
-                        danger.append('{0} 插件失联'.format(item.get('host_name') or item.get('host_id')))
+                    if int(time.time() - ts) > self.REPORT_LOST_SECONDS and item.get('role') == 'master' and item.get('collect_method') == 'local':
+                        danger.append('{0} 插件失联'.format(self._displayHostName(item, pair)))
                 except Exception:
                     pass
             if item.get('role') == 'master' and item.get('online_status') == 'offline':
-                danger.append('{0} 主机离线'.format(item.get('host_name') or item.get('host_id')))
+                danger.append('{0} 主机离线'.format(self._displayHostName(item, pair)))
             if item.get('collect_status') in ('failed', 'partial'):
-                warnings.append('{0} SSH采集异常'.format(item.get('host_name') or item.get('host_id')))
+                warnings.append('{0} SSH采集异常'.format(self._displayHostName(item, pair)))
             if item.get('health_status') in ('warning', 'danger', 'failed'):
                 detail = self._jsonLoads(item.get('health_detail'), {})
-                warnings.append(detail.get('summary') or '{0} 自检提醒'.format(item.get('host_name') or item.get('host_id')))
+                warnings.append(detail.get('summary') or '{0} 自检提醒'.format(self._displayHostName(item, pair)))
         desired = pair.get('desired_master_host_id') or ''
-        actual = masters[0].get('host_id') if len(masters) == 1 else ''
-        if desired and actual and desired != actual:
+        actual_aliases = masters[0].get('_alias_host_ids') or [masters[0].get('host_id')] if len(masters) == 1 else []
+        if desired and actual_aliases and desired not in actual_aliases:
             danger.append('期望主机和实际主机不一致')
         if danger:
             return 'danger', '；'.join(danger[:3])
@@ -333,29 +508,39 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             return 'warning', '备用机或对端离线'
         return 'normal', '状态正常'
 
-    def _normalizePair(self, pair):
-        states = self._getStates(pair.get('pair_id'))
+    def _normalizePair(self, pair, include_log=False, include_events=False):
+        states = self._displayStates(self._getStates(pair.get('pair_id')))
         status, status_text = self.deriveStatus(pair, states)
-        hosts = [self._normalizeHost(x) for x in states]
+        hosts = [self._normalizeHost(x, pair) for x in states]
         actual_master = ''
         for host in hosts:
-            if host.get('role') == 'master':
+            if host.get('role') == 'master' or 'master' in (host.get('host_alias_roles') or []):
                 actual_master = host.get('host_id')
+                break
+        desired_master = pair.get('desired_master_host_id') or actual_master
+        for host in hosts:
+            if desired_master in (host.get('host_alias_ids') or []):
+                desired_master = host.get('host_id')
                 break
         data = dict(pair)
         data['status'] = status
         data['status_text'] = status_text
         data['hosts'] = hosts
         data['actual_master_host_id'] = actual_master or pair.get('actual_master_host_id') or ''
-        data['desired_master_host_id'] = pair.get('desired_master_host_id') or data['actual_master_host_id']
+        data['desired_master_host_id'] = desired_master or data['actual_master_host_id']
         data['switch_run_id'] = pair.get('current_switch_run_id') or ''
         data['log_path'] = ''
+        data['switch_run'] = {}
+        data['switch_events'] = []
         if data['switch_run_id']:
             run = self._getRun(data['switch_run_id'])
+            data['switch_run'] = self._normalizeRun(run)
             data['log_path'] = run.get('log_path') or ''
+            if include_events:
+                data['switch_events'] = [self._normalizeEvent(x) for x in self._getEvents(data['switch_run_id'])]
         data['health'] = self._summaryHealth(hosts)
         data['warnings'] = [] if status == 'normal' else status_text.split('；')
-        data['log'] = self._readLogText(data.get('log_path')) if data.get('log_path') else ''
+        data['log'] = self._readLogText(data.get('log_path')) if include_log and data.get('log_path') else ''
         data['last_report_at'] = pair.get('last_report_at') or ''
         return data
 
@@ -381,14 +566,36 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         rows = jh.M('ha_pair').field(self.pair_fields).order('id desc').select()
         if not isinstance(rows, list):
             rows = []
-        return jh.returnJson(True, 'ok', {'list': [self._normalizePair(row) for row in rows]})
+        return jh.returnJson(True, 'ok', {'list': [self._normalizePair(row, include_log=False, include_events=False) for row in rows]})
 
     def getDetailApi(self):
         pair_id = request.form.get('pair_id', '').strip()
         pair = self._getPair(pair_id)
         if not pair:
             return jh.returnJson(False, '主备关系不存在')
-        return jh.returnJson(True, 'ok', self._normalizePair(pair))
+        return jh.returnJson(True, 'ok', self._normalizePair(pair, include_log=True, include_events=True))
+
+    def deletePairApi(self):
+        self.ensureHaSchema()
+        pair_id = request.form.get('pair_id', '').strip()
+        if not pair_id:
+            return jh.returnJson(False, '主备关系不能为空')
+        pair = self._getPair(pair_id)
+        if not pair:
+            return jh.returnJson(False, '主备关系不存在')
+        runs = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).field('switch_run_id').select()
+        run_ids = []
+        if isinstance(runs, list):
+            run_ids = [row.get('switch_run_id') for row in runs if isinstance(row, dict) and row.get('switch_run_id')]
+        jh.M('ha_switch_event').where('pair_id=?', (pair_id,)).delete()
+        for switch_run_id in run_ids:
+            jh.M('ha_switch_event').where('switch_run_id=?', (switch_run_id,)).delete()
+        jh.M('ha_callback_record').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_host_state').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_api_nonce').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_pair').where('pair_id=?', (pair_id,)).delete()
+        return jh.returnJson(True, '主备关系已删除', {'pair_id': pair_id})
 
     def _monthLogPath(self, switch_run_id):
         month = time.strftime('%Y-%m')
@@ -558,10 +765,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
 
     def _upsertState(self, pair_id, host, role, now):
         host_id = self._safeText(host.get('host_id'), 128)
+        host_name = self._safeText(host.get('host_name') or host.get('name') or host_id, 128)
+        host_ip = self._safeText(host.get('host_ip') or host.get('ip'), 64)
         exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id').find()
         values = (
-            self._safeText(host.get('host_name') or host.get('name') or host_id, 128),
-            self._safeText(host.get('host_ip') or host.get('ip'), 64),
+            host_name,
+            host_ip,
             self._safeText(role, 32),
             self._safeText(host.get('online_status') or host.get('online') or 'unknown', 32),
             self._safeText(host.get('health_status') or 'unknown', 32),
@@ -569,16 +778,23 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._safeText(host.get('collect_method') or '', 32),
             self._safeText(host.get('report_host_id') or '', 128),
             json.dumps(host.get('health_detail') or {}, ensure_ascii=False),
+            self._safeText(host.get('switch_run_id') or '', 128),
+            self._safeText(host.get('switch_phase') or '', 64),
+            self._safeText(host.get('switch_status') or '', 64),
+            self._safeText(host.get('current_step') or '', 255),
+            self._safeText(host.get('next_step') or '', 255),
+            self._safeText(host.get('last_error') or '', 512),
+            self._safeText(host.get('log_path') or '', 512),
             now,
             now
         )
         if isinstance(exists, dict) and exists.get('id'):
             jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
-                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,last_report_at,update_time', values
+                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,update_time', values
             )
         else:
             jh.M('ha_host_state').add(
-                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,last_report_at,addtime,update_time',
+                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,addtime,update_time',
                 (pair_id, host_id) + values + (now,)
             )
 

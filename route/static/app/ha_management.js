@@ -57,6 +57,17 @@ function haFindHost(pair, hostId) {
   return null;
 }
 
+function haStorePair(pair) {
+  if (!pair || !pair.pair_id) return;
+  for (var i = 0; i < haPairs.length; i++) {
+    if (haPairs[i].pair_id === pair.pair_id) {
+      haPairs[i] = pair;
+      return;
+    }
+  }
+  haPairs.push(pair);
+}
+
 function haStatusClass(status) {
   if (status === 'danger') return 'ha-pill-danger';
   if (status === 'warning') return 'ha-pill-warning';
@@ -75,109 +86,94 @@ function haStatusWeight(status) {
   return {danger: 0, switching: 1, warning: 2, normal: 3}[status] || 4;
 }
 
-var haCheckTemplate = [
-  {group: '计划任务', name: '备份数据库', master: '关闭', standby: '开启'},
-  {group: '计划任务', name: 'xtrabackup', master: '关闭', standby: '开启'},
-  {group: '计划任务', name: 'xtrabackup-inc 全量备份', master: '关闭', standby: '开启'},
-  {group: '计划任务', name: 'xtrabackup-inc 增量备份', master: '关闭', standby: '开启'},
-  {group: '计划任务', name: '备份网站配置', master: '开启', standby: '关闭'},
-  {group: '计划任务', name: '备份插件配置', master: '开启', standby: '关闭'},
-  {group: '计划任务', name: 'lsyncd 实时任务定时同步', master: '开启', standby: '关闭'},
-  {group: '计划任务', name: "续签 Let's Encrypt 证书", master: '开启', standby: '关闭'},
-  {group: '计划任务', name: '恢复网站配置', master: '关闭', standby: '开启'},
-  {group: '计划任务', name: '恢复插件配置', master: '关闭', standby: '开启'},
-  {group: '监控提醒', name: 'SSL 证书到期预提醒', master: '开启', standby: '关闭'},
-  {group: '监控提醒', name: '主从同步异常提醒', master: '开启', standby: '关闭'},
-  {group: '监控提醒', name: 'Rsync 状态异常提醒', master: '开启', standby: '关闭'},
-  {group: 'SSH 同步', name: 'authorized_keys 同步公钥', master: '已删除', standby: '已添加'},
-  {group: 'rsync', name: 'rsyncd 任务', master: '运行中', standby: '已停止'},
-  {group: 'rsync', name: 'lsyncd 服务', master: '运行中', standby: '已停止'},
-  {group: 'Web 服务', name: 'OpenResty', master: '运行中', standby: '已停止'},
-  {group: '数据库', name: 'MySQL 主从状态', master: '无主从配置（作为主）', standby: '作为从库（复制链路正常）'}
-];
+function haNormalizeChecks(host) {
+  var detail = host.health_detail || {};
+  var checks = [];
+  if ($.isArray(host.script_checks)) checks = host.script_checks;
+  else if ($.isArray(detail.script_checks)) checks = detail.script_checks;
+  else if ($.isArray(detail.checks)) checks = detail.checks;
+  if (checks.length) return checks;
+  var summary = detail.summary || host.health_text || '';
+  if (summary) {
+    return [{group: '健康摘要', name: '状态摘要', expected: '', actual: summary, status: host.health_status || 'unknown', message: ''}];
+  }
+  return [];
+}
 
-function haBuildHostChecks(pair, host) {
-  var isMaster = host.role === 'master';
-  var isOffline = host.online !== 'online';
-  var isSwitching = pair.status === 'switching';
-  var result = {};
-  haCheckTemplate.forEach(function(item) {
-    var expected = isMaster ? item.master : item.standby;
-    var actual = expected;
-    var status = 'pass';
-    if (isOffline) {
-      actual = '未知（插件离线）';
-      status = 'unknown';
-    } else if (isSwitching && isMaster && item.group !== '数据库') {
-      if (item.name.indexOf('OpenResty') !== -1 || item.name.indexOf('备份数据库') !== -1 || item.name.indexOf('rsyncd') !== -1) {
-        actual = item.standby;
-        status = 'warning';
-      }
-    } else if (!isMaster && pair.status === 'warning' && item.name.indexOf('MySQL') !== -1) {
-      actual = '复制延迟 38s';
-      status = 'warning';
-    } else if (isMaster && pair.status === 'warning' && item.name.indexOf('lsyncd') !== -1) {
-      actual = 'lsyncd warning';
-      status = 'warning';
-    }
-    result[item.name] = {expected: expected, actual: actual, status: status};
-  });
-  return result;
+function haCheckStatus(status) {
+  status = (status || '').toLowerCase();
+  if (status === 'ok' || status === 'success' || status === 'normal' || status === 'pass' || status === 'passed') return 'pass';
+  if (status === 'warn' || status === 'warning') return 'warning';
+  if (status === 'fail' || status === 'failed' || status === 'error' || status === 'danger') return 'failed';
+  if (status === 'skip' || status === 'skipped') return 'skipped';
+  return status || 'unknown';
 }
 
 function haCheckStatusIcon(status) {
+  status = haCheckStatus(status);
   if (status === 'pass') return '<span class="ha-check-icon ha-check-pass" title="正常">✓</span>';
-  if (status === 'warning') return '<span class="ha-check-icon ha-check-warn" title="提醒">!</span>';
+  if (status === 'warning' || status === 'skipped') return '<span class="ha-check-icon ha-check-warn" title="提醒">!</span>';
   if (status === 'unknown') return '<span class="ha-check-icon ha-check-unknown" title="未知">?</span>';
   return '<span class="ha-check-icon ha-check-fail" title="异常">✗</span>';
 }
 
 function haDetailChecksHtml(pair) {
   var hostCards = pair.hosts.map(function(host, index) {
-    var checks = haBuildHostChecks(pair, host);
+    var checks = haNormalizeChecks(host);
     var rows = '';
     var currentGroup = '';
-    haCheckTemplate.forEach(function(item) {
-      if (item.group !== currentGroup) {
-        currentGroup = item.group;
-        rows += '<tr class="ha-check-group-row"><td colspan="2">' + haEscape(item.group) + '</td></tr>';
-      }
-      var check = checks[item.name];
-      var matched = check.status === 'pass';
-      var actualCls = matched ? 'ha-check-actual-pass' : 'ha-check-actual-fail';
-      var statusTitle = '当前状态: ' + check.actual + '\n期望状态: ' + check.expected;
-      rows += '<tr>' +
-        '<td class="ha-check-name">' + haEscape(item.name) + '</td>' +
-        '<td class="ha-check-actual ' + actualCls + '" title="' + haAttr(statusTitle) + '">' + haCheckStatusIcon(matched ? 'pass' : 'fail') + haEscape(check.actual) + '</td>' +
-      '</tr>';
-    });
+    if (!checks.length) {
+      rows = '<tr><td colspan="2" class="ha-muted">暂无自检明细，等待插件上报。</td></tr>';
+    } else {
+      checks.forEach(function(item) {
+        var group = item.group || '其他';
+        if (group !== currentGroup) {
+          currentGroup = group;
+          rows += '<tr class="ha-check-group-row"><td colspan="2">' + haEscape(group) + '</td></tr>';
+        }
+        var status = haCheckStatus(item.status);
+        var matched = status === 'pass';
+        var actualCls = matched ? 'ha-check-actual-pass' : 'ha-check-actual-fail';
+        var actual = item.actual || item.text || item.message || '未知';
+        var expected = item.expected || '';
+        var statusTitle = '当前状态: ' + actual + (expected ? '\n期望状态: ' + expected : '') + (item.message ? '\n说明: ' + item.message : '');
+        rows += '<tr>' +
+          '<td class="ha-check-name">' + haEscape(item.name || '未命名检查项') + '</td>' +
+          '<td class="ha-check-actual ' + actualCls + '" title="' + haAttr(statusTitle) + '">' + haCheckStatusIcon(status) + haEscape(actual) + '</td>' +
+        '</tr>';
+      });
+    }
+    var sourceText = host.collect_method ? '采集来源: ' + host.collect_method + ' / ' + (host.collect_status || 'unknown') : '采集来源: 未知';
+    if (host.last_report_at) sourceText += ' / ' + host.last_report_at;
     var dot = haHostStatusDot(pair, host);
     var switchState = haHostSwitchState(pair, host);
     var switchingMark = switchState.status === 'running' ? '<span class="ha-switching-state" title="' + haAttr(switchState.step) + '"><span class="ha-loading-icon"></span>切换中</span>' : '';
     var nameCls = host.online === 'online' ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
+    var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag">本机房</span>' : '';
     return '<div class="ha-check-host-card">' +
       '<div class="ha-check-host-head">' + dot + haRoleMark(host.role) +
         '<span class="' + nameCls + '">' + haEscape(host.name) + '</span>' +
-        (index === 0 ? '<span class="ha-current-site-tag">本机房</span>' : '') + switchingMark +
+        currentMark + switchingMark +
       '</div>' +
+      '<div class="ha-muted mb10">' + haEscape(sourceText) + '</div>' +
       '<table class="table table-hover ha-check-table"><colgroup><col><col class="ha-check-status-col"></colgroup><thead><tr><th>检查项</th><th class="ha-check-status-head">状态</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     '</div>';
   }).join('');
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">自检状态</div>' +
-    '<div class="ha-muted mb10">基于上下线脚本的每个步骤，检查每台机器当前角色下的期望状态是否满足。</div>' +
+    '<div class="ha-muted mb10">展示 ha_manager 插件上报的真实自检明细；缺失明细时显示摘要或等待上报。</div>' +
     '<div class="ha-check-grid">' + hostCards + '</div>' +
     '</div>';
 }
 
 function haRoleMark(role) {
   var cls = role === 'master' ? 'ha-role-master' : 'ha-role-standby';
-  var text = role === 'master' ? '主' : '备';
+  var text = role === 'master' ? '主' : (role === 'standby' ? '备' : '?');
   return '<span class="ha-role-mark ' + cls + '">' + text + '</span>';
 }
 
 function haHostCell(host) {
-  var onlineText = host.online === 'online' ? '在线' : '离线';
+  var onlineText = host.online === 'online' ? '在线' : (host.online === 'offline' ? '离线' : '未知');
   var onlineCls = host.online === 'online' ? 'ha-online' : 'ha-offline';
   return '<div class="ha-main">' + haRoleMark(host.role) + haEscape(host.name) + '</div>' +
     '<div class="ha-sub">' + haEscape(host.ip) + ' / <span class="' + onlineCls + '">' + onlineText + '</span></div>' +
@@ -189,26 +185,79 @@ function haHostStatusDot(pair, host) {
   if (state.status === 'running') {
     return '<span class="ha-host-dot ha-host-dot-switching" title="正在切换中：' + haAttr(state.step) + '"></span>';
   }
+  if (haHostLooksHealthy(host)) {
+    return '<span class="ha-host-dot ha-host-dot-online" title="主机自检正常"></span>';
+  }
   if (host.online !== 'online') {
-    return '<span class="ha-host-dot ha-host-dot-offline" title="主机离线或插件失联"></span>';
+    return '<span class="ha-host-dot ha-host-dot-offline" title="主机离线、插件失联或尚未上报真实状态"></span>';
   }
   return '<span class="ha-host-dot ha-host-dot-online" title="主机在线"></span>';
 }
 
-function haHostLine(pair, host, isCurrentDatacenter) {
-  var currentMark = isCurrentDatacenter ? '<span class="ha-current-site-tag" title="当前机房主机">本机房</span>' : '';
-  var nameCls = host.online === 'online' ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
+function haHostLooksHealthy(host) {
+  if (host.online === 'online') return true;
+  if (host.health_status === 'normal') return true;
+  var checks = haNormalizeChecks(host);
+  if (!checks.length) return false;
+  for (var i = 0; i < checks.length; i++) {
+    var status = haCheckStatus(checks[i].status);
+    if (status !== 'pass' && status !== 'skipped') return false;
+  }
+  return true;
+}
+
+function haIsCurrentDatacenterHost(pair, host, index) {
+  var methods = host.host_alias_collect_methods || [];
+  if (host.collect_method === 'local' || methods.indexOf('local') !== -1) return true;
+  var hasLocal = false;
+  (pair.hosts || []).forEach(function(item) {
+    var itemMethods = item.host_alias_collect_methods || [];
+    if (item.collect_method === 'local' || itemMethods.indexOf('local') !== -1) hasLocal = true;
+  });
+  return !hasLocal && index === 0;
+}
+
+function haOnlineLabel(host) {
+  if (haHostLooksHealthy(host)) return '<span class="ha-online">正常</span>';
+  if (host.online === 'offline') return '<span class="ha-offline">离线</span>';
+  if (host.collect_status === 'failed') return '<span class="ha-offline">采集失败</span>';
+  return '<span class="ha-muted">待上报</span>';
+}
+
+function haCollectLabel(host) {
+  if (host.collect_status === 'success') {
+    return '<div><span class="ha-online">正常</span></div><div class="ha-sub">' + haEscape(host.collect_method || '插件上报') + '</div>';
+  }
+  if (host.collect_method === 'ssh_peer' && host.collect_status === 'partial') {
+    return '<div><span class="ha-pill-warning ha-status-pill">部分成功</span></div><div class="ha-sub">SSH 已连接，日志采集不完整</div>';
+  }
+  if (host.collect_status === 'failed') {
+    return '<div><span class="ha-offline">SSH采集异常</span></div><div class="ha-sub">' + haEscape(host.collect_method || '--') + '</div>';
+  }
+  if (haHostLooksHealthy(host)) {
+    return '<div><span class="ha-online">正常</span></div><div class="ha-sub">自检通过</div>';
+  }
+  return '<div><span class="ha-muted">待上报</span></div><div class="ha-sub">' + haEscape(host.collect_method || '--') + '</div>';
+}
+
+function haHostLine(pair, host, index) {
+  var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag" title="当前机房主机">本机房</span>' : '';
+  var nameCls = haHostLooksHealthy(host) ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
+  var meta = [];
+  if (host.collect_method) meta.push(host.collect_method);
+  if (host.collect_status) meta.push(host.collect_status);
+  if (host.last_report_at) meta.push(host.last_report_at);
   return '<div class="ha-host-line">' +
     haHostStatusDot(pair, host) +
     haRoleMark(host.role) +
     '<span class="' + nameCls + '" title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + currentMark +
-    '<span class="ha-host-ip">' + haEscape(host.ip) + '</span>' +
+    '<span class="ha-host-ip" title="' + haAttr(meta.join(' / ')) + '">' + haEscape(host.ip) + '</span>' +
     '</div>';
 }
 
 function haHostsCell(pair) {
   return '<div class="ha-host-list-cell">' + pair.hosts.map(function(host, index) {
-    return haHostLine(pair, host, index === 0);
+    return haHostLine(pair, host, index);
   }).join('') + '</div>';
 }
 
@@ -217,14 +266,14 @@ function haHealthItem(label, value) {
 }
 
 function haHostHealth(pair, host, index) {
+  var detail = host.health_detail || {};
   var isOffline = host.online !== 'online';
-  var isMaster = host.role === 'master';
-  var statusText = isOffline ? '插件失联' : '插件在线';
-  var mysqlText = isOffline ? '未知' : (isMaster ? pair.health.mysql : (pair.status === 'switching' ? '等待提升或同步' : '复制链路正常'));
-  var rsyncText = isOffline ? '未知' : (isMaster ? pair.health.rsync : '备用同步正常');
-  var openrestyText = isOffline ? '未知' : (isMaster ? pair.health.openresty : '备用机待启动');
-  var reportTime = isOffline ? '超过 5 分钟未上报' : pair.last_report_at;
-  var level = isOffline ? 'danger' : (pair.status === 'warning' && index === 0 ? 'warning' : 'normal');
+  var statusText = isOffline ? '插件失联或未知' : '插件在线';
+  var mysqlText = haHealthDetailText(detail.mysql, '未知');
+  var rsyncText = haHealthDetailText(detail.rsync, '未知');
+  var openrestyText = haHealthDetailText(detail.openresty, '未知');
+  var reportTime = host.last_report_at || pair.last_report_at || '未上报';
+  var level = isOffline ? 'danger' : (host.health_status === 'warning' || host.health_status === 'danger' || host.health_status === 'failed' ? 'warning' : 'normal');
   return {
     plugin: statusText,
     mysql: mysqlText,
@@ -235,6 +284,11 @@ function haHostHealth(pair, host, index) {
   };
 }
 
+function haHealthDetailText(item, fallback) {
+  if ($.isPlainObject(item)) return item.text || item.status || fallback;
+  return item || fallback;
+}
+
 function haHealthLevelText(level) {
   if (level === 'danger') return '红色异常';
   if (level === 'warning') return '橙色提醒';
@@ -242,21 +296,36 @@ function haHealthLevelText(level) {
 }
 
 function haHostSwitchState(pair, host) {
-  if (pair.status === 'switching') {
-    if (host.host_id === pair.actual_master_host_id) {
-      return {phase: 'offline', status: 'success', step: '旧主机下线流程已完成或等待确认', next: '等待目标主机上线'};
-    }
-    if (host.host_id === pair.desired_master_host_id) {
-      return {phase: 'online', status: 'running', step: pair.status_text || '上线中', next: '执行数据库提升、同步任务和 OpenResty 启动'};
-    }
+  var run = pair.switch_run || {};
+  var hostSwitchStatus = haNormalizeSwitchStatus(host.switch_status || '');
+  if (host.switch_phase || host.switch_status || host.current_step || host.last_error || (host.switch_run_id && hostSwitchStatus)) {
+    return {
+      phase: host.switch_phase || run.current_phase || 'switch',
+      status: hostSwitchStatus || haNormalizeSwitchStatus(run.status || '') || 'waiting',
+      step: host.last_error || host.current_step || run.current_step || pair.status_text || '切换中',
+      next: host.next_step || run.next_step || '等待下一次状态上报'
+    };
   }
-  if (pair.status === 'danger' && host.online !== 'online') {
-    return {phase: 'offline', status: 'error', step: '插件失联，无法领取下线阶段', next: '人工确认后可切换到备用机'};
+  if (run.switch_run_id && pair.status === 'switching') {
+    return {
+      phase: run.current_phase || 'switch',
+      status: haNormalizeSwitchStatus(run.status || 'running'),
+      step: run.last_error || run.current_step || pair.status_text || '切换中',
+      next: run.next_step || '等待插件上报下一步'
+    };
   }
   if (host.host_id === pair.actual_master_host_id) {
     return {phase: 'stable', status: 'success', step: '当前承载主机角色', next: '无执行中任务'};
   }
   return {phase: 'standby', status: 'waiting', step: '备用机待命', next: '等待手动切换或云监控期望状态变更'};
+}
+
+function haNormalizeSwitchStatus(status) {
+  status = (status || '').toLowerCase();
+  if (status === 'success' || status === 'done' || status.indexOf('_done') !== -1) return 'success';
+  if (status === 'failed' || status === 'error' || status === 'waiting_retry') return 'error';
+  if (status === 'running' || status === 'pending' || status === 'preparing' || status === 'finalizing' || status.indexOf('_running') !== -1) return 'running';
+  return status || 'waiting';
 }
 
 function haSwitchStatusText(status) {
@@ -274,7 +343,15 @@ function haSwitchStatusClass(status) {
 }
 
 function haHostLogText(pair, host) {
-  var lines = (pair.log || '').split('\n').filter(function(line) {
+  var events = pair.switch_events || [];
+  var lines = [];
+  events.forEach(function(item) {
+    if (item.origin_host_id === host.host_id) {
+      lines.push('[' + (item.addtime || '--') + '] [' + (item.phase || 'event') + '] [' + (item.status || 'info') + '] ' + (item.log_text || item.step || ''));
+    }
+  });
+  if (lines.length) return lines.join('\n');
+  lines = (pair.log || '').split('\n').filter(function(line) {
     return line.indexOf('[' + host.host_id + ']') !== -1;
   });
   if (lines.length) return lines.join('\n');
@@ -339,10 +416,28 @@ function haRenderList(search) {
         '<a class="btlink" href="javascript:;" onclick="haOpenDetailDialog(\'' + haAttr(pair.pair_id) + '\')">详情</a>' +
         '<a class="btlink" href="javascript:;" onclick="haOpenSwitchDialog(\'' + haAttr(pair.pair_id) + '\')">切换</a>' +
         '<a class="btlink" href="javascript:;" onclick="haOpenLogDialog(\'' + haAttr(pair.pair_id) + '\')">日志</a>' +
+        '<a class="btlink" href="javascript:;" onclick="haDeletePair(\'' + haAttr(pair.pair_id) + '\')">删除</a>' +
       '</td>' +
       '</tr>';
   });
   $('#haPairBody').html(html);
+}
+
+function haDeletePair(pairId) {
+  var pair = haFindPair(pairId);
+  if (!pair) return layer.msg('主备关系不存在', {icon: 2});
+  layer.confirm('确认删除主备关系 [' + haEscape(pair.pair_name || pair.pair_id) + ']？<br>将清理云监控侧该记录及关联状态、切换任务和事件，日志文件会保留。', {
+    icon: 3,
+    title: '删除主备关系',
+    btn: ['确认删除', '取消']
+  }, function(index) {
+    haApi('delete_pair', {pair_id: pairId}, function(data) {
+      if (!data) return;
+      layer.close(index);
+      layer.msg('已删除主备关系', {icon: 1});
+      haLoadPairs();
+    });
+  });
 }
 
 function haSwitchOptionsHtml(pair, target) {
@@ -439,7 +534,13 @@ function haOpenDetailDialog(pairId) {
     closeBtn: 1,
     content: html,
     success: function() {
-      haRenderDetailTab(pair.pair_id, 'summary');
+      haApi('get_detail', {pair_id: pair.pair_id}, function(data) {
+        if (data) {
+          haStorePair(data);
+          pair = data;
+        }
+        haRenderDetailTab(pair.pair_id, 'summary');
+      });
     }
   });
 }
@@ -479,9 +580,14 @@ function haDetailSummaryHtml(pair) {
 function haDetailHostsHtml(pair) {
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">主机列表</div>' +
-    '<table class="table table-hover" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th></tr></thead><tbody>' +
+    '<table class="table table-hover" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th><th>采集状态</th><th>最近上报</th></tr></thead><tbody>' +
       pair.hosts.map(function(host) {
-        return '<tr><td><div class="ha-main">' + haEscape(host.name) + '</div><div class="ha-sub">' + haEscape(host.host_id || '') + '</div></td><td>' + haEscape(host.ip) + '</td><td>' + haRoleMark(host.role) + haEscape(host.role) + '</td><td>' + (host.online === 'online' ? '<span class="ha-online">在线</span>' : '<span class="ha-offline">离线</span>') + '</td></tr>';
+        return '<tr><td><div class="ha-main">' + haEscape(host.name) + '</div><div class="ha-sub">' + haEscape(host.host_id || '') + '</div></td>' +
+          '<td>' + haEscape(host.ip) + '</td>' +
+          '<td>' + haRoleMark(host.role) + haEscape(host.role) + '</td>' +
+          '<td>' + haOnlineLabel(host) + '</td>' +
+          '<td>' + haCollectLabel(host) + '</td>' +
+          '<td>' + haEscape(host.last_report_at || '--') + '</td></tr>';
       }).join('') +
     '</tbody></table>' +
     '<div class="ha-muted">主机数据来自 ha_manager 插件注册和状态上报。</div>' +
@@ -489,6 +595,7 @@ function haDetailHostsHtml(pair) {
 }
 
 function haDetailSwitchHtml(pair) {
+  var run = pair.switch_run || {};
   var hostRows = pair.hosts.map(function(host) {
     var state = haHostSwitchState(pair, host);
     return '<tr>' +
@@ -503,14 +610,17 @@ function haDetailSwitchHtml(pair) {
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">步骤摘要</div>' +
     '<div class="ha-health-row">' +
-      haHealthItem('offline', pair.status === 'switching' ? '已完成或等待中' : '无执行中任务') +
-      haHealthItem('online', pair.status === 'switching' ? pair.status_text : '无执行中任务') +
-      haHealthItem('callback', pair.status === 'normal' ? '最近成功' : '等待切换完成') +
+      haHealthItem('任务状态', run.status || (pair.status === 'switching' ? 'running' : '无执行中任务')) +
+      haHealthItem('当前阶段', run.current_phase || (pair.status === 'switching' ? pair.status_text : '无执行中任务')) +
+      haHealthItem('回调状态', run.callback_status || pair.callback_status || '未触发') +
     '</div>' +
     '<table class="table table-hover mtb15 ha-switch-detail-table"><thead><tr><th width="190">主机</th><th width="80">阶段</th><th width="90">状态</th><th>当前步骤</th><th>下一步</th><th width="210">日志文件</th></tr></thead><tbody>' + hostRows + '</tbody></table>' +
     '<table class="table table-hover mtb15"><tbody>' +
       '<tr><td width="130">切换任务</td><td>' + haEscape(pair.switch_run_id) + '</td></tr>' +
-      '<tr><td>当前阶段</td><td>' + (pair.status === 'switching' ? haEscape(pair.status_text) : '无执行中任务') + '</td></tr>' +
+      '<tr><td>当前阶段</td><td>' + haEscape(run.current_phase || (pair.status === 'switching' ? pair.status_text : '无执行中任务')) + '</td></tr>' +
+      '<tr><td>当前步骤</td><td>' + haEscape(run.current_step || '--') + '</td></tr>' +
+      '<tr><td>下一步</td><td>' + haEscape(run.next_step || '--') + '</td></tr>' +
+      '<tr><td>最后错误</td><td>' + haEscape(run.last_error || '--') + '</td></tr>' +
       '<tr><td>日志文件</td><td>' + haEscape(pair.log_path) + '</td></tr>' +
       '<tr><td>操作</td><td><a class="btlink" href="javascript:;" onclick="haOpenSwitchDialog(\'' + haAttr(pair.pair_id) + '\')">发起切换</a><a class="btlink ml10" href="javascript:;" onclick="haOpenLogDialog(\'' + haAttr(pair.pair_id) + '\')">查看日志</a></td></tr>' +
     '</tbody></table>' +
