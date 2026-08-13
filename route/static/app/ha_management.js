@@ -3,7 +3,9 @@ var haCurrentSearch = '';
 var haSwitchDialogIndex = null;
 var haSwitchLogLayerIndex = null;
 var haSwitchLogTimer = null;
+var haSwitchLogHeartbeatTimer = null;
 var haSwitchLogHeartbeat = 0;
+var haSwitchLiveBaseText = '';
 var haSwitchWizard = {step: 1, pairId: '', targetHostId: '', options: null, prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
 
 function haApi(action, data, callback, options) {
@@ -506,7 +508,6 @@ function haOpenSwitchDialog(pairId) {
     },
     end: function() {
       haSwitchDialogIndex = null;
-      haStopSwitchLogPolling();
     },
   });
 }
@@ -698,6 +699,10 @@ function haStopSwitchLogPolling() {
     clearInterval(haSwitchLogTimer);
     haSwitchLogTimer = null;
   }
+  if (haSwitchLogHeartbeatTimer) {
+    clearInterval(haSwitchLogHeartbeatTimer);
+    haSwitchLogHeartbeatTimer = null;
+  }
 }
 
 function haCloseSwitchLogWindow() {
@@ -715,13 +720,25 @@ function haCloseSwitchLogWindow() {
 }
 
 function haUpdateSwitchLogWindow(logText, stateText, stateClass) {
-  var displayText = logText || '正在准备切换任务...';
+  haSwitchLiveBaseText = logText || '正在准备切换任务...';
+  var displayText = haSwitchLiveBaseText;
   if (stateClass === 'ha-live-state-running') {
-    haSwitchLogHeartbeat = (haSwitchLogHeartbeat + 1) % 4;
-    displayText += '\n\n|- 正在执行中，等待新的日志输出' + new Array(haSwitchLogHeartbeat + 1).join('.');
+    displayText += haSwitchLogHeartbeatText();
   }
   $('#haSwitchLiveLog').text(displayText);
   $('#haSwitchLiveState').removeClass('ha-live-state-running ha-live-state-success ha-live-state-failed').addClass(stateClass || 'ha-live-state-running').text(stateText || '执行中');
+  var box = document.getElementById('haSwitchLiveLog');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function haSwitchLogHeartbeatText() {
+  return '\n\n|- 正在执行中，等待新的日志输出' + new Array(haSwitchLogHeartbeat + 1).join('.');
+}
+
+function haTickSwitchLogHeartbeat() {
+  if (!$('#haSwitchLiveState').hasClass('ha-live-state-running')) return;
+  haSwitchLogHeartbeat = (haSwitchLogHeartbeat + 1) % 4;
+  $('#haSwitchLiveLog').text((haSwitchLiveBaseText || '正在准备切换任务...') + haSwitchLogHeartbeatText());
   var box = document.getElementById('haSwitchLiveLog');
   if (box) box.scrollTop = box.scrollHeight;
 }
@@ -734,7 +751,7 @@ function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
     var status = run.status || '';
     var currentPhase = run.current_phase || '';
     var currentStep = run.current_step || '';
-    var prepareDone = prepareMode && currentPhase === 'prepare_online' && (status === 'prepare_success' || status === 'success' || /预上线完成|预备上线完成/.test(currentStep + '\n' + logText));
+    var prepareDone = prepareMode && (status === 'prepare_success' || status === 'success' || /预上线完成|预备上线完成/.test(currentStep + '\n' + logText));
     var finalizeDone = !prepareMode && (status === 'success' || /正式上线完成/.test(currentStep + '\n' + logText));
     var done = prepareDone || finalizeDone;
     var failed = status === 'waiting_retry' || status === 'failed' || status === 'cancelled';
@@ -744,11 +761,7 @@ function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
     if (prepareMode) {
       haSwitchWizard.prepareLog = logText;
       haSwitchWizard.prepareStatus = done ? 'success' : failed ? 'failed' : 'running';
-      if (done || failed) {
-        haStopSwitchLogPolling();
-        haCloseSwitchLogWindow();
-        haRenderSwitchWizard();
-      }
+      if (haSyncPrepareWizardStatus(run, logText)) return;
     } else if (done || failed) {
       haStopSwitchLogPolling();
       if (done) haCloseSwitchLogWindow();
@@ -763,6 +776,7 @@ function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
 function haShowSwitchLogWindow(title, switchRunId, prepareMode) {
   haStopSwitchLogPolling();
   haSwitchLogHeartbeat = 0;
+  haSwitchLiveBaseText = '正在准备切换任务...';
   var html = '<div class="ha-live-log-wrap">' +
     '<div class="ha-live-log-head"><span id="haSwitchLiveState" class="ha-live-state ha-live-state-running">执行中</span><span class="ha-live-run-id">' + haEscape(switchRunId) + '</span></div>' +
     '<pre id="haSwitchLiveLog" class="ha-live-log-box">正在准备切换任务...</pre>' +
@@ -783,12 +797,26 @@ function haShowSwitchLogWindow(title, switchRunId, prepareMode) {
     }
   });
   haRefreshSwitchLogWindow(switchRunId, prepareMode);
+  haSwitchLogHeartbeatTimer = setInterval(haTickSwitchLogHeartbeat, 500);
   haSwitchLogTimer = setInterval(function() { haRefreshSwitchLogWindow(switchRunId, prepareMode); }, 1500);
 }
 
 $(document).off('click', '.ha-prepare-log-link').on('click', '.ha-prepare-log-link', function() {
   var runId = $(this).data('run-id') || '';
   haShowSwitchLogWindow('预上线日志', runId, true);
+});
+
+$(document).off('click', '.ha-refresh-prepare-status').on('click', '.ha-refresh-prepare-status', function() {
+  var runId = $(this).data('run-id') || '';
+  if (!runId) return;
+  haApi('read_log', {switch_run_id: runId, offset: 0}, function(data) {
+    if (!data) return;
+    if (haSyncPrepareWizardStatus(data.run || {}, data.content || '')) {
+      layer.msg('已刷新预上线状态', {icon: 1});
+      return;
+    }
+    layer.msg('当前预上线仍在执行中', {icon: 0});
+  });
 });
 
 function haPrepareResultStatusMeta(status) {
@@ -829,7 +857,28 @@ function haBuildPrepareResultContent(switchRunId, logText, success) {
   }).join('');
   return '<div><div class="ha-muted mb10">Run ID: ' + haEscape(switchRunId || '') + '</div>' +
     '<table class="table table-hover ha-detail-data-table"><thead><tr><th>流程</th><th style="width:90px">结果</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<div class="mt10"><a class="btlink ha-prepare-log-link" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">查看完整切换日志</a></div></div>';
+    '<div class="mt10"><a class="btlink ha-prepare-log-link" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">查看完整切换日志</a> <a class="btlink ha-refresh-prepare-status" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">刷新状态</a></div></div>';
+}
+
+function haSyncPrepareWizardStatus(run, logText) {
+  if (!run || !run.switch_run_id || !haSwitchWizard.pairId) return false;
+  if (haSwitchWizard.prepareRunId && haSwitchWizard.prepareRunId !== run.switch_run_id) return false;
+  var status = run.status || '';
+  var currentPhase = run.current_phase || '';
+  var currentStep = run.current_step || '';
+  var done = (status === 'prepare_success' || status === 'success' || /预上线完成|预备上线完成/.test(currentStep + '\n' + (logText || '')));
+  var failed = status === 'waiting_retry' || status === 'failed' || status === 'cancelled';
+  if (!done && !failed) return false;
+  haSwitchWizard.prepareRunId = run.switch_run_id;
+  haSwitchWizard.prepareLog = logText || haSwitchWizard.prepareLog;
+  haSwitchWizard.prepareStatus = done ? 'success' : 'failed';
+  haSwitchWizard.step = 3;
+  haRenderSwitchWizard();
+  if (done || failed) {
+    haStopSwitchLogPolling();
+    haCloseSwitchLogWindow();
+  }
+  return true;
 }
 
 function haOpenDetailDialog(pairId) {

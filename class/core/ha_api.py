@@ -95,10 +95,10 @@ class ha_api:
                 return state.get('host_id') or fallback
         return fallback
 
-    def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text):
+    def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text, old_master_host_id=''):
         pair_id = pair.get('pair_id')
         switch_run_id = self._runId()
-        old_master = self._masterHostId(pair_id, pair.get('actual_master_host_id') or '')
+        old_master = old_master_host_id or self._masterHostId(pair_id, pair.get('actual_master_host_id') or '')
         log_path = self._monthLogPath(switch_run_id)
         now = self._now()
         jh.M('ha_switch_run').add(
@@ -508,11 +508,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         }
 
     def deriveStatus(self, pair, states):
-        running = jh.M('ha_switch_run').where(
-            'pair_id=? AND status IN (?,?,?,?,?,?)', (pair.get('pair_id'), 'pending', 'pending_prepare', 'pending_finalize', 'pending_online', 'running', 'waiting_retry')
-        ).field(self.run_fields).find()
-        if isinstance(running, dict) and running.get('switch_run_id'):
-            return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
+        current_run_id = pair.get('current_switch_run_id') or ''
+        if current_run_id:
+            running = self._getRun(current_run_id)
+            if isinstance(running, dict) and running.get('status') == 'prepare_success':
+                return 'normal', running.get('next_step') or '预上线完成，等待正式上线'
+            if isinstance(running, dict) and running.get('status') in ('pending', 'pending_prepare', 'pending_finalize', 'pending_online', 'running', 'waiting_retry'):
+                return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
         if not states:
             return 'unknown', '等待插件上报'
         masters = [x for x in states if x.get('role') == 'master' or 'master' in (x.get('_alias_roles') or [])]
@@ -700,7 +702,19 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if action == 'prepare':
             data = self._createSwitchRun(pair, target_host_id, 'prepare_online', '等待目标主机领取预上线阶段', '预上线完成后执行正式上线', 'pending_prepare', options, '预上线')
             return jh.returnJson(True, '预上线任务已创建', data)
-        data = self._createSwitchRun(pair, target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线')
+        old_master_host_id = ''
+        finalize_target_host_id = target_host_id
+        current_run_id = pair.get('current_switch_run_id') or ''
+        if current_run_id:
+            current_run = self._getRun(current_run_id)
+            if current_run and current_run.get('status') == 'prepare_success':
+                old_master_host_id = current_run.get('old_master_host_id') or ''
+                finalize_target_host_id = current_run.get('new_master_host_id') or current_run.get('desired_master_host_id') or finalize_target_host_id
+        if not old_master_host_id:
+            old_master_host_id = pair.get('actual_master_host_id') or self._masterHostId(pair_id, '')
+        if not finalize_target_host_id:
+            finalize_target_host_id = pair.get('desired_master_host_id') or target_host_id
+        data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id)
         return jh.returnJson(True, '正式上线任务已创建', data)
 
     def retrySwitchApi(self):
@@ -813,7 +827,11 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         exist = self._getPair(pair_id)
         master_id = self._safeText(payload.get('desired_master_host_id') or local.get('host_id'), 128)
         if exist:
-            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('pair_name,desired_master_host_id,api_secret,update_time', (pair_name, master_id, api_secret, now))
+            stored_secret = exist.get('api_secret') or ''
+            if not stored_secret:
+                stored_secret = api_secret
+            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('pair_name,desired_master_host_id,api_secret,update_time', (pair_name, master_id, stored_secret, now))
+            api_secret = stored_secret
         else:
             jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (pair_id, pair_name, master_id, api_secret, 'unknown', '等待插件上报', now, now))
         for host in (local, peer):
@@ -907,6 +925,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 actual = state.get('host_id')
                 break
         desired = self._safeText(payload.get('desired_master_host_id') or '', 128)
+        current_run = self._getRun(pair.get('current_switch_run_id') or '') if pair.get('current_switch_run_id') else {}
+        if current_run.get('status') == 'prepare_success':
+            desired = ''
         if desired:
             pair['desired_master_host_id'] = desired
             status, status_text = self.deriveStatus(pair, states)

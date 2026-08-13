@@ -241,6 +241,24 @@ def main():
     pair_after_prepare = api._getPair(prepare_pair_id)
     assert pair_after_prepare['status'] == 'normal', pair_after_prepare
 
+    with app.test_request_context('/ha/request_switch', method='POST', data={'pair_id': prepare_pair_id, 'target_host_id': 'H_PREP_A', 'action': 'finalize'}):
+        res = _json(api.requestSwitchApi())
+        assert res['status'], res
+        inherited_finalize_run_id = res['data']['switch_run_id']
+    inherited_finalize_run = api._getRun(inherited_finalize_run_id)
+    assert inherited_finalize_run['old_master_host_id'] == 'H_PREP_A', inherited_finalize_run
+    assert inherited_finalize_run['new_master_host_id'] == 'H_PREP_B', inherited_finalize_run
+    jh.M('ha_pair').where('pair_id=?', (prepare_pair_id,)).save('current_switch_run_id,status,status_text,update_time', (prepare_run_id, 'normal', '预上线完成，等待正式上线', now))
+
+    stale_run_id = prepare_pair_id + '_STALE_WAITING'
+    jh.M('ha_switch_run').add('switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,log_path,callback_status,addtime,update_time', (stale_run_id, prepare_pair_id, 'H_PREP_A', 'H_PREP_B', 'H_PREP_B', '{}', 'waiting_retry', 'prepare_online', '旧任务失败', '旧任务失败', api._monthLogPath(stale_run_id), 'pending', now, now))
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair = [x for x in res['data']['list'] if x['pair_id'] == prepare_pair_id][0]
+        assert pair['status'] == 'normal', pair
+        assert pair['status_text'] == '等待操作员执行正式上线', pair
+
     event_payload = {'switch_run_id': switch_run_id, 'pair_id': pair_id, 'event_id': pair_id + '-ui-event', 'origin_host_id': 'H_UI_A', 'seq': 1, 'phase': 'offline', 'step': '关闭服务', 'status': 'running', 'log_text': '关闭服务'}
     with app.test_request_context('/pub/ha_report_switch_event', method='POST', json=event_payload):
         api._publicPayload = lambda verify=True: (True, event_payload, 'ok')
