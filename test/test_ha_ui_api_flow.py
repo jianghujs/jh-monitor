@@ -208,6 +208,39 @@ def main():
         assert pair['switch_run_id'] == switch_run_id
         assert pair['log'] == ''
 
+    with app.test_request_context('/pub/ha_pull_desired_state', method='POST', json={'pair_id': pair_id, 'host_id': 'H_UI_A'}):
+        api._publicPayload = lambda verify=True: (True, {'pair_id': pair_id, 'host_id': 'H_UI_A'}, 'ok')
+        pull = _json(api.publicPullDesiredState())
+        assert pull['status']
+        assert pull['data']['switch_run']['execute_phase'] == 'offline', pull
+
+    prepare_pair_id = pair_id + '_PREPARE_FLOW'
+    cleanup_pair_ids.append(prepare_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (prepare_pair_id, 'PrepareFlow', 'H_PREP_A', api_secret, 'normal', '状态正常', now, now))
+    api._upsertState(prepare_pair_id, {'host_id': 'H_PREP_A', 'host_name': 'Prep-A', 'host_ip': '10.10.7.1', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(prepare_pair_id, {'host_id': 'H_PREP_B', 'host_name': 'Prep-B', 'host_ip': '10.10.7.2', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local'}, 'standby', now)
+    with app.test_request_context('/ha/request_switch', method='POST', data={'pair_id': prepare_pair_id, 'target_host_id': 'H_PREP_B', 'action': 'prepare', 'sync_files': '1', 'run_checksum': '1'}):
+        res = _json(api.requestSwitchApi())
+        assert res['status']
+        prepare_run_id = res['data']['switch_run_id']
+    run_options = json.loads(api._getRun(prepare_run_id)['options_json'])
+    assert 'local_ip' not in run_options, run_options
+    assert 'remote_ip' not in run_options, run_options
+    assert 'remote_ssh_port' not in run_options, run_options
+    with app.test_request_context('/pub/ha_pull_desired_state', method='POST', json={'pair_id': prepare_pair_id, 'host_id': 'H_PREP_B'}):
+        api._publicPayload = lambda verify=True: (True, {'pair_id': prepare_pair_id, 'host_id': 'H_PREP_B'}, 'ok')
+        pull = _json(api.publicPullDesiredState())
+        assert pull['status']
+        assert pull['data']['switch_run']['execute_phase'] == 'prepare_online', pull
+    with app.test_request_context('/pub/ha_ack_switch_phase', method='POST', json={'pair_id': prepare_pair_id, 'switch_run_id': prepare_run_id, 'phase': 'prepare_online', 'phase_status': 'success', 'current_step': '预上线完成'}):
+        payload = {'pair_id': prepare_pair_id, 'switch_run_id': prepare_run_id, 'phase': 'prepare_online', 'phase_status': 'success', 'current_step': '预上线完成'}
+        api._publicPayload = lambda verify=True: (True, payload, 'ok')
+        assert _json(api.publicAckSwitchPhase())['status']
+    run = api._getRun(prepare_run_id)
+    assert run['status'] == 'prepare_success', run
+    pair_after_prepare = api._getPair(prepare_pair_id)
+    assert pair_after_prepare['status'] == 'normal', pair_after_prepare
+
     event_payload = {'switch_run_id': switch_run_id, 'pair_id': pair_id, 'event_id': pair_id + '-ui-event', 'origin_host_id': 'H_UI_A', 'seq': 1, 'phase': 'offline', 'step': '关闭服务', 'status': 'running', 'log_text': '关闭服务'}
     with app.test_request_context('/pub/ha_report_switch_event', method='POST', json=event_payload):
         api._publicPayload = lambda verify=True: (True, event_payload, 'ok')
@@ -218,6 +251,7 @@ def main():
         assert res['status']
         assert '创建切换任务' in res['data']['content']
         assert res['data']['next_offset'] > 0
+        assert res['data']['run']['switch_run_id'] == switch_run_id
 
     with app.test_request_context('/ha/get_detail', method='POST', data={'pair_id': pair_id}):
         res = _json(api.getDetailApi())
@@ -228,6 +262,28 @@ def main():
         assert detail['switch_run']['switch_run_id'] == switch_run_id, detail
         assert detail['switch_events'][0]['origin_host_id'] == 'H_UI_A', detail
         assert '关闭服务' in detail['log'], detail
+
+    finalize_pair_id = pair_id + '_FINALIZE_FLOW'
+    cleanup_pair_ids.append(finalize_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (finalize_pair_id, 'FinalizeFlow', 'H_FIN_A', api_secret, 'normal', '状态正常', now, now))
+    api._upsertState(finalize_pair_id, {'host_id': 'H_FIN_A', 'host_name': 'Fin-A', 'host_ip': '10.10.8.1', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local'}, 'master', now)
+    api._upsertState(finalize_pair_id, {'host_id': 'H_FIN_B', 'host_name': 'Fin-B', 'host_ip': '10.10.8.2', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local'}, 'standby', now)
+    with app.test_request_context('/ha/request_switch', method='POST', data={'pair_id': finalize_pair_id, 'target_host_id': 'H_FIN_B', 'action': 'finalize'}):
+        res = _json(api.requestSwitchApi())
+        assert res['status']
+        finalize_run_id = res['data']['switch_run_id']
+    for phase, step in [('offline', '旧主机下线完成'), ('online', '正式上线完成')]:
+        payload = {'pair_id': finalize_pair_id, 'switch_run_id': finalize_run_id, 'phase': phase, 'phase_status': 'success', 'current_step': step}
+        with app.test_request_context('/pub/ha_ack_switch_phase', method='POST', json=payload):
+            api._publicPayload = lambda verify=True, payload=payload: (True, payload, 'ok')
+            assert _json(api.publicAckSwitchPhase())['status']
+    pair_after_finalize = api._getPair(finalize_pair_id)
+    assert pair_after_finalize['current_switch_run_id'] == '', pair_after_finalize
+    with app.test_request_context('/ha/read_log', method='POST', data={'switch_run_id': finalize_run_id, 'offset': 0}):
+        res = _json(api.readLogApi())
+        assert res['status']
+        assert res['data']['run']['status'] == 'success', res
+        assert '正式上线完成' in res['data']['content'], res
 
     with app.test_request_context('/ha/cancel_switch', method='POST', data={'switch_run_id': switch_run_id}):
         assert _json(api.cancelSwitchApi())['status']

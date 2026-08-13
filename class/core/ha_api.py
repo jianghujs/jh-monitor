@@ -77,6 +77,41 @@ class ha_api:
     def _runId(self):
         return 'HSR_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(6))
 
+    def _switchOptionsFromRequest(self):
+        options = self._bodyJson()
+        for key in ('pair_id', 'target_host_id', 'desired_master_host_id', 'action'):
+            options.pop(key, None)
+        for key in ('local_ip', 'remote_ip', 'remote_ssh_port'):
+            options.pop(key, None)
+        for key in ('sync_files', 'run_checksum', 'allow_checksum_diff', 'checksum_confirmed', 'restore_site_setting', 'restore_plugin_setting', 'run_xtrabackup_inc_restore'):
+            if key in options:
+                options[key] = str(options.get(key)).lower() in ('1', 'true', 'yes', 'on')
+        options['promote_mysql'] = True
+        return options
+
+    def _masterHostId(self, pair_id, fallback=''):
+        for state in self._displayStates(self._getStates(pair_id)):
+            if state.get('role') == 'master':
+                return state.get('host_id') or fallback
+        return fallback
+
+    def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text):
+        pair_id = pair.get('pair_id')
+        switch_run_id = self._runId()
+        old_master = self._masterHostId(pair_id, pair.get('actual_master_host_id') or '')
+        log_path = self._monthLogPath(switch_run_id)
+        now = self._now()
+        jh.M('ha_switch_run').add(
+            'switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,log_path,callback_status,addtime,update_time',
+            (switch_run_id, pair_id, old_master, target_host_id, target_host_id, json.dumps(options, ensure_ascii=False), status, phase, current_step, next_step, log_path, 'pending', now, now)
+        )
+        jh.M('ha_pair').where('pair_id=?', (pair_id,)).save(
+            'desired_master_host_id,current_switch_run_id,status,status_text,update_time',
+            (target_host_id, switch_run_id, 'switching', current_step, now)
+        )
+        self._appendLog(log_path, '[{0}] [system] [pending] 创建切换任务 {1}，动作 {2}，目标主机 {3}'.format(now, switch_run_id, action_text, target_host_id))
+        return {'switch_run_id': switch_run_id, 'log_path': log_path}
+
     def ensureHaSchema(self):
         db = jh.M('ha_pair')
         statements = [
@@ -474,7 +509,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
 
     def deriveStatus(self, pair, states):
         running = jh.M('ha_switch_run').where(
-            'pair_id=? AND status IN (?,?,?)', (pair.get('pair_id'), 'pending', 'running', 'waiting_retry')
+            'pair_id=? AND status IN (?,?,?,?,?,?)', (pair.get('pair_id'), 'pending', 'pending_prepare', 'pending_finalize', 'pending_online', 'running', 'waiting_retry')
         ).field(self.run_fields).find()
         if isinstance(running, dict) and running.get('switch_run_id'):
             return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
@@ -627,37 +662,46 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             data = fp.read(max(1, int(limit)))
         return data.decode('utf-8', errors='replace')
 
+    def _advanceSwitchRun(self, run, phase, phase_status, step):
+        now = self._now()
+        if phase_status in ('failed', 'error'):
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,update_time', ('waiting_retry', phase, step, step, now))
+            return 'waiting_retry'
+        if phase_status not in ('done', 'success'):
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,update_time', ('running', phase, step, now))
+            return 'running'
+        if phase == 'prepare_online':
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time,finish_time', ('prepare_success', phase, step or '预上线完成', '等待操作员执行正式上线', now, now))
+            jh.M('ha_pair').where('pair_id=?', (run.get('pair_id'),)).save('status,status_text,last_report_at,update_time', ('normal', '预上线完成，等待正式上线', now, now))
+            return 'prepare_success'
+        if phase == 'offline':
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time', ('pending_online', 'online', '等待目标主机领取上线阶段', '目标主机正式上线', now))
+            return 'pending_online'
+        if phase == 'online':
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,update_time,finish_time', ('success', phase, step or '正式上线完成', '', now, now))
+            jh.M('ha_pair').where('pair_id=?', (run.get('pair_id'),)).save('actual_master_host_id,desired_master_host_id,current_switch_run_id,status,status_text,last_report_at,update_time', (run.get('new_master_host_id'), run.get('new_master_host_id'), '', 'normal', '状态正常', now, now))
+            self._executeCallbacks(run.get('pair_id'), run.get('switch_run_id'))
+            return 'success'
+        return 'running'
+
     def requestSwitchApi(self):
         self.ensureHaSchema()
         pair_id = request.form.get('pair_id', '').strip()
         target_host_id = request.form.get('target_host_id', '').strip() or request.form.get('desired_master_host_id', '').strip()
+        action = request.form.get('action', '').strip() or 'finalize'
         pair = self._getPair(pair_id)
         if not pair:
             return jh.returnJson(False, '主备关系不存在')
         if not target_host_id:
             return jh.returnJson(False, '目标主机不能为空')
-        switch_run_id = self._runId()
-        old_master = pair.get('actual_master_host_id') or ''
-        states = self._getStates(pair_id)
-        for state in states:
-            if state.get('role') == 'master':
-                old_master = state.get('host_id')
-                break
-        options = self._bodyJson()
-        options.pop('pair_id', None)
-        options.pop('target_host_id', None)
-        log_path = self._monthLogPath(switch_run_id)
-        now = self._now()
-        jh.M('ha_switch_run').add(
-            'switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,log_path,callback_status,addtime,update_time',
-            (switch_run_id, pair_id, old_master, target_host_id, target_host_id, json.dumps(options, ensure_ascii=False), 'pending', 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', log_path, 'pending', now, now)
-        )
-        jh.M('ha_pair').where('pair_id=?', (pair_id,)).save(
-            'desired_master_host_id,current_switch_run_id,status,status_text,update_time',
-            (target_host_id, switch_run_id, 'switching', '等待插件执行切换', now)
-        )
-        self._appendLog(log_path, '[{0}] [system] [pending] 创建切换任务 {1}，目标主机 {2}'.format(now, switch_run_id, target_host_id))
-        return jh.returnJson(True, '切换任务已创建', {'switch_run_id': switch_run_id, 'log_path': log_path})
+        if action not in ('prepare', 'finalize'):
+            return jh.returnJson(False, '切换动作无效')
+        options = self._switchOptionsFromRequest()
+        if action == 'prepare':
+            data = self._createSwitchRun(pair, target_host_id, 'prepare_online', '等待目标主机领取预上线阶段', '预上线完成后执行正式上线', 'pending_prepare', options, '预上线')
+            return jh.returnJson(True, '预上线任务已创建', data)
+        data = self._createSwitchRun(pair, target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线')
+        return jh.returnJson(True, '正式上线任务已创建', data)
 
     def retrySwitchApi(self):
         switch_run_id = request.form.get('switch_run_id', '').strip()
@@ -688,7 +732,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         log_path = run.get('log_path') or ''
         text = self._readLogText(log_path, offset)
         next_offset = offset + len(text.encode('utf-8'))
-        return jh.returnJson(True, 'ok', {'log_path': log_path, 'offset': offset, 'next_offset': next_offset, 'content': text})
+        return jh.returnJson(True, 'ok', {
+            'run': self._normalizeRun(run),
+            'log_path': log_path,
+            'offset': offset,
+            'next_offset': next_offset,
+            'content': text
+        })
 
     def saveCallbackConfigApi(self):
         self.ensureHaSchema()
@@ -817,12 +867,24 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         ok, payload, msg = self._publicPayload(True)
         if not ok:
             return jh.returnJson(False, msg)
+        host_id = self._safeText(payload.get('host_id'), 128)
         pair = self._getPair(payload.get('pair_id'))
         if not pair:
             return jh.returnJson(False, 'unknown pair_id')
         run = {}
         if pair.get('current_switch_run_id'):
             run = self._getRun(pair.get('current_switch_run_id'))
+            if run:
+                phase = run.get('current_phase') or ''
+                if phase == 'prepare_online':
+                    run['execute_phase'] = 'prepare_online' if host_id == run.get('new_master_host_id') else ''
+                    run['execute_role'] = 'master'
+                elif phase == 'offline':
+                    run['execute_phase'] = 'offline' if host_id == run.get('old_master_host_id') else ''
+                    run['execute_role'] = 'standby'
+                elif phase == 'online':
+                    run['execute_phase'] = 'online' if host_id == run.get('new_master_host_id') else ''
+                    run['execute_role'] = 'master'
         return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
 
     def publicReportState(self):
@@ -883,14 +945,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         )
         line = '[{0}] [{1}] [{2}] [{3}] {4}'.format(now, origin_host_id or 'unknown', phase or 'event', status or 'info', log_text or step)
         self._appendLog(run.get('log_path'), line)
-        db_status = 'running'
-        if status in ('failed', 'error'):
-            db_status = 'waiting_retry'
-        elif status in ('success', 'done') and phase in ('online', 'callback'):
-            db_status = 'success'
-        jh.M('ha_switch_run').where('switch_run_id=?', (switch_run_id,)).save('status,current_phase,current_step,last_error,update_time,finish_time', (db_status, phase, step or log_text, log_text if db_status == 'waiting_retry' else '', now, now if db_status == 'success' else ''))
-        if db_status == 'success':
-            self._executeCallbacks(pair_id, switch_run_id)
+        db_status = self._advanceSwitchRun(run, phase, status, step or log_text)
         return jh.returnJson(True, '事件已上报')
 
     def publicAckSwitchPhase(self):
@@ -905,15 +960,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         phase_status = self._safeText(payload.get('phase_status') or payload.get('status'), 64)
         step = self._safeText(payload.get('current_step') or payload.get('step'), 255)
         now = self._now()
-        status = 'running'
-        if phase_status in ('failed', 'error'):
-            status = 'waiting_retry'
-        elif phase_status in ('done', 'success') and phase == 'online':
-            status = 'success'
-        jh.M('ha_switch_run').where('switch_run_id=?', (switch_run_id,)).save('status,current_phase,current_step,last_error,update_time,finish_time', (status, phase, step, payload.get('last_error') or '', now, now if status == 'success' else ''))
+        status = self._advanceSwitchRun(run, phase, phase_status, step or payload.get('last_error') or '')
         self._appendLog(run.get('log_path'), '[{0}] [{1}] [{2}] {3}'.format(now, phase or 'phase', phase_status or status, step or '阶段确认'))
-        if status == 'success':
-            self._executeCallbacks(run.get('pair_id'), switch_run_id)
         return jh.returnJson(True, '阶段已确认')
 
     def _executeCallbacks(self, pair_id, switch_run_id):

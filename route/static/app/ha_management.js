@@ -1,19 +1,25 @@
 var haPairs = [];
 var haCurrentSearch = '';
+var haSwitchDialogIndex = null;
+var haSwitchLogLayerIndex = null;
+var haSwitchLogTimer = null;
+var haSwitchLogHeartbeat = 0;
+var haSwitchWizard = {step: 1, pairId: '', targetHostId: '', options: null, prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
 
-function haApi(action, data, callback) {
+function haApi(action, data, callback, options) {
+  options = options || {};
   $.post('/ha/' + action, data || {}, function(res) {
     if (typeof res === 'string') {
       try { res = JSON.parse(res); } catch (e) { res = {status: false, msg: res}; }
     }
     if (!res || !res.status) {
-      layer.msg((res && res.msg) || 'HA接口请求失败', {icon: 2});
+      if (!options.quiet) layer.msg((res && res.msg) || 'HA接口请求失败', {icon: 2});
       if (callback) callback(null, res || {});
       return;
     }
     if (callback) callback(res.data || {}, res);
   }, 'json').fail(function() {
-    layer.msg('HA接口连接失败', {icon: 2});
+    if (!options.quiet) layer.msg('HA接口连接失败', {icon: 2});
     if (callback) callback(null, {status: false});
   });
 }
@@ -474,72 +480,356 @@ function haDeletePair(pairId) {
 }
 
 function haSwitchOptionsHtml(pair, target) {
-  var hostSelect = '<div class="ha-switch-hosts">' + pair.hosts.map(function(host) {
-    var checked = host.host_id === target.host_id ? 'checked' : '';
-    var roleText = host.role === 'master' ? '主' : '备';
-    return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" ' + checked + '>' +
-      '<span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' +
-      '<div class="ha-switch-host-meta">当前: ' + roleText + ' / IP: ' + haEscape(host.ip || '--') + '</div>' +
-    '</label>';
-  }).join('') + '</div>';
-  return '<div class="pd15">' +
-    '<div class="c6 mb10">选择要切换为主机的目标主机，确认后云监控会创建切换任务并等待插件领取执行。</div>' +
-    hostSelect +
-    '<div class="ha-switch-options"><div class="ha-switch-options-title">切换选项</div>' +
-      '<div class="ha-option-grid">' +
-        '<label class="ha-option-check"><input type="checkbox" id="haSyncFiles" onchange="haToggleSyncOptions()" checked><span>同步文件</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" id="haRunChecksum" checked><span>检查 checksum</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" id="haAllowChecksumDiff"><span>允许忽略 checksum 差异</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" id="haRestoreSite"><span>恢复网站配置</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" id="haRestorePlugin"><span>面板插件配置</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" id="haRunXtrabackup"><span>执行增量恢复</span></label>' +
-      '</div>' +
-      '<div class="ha-sync-options ha-sync-group">' +
-        '<div class="ha-sync-field"><span>同步目录</span><input class="bt-input-text" value="/www/wwwroot,/www/wwwstorage"></div>' +
-        '<div class="ha-sync-field"><span>忽略目录</span><input class="bt-input-text" value="node_modules,logs,run"></div>' +
-      '</div>' +
-    '</div>' +
-    '</div>';
+  return haSwitchWizardSteps() + '<div class="ha-wizard-body">' + haSwitchWizardHostSelect(pair) + '</div>';
 }
 
 function haToggleSyncOptions() {
-  $('.ha-sync-options').toggle($('#haSyncFiles').is(':checked'));
+  var root = haSwitchWizardRoot().length ? haSwitchWizardRoot() : $(document);
+  var checked = root.find('input[type="checkbox"][name="sync_files"]').last().prop('checked') === true;
+  root.find('.ha-sync-options').toggle(checked);
 }
 
 function haOpenSwitchDialog(pairId) {
   var pair = haFindPair(pairId);
   if (!pair) return layer.msg('主备关系不存在', {icon: 2});
   var target = pair.hosts[0].host_id === pair.actual_master_host_id ? pair.hosts[1] : pair.hosts[0];
-  layer.open({
+  haSwitchWizard = {step: 1, pairId: pair.pair_id, targetHostId: target.host_id, options: $.extend(true, {}, haDefaultSwitchOptions()), prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
+  haSwitchDialogIndex = layer.open({
     type: 1,
-    title: '手动切换 - ' + pair.pair_name,
-    area: ['750px', '500px'],
-    content: haSwitchOptionsHtml(pair, target),
-    btn: ['确认发起切换', '取消'],
+    title: '切换主备 - ' + pair.pair_name,
+    area: ['780px', '560px'],
+    closeBtn: 1,
+    shadeClose: false,
+    content: '<div id="haSwitchWizardBox" class="ha-switch-wizard"></div>',
     success: function() {
-      haToggleSyncOptions();
+      haRenderSwitchWizard();
     },
-    yes: function(index) {
-      var selectedHostId = $('[name=haSwitchTargetHost]:checked').val();
-      target = haFindHost(pair, selectedHostId) || target;
-      var payload = {
-        pair_id: pair.pair_id,
-        target_host_id: target.host_id,
-        sync_files: $('#haSyncFiles').is(':checked') ? 1 : 0,
-        run_checksum: $('#haRunChecksum').is(':checked') ? 1 : 0,
-        allow_checksum_diff: $('#haAllowChecksumDiff').is(':checked') ? 1 : 0,
-        restore_site_setting: $('#haRestoreSite').is(':checked') ? 1 : 0,
-        restore_plugin_setting: $('#haRestorePlugin').is(':checked') ? 1 : 0,
-        run_xtrabackup_inc_restore: $('#haRunXtrabackup').is(':checked') ? 1 : 0
-      };
-      haApi('request_switch', payload, function(data) {
-        if (!data) return;
-        layer.close(index);
-        layer.msg('切换任务已创建', {icon: 1});
-        haLoadPairs();
-      });
+    end: function() {
+      haSwitchDialogIndex = null;
+      haStopSwitchLogPolling();
+    },
+  });
+}
+
+function haDefaultSwitchOptions() {
+  return {
+    local_ip: '',
+    remote_ip: '',
+    remote_ssh_port: '22',
+    run_checksum: true,
+    sync_files: true,
+    sync_file_dirs: '/www/wwwroot,/www/wwwstorage',
+    sync_ignore_dirs: '.git,node_modules,logs,run',
+    restore_site_setting: false,
+    restore_plugin_setting: false,
+    run_xtrabackup_inc_restore: false,
+    promote_mysql: true,
+    checksum_confirmed: false,
+    allow_checksum_diff: false
+  };
+}
+
+function haSwitchWizardRoot() {
+  return haSwitchDialogIndex ? $('#layui-layer' + haSwitchDialogIndex).find('#haSwitchWizardBox') : $('#haSwitchWizardBox');
+}
+
+function haSwitchWizardSteps() {
+  var items = [{num: 1, text: '选择主机'}, {num: 2, text: '预上线'}, {num: 3, text: '正式切换'}];
+  return '<div class="ha-wizard-steps">' + items.map(function(item) {
+    var cls = item.num === haSwitchWizard.step ? 'active' : item.num < haSwitchWizard.step ? 'done' : '';
+    return '<div class="ha-wizard-step ' + cls + '"><span class="ha-wizard-step-num">' + item.num + '</span>' + item.text + '</div>';
+  }).join('') + '</div>';
+}
+
+function haSwitchWizardHostSelect(pair) {
+  return '<div class="ha-switch-hosts">' + pair.hosts.map(function(host) {
+    var checked = host.host_id === haSwitchWizard.targetHostId ? 'checked' : '';
+    var roleText = host.role === 'master' ? '主' : '备';
+    return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" ' + checked + '>' +
+      '<span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' +
+      '<div class="ha-switch-host-meta">当前: ' + roleText + ' / IP: ' + haEscape(host.ip || '--') + '</div>' +
+    '</label>';
+  }).join('') + '</div>';
+}
+
+function haBuildSwitchOptionsForm(o) {
+  o = o || haDefaultSwitchOptions();
+  return '<form class="bt-form ha-form" id="haLocalSwitchForm">' +
+    '<div class="ha-switch-options"><div class="ha-switch-options-title">预上线选项</div>' +
+      '<div class="ha-option-grid">' +
+        '<label class="ha-option-check"><input type="checkbox" name="sync_files" onchange="haToggleSyncOptions()" ' + (o.sync_files ? 'checked' : '') + '><span>同步文件</span></label>' +
+        '<label class="ha-option-check"><input type="checkbox" name="run_checksum" ' + (o.run_checksum ? 'checked' : '') + '><span>检查 checksum</span></label>' +
+        '<label class="ha-option-check"><input type="checkbox" name="allow_checksum_diff" ' + (o.allow_checksum_diff ? 'checked' : '') + '><span>允许忽略 checksum 差异</span></label>' +
+        '<label class="ha-option-check"><input type="checkbox" name="restore_site_setting" ' + (o.restore_site_setting ? 'checked' : '') + '><span>恢复网站配置</span></label>' +
+        '<label class="ha-option-check"><input type="checkbox" name="restore_plugin_setting" ' + (o.restore_plugin_setting ? 'checked' : '') + '><span>面板插件配置</span></label>' +
+        '<label class="ha-option-check"><input type="checkbox" name="run_xtrabackup_inc_restore" ' + (o.run_xtrabackup_inc_restore ? 'checked' : '') + '><span>执行增量恢复</span></label>' +
+      '</div>' +
+      '<div class="ha-sync-options ha-sync-group">' +
+        '<div class="ha-sync-field"><span>同步目录</span><input class="bt-input-text" type="text" name="sync_file_dirs" value="' + haEscape(o.sync_file_dirs) + '" /></div>' +
+        '<div class="ha-sync-field"><span>忽略目录</span><input class="bt-input-text" type="text" name="sync_ignore_dirs" value="' + haEscape(o.sync_ignore_dirs) + '" /></div>' +
+      '</div>' +
+    '</div>' +
+    '</form>';
+}
+
+function haSwitchWizardRiskTip() {
+  return '<div class="ha-switch-risk-tip"><span>提示：</span>为减少服务中断时间，请确保程序（JianghuJS、Docker）和配置正确后执行上线操作。</div>';
+}
+
+function haBuildSwitchWizardBody(pair) {
+  var pairHosts = pair.hosts || [];
+  if (haSwitchWizard.step === 1) {
+    var target = haFindHost(pair, haSwitchWizard.targetHostId) || pairHosts[0] || {};
+    return '<div class="c6 mb10">选择切换完成后作为主机的机器。</div>' + haSwitchWizardHostSelect(pair) +
+      '<div class="ms-sub mt10">当前目标: ' + haEscape(target.name || '--') + ' / ' + haEscape(target.ip || '--') + '</div>';
+  }
+  if (haSwitchWizard.step === 2) {
+    return '<div class="c6 mb10">选择预上线要执行的检查和同步动作。</div>' + haBuildSwitchOptionsForm(haSwitchWizard.options);
+  }
+  return haBuildPrepareResultContent(haSwitchWizard.prepareRunId, haSwitchWizard.prepareLog, haSwitchWizard.prepareStatus === 'success');
+}
+
+function haRenderSwitchWizard() {
+  var root = haSwitchWizardRoot();
+  if (!root.length) return;
+  var pair = haFindPair(haSwitchWizard.pairId);
+  if (!pair) return;
+  var actions = '';
+  if (haSwitchWizard.step === 1) {
+    actions = '<button type="button" class="btn btn-success btn-sm" onclick="haWizardGoOptions()">下一步</button>';
+  } else if (haSwitchWizard.step === 2) {
+    actions = '<button type="button" class="btn btn-default btn-sm" onclick="haWizardBackHost()">上一步</button><button type="button" class="btn btn-success btn-sm" onclick="haWizardRunPrepare()">开始预上线</button>';
+  } else {
+    actions = '<button type="button" class="btn btn-default btn-sm" onclick="haWizardBackOptions()">返回预上线选项</button>' + (haSwitchWizard.prepareStatus === 'success' ? '<button type="button" class="btn btn-success btn-sm" onclick="haStartFinalizeFromWizard()">正式切换</button>' : '');
+  }
+  root.html(haSwitchWizardSteps() + '<div class="ha-wizard-body">' + haBuildSwitchWizardBody(pair) + '</div><div class="ha-wizard-actions">' + actions + '</div>');
+  haToggleSyncOptions();
+}
+
+function haWizardGoOptions() {
+  var pair = haFindPair(haSwitchWizard.pairId);
+  if (!pair) return;
+  var selectedHostId = haSwitchWizardRoot().find('[name=haSwitchTargetHost]:checked').val();
+  var target = haFindHost(pair, selectedHostId);
+  if (!target) return layer.msg('请选择切换后的主机', {icon: 2});
+  if (target.host_id === pair.actual_master_host_id) return layer.msg('当前主备关系已符合选择，无需切换', {icon: 0});
+  haSwitchWizard.targetHostId = target.host_id;
+  haSwitchWizard.step = 2;
+  haRenderSwitchWizard();
+}
+
+function haWizardBackHost() {
+  haSwitchWizard.step = 1;
+  haRenderSwitchWizard();
+}
+
+function haWizardBackOptions() {
+  haSwitchWizard.step = 2;
+  haRenderSwitchWizard();
+}
+
+function haReadSwitchOptions() {
+  var root = haSwitchWizardRoot();
+  var form = root.find('#haLocalSwitchForm').last();
+  var data = $.extend(true, {}, haSwitchWizard.options || haDefaultSwitchOptions());
+  if (!form.length) return data;
+  form.serializeArray().forEach(function(item) { data[item.name] = item.value; });
+  ['run_checksum','sync_files','allow_checksum_diff','restore_site_setting','restore_plugin_setting','run_xtrabackup_inc_restore'].forEach(function(key) {
+    data[key] = form.find('input[type="checkbox"][name="' + key + '"]').prop('checked') === true;
+  });
+  data.checksum_confirmed = data.allow_checksum_diff;
+  data.promote_mysql = true;
+  haSwitchWizard.options = $.extend(true, {}, data);
+  return data;
+}
+
+function haWizardRunPrepare() {
+  var pair = haFindPair(haSwitchWizard.pairId);
+  var target = pair ? haFindHost(pair, haSwitchWizard.targetHostId) : null;
+  if (!pair || !target) return layer.msg('目标主机不存在', {icon: 2});
+  var options = haReadSwitchOptions();
+  var content = haSwitchWizardRiskTip() + '<div>确认在目标主机（' + haEscape(target.name || target.ip || target.host_id) + '）执行预备上线？<br>将按预上线选项执行同步文件、checksum 检查、增量恢复等操作。</div>';
+  layer.confirm(content, {icon: 3, title: '确认预备上线', btn: ['确认执行', '取消']}, function(confirmIndex) {
+    layer.close(confirmIndex);
+    haCreateSwitchTask(pair, target, options, 'prepare');
+  });
+}
+
+function haStartFinalizeFromWizard() {
+  var pair = haFindPair(haSwitchWizard.pairId);
+  var target = pair ? haFindHost(pair, haSwitchWizard.targetHostId) : null;
+  if (!pair || !target) return layer.msg('目标主机不存在', {icon: 2});
+  var options = $.extend(true, {}, haSwitchWizard.options || haDefaultSwitchOptions());
+  var content = haSwitchWizardRiskTip() + '<div>确认执行正式上线并切换主备？<br>将执行旧主机下线和目标主机（' + haEscape(target.name || target.ip || target.host_id) + '）正式上线流程。</div>';
+  layer.confirm(content, {icon: 3, title: '确认正式上线', btn: ['确认执行', '取消']}, function(confirmIndex) {
+    layer.close(confirmIndex);
+    if (haSwitchDialogIndex) {
+      layer.close(haSwitchDialogIndex);
+      haSwitchDialogIndex = null;
+    }
+    haCreateSwitchTask(pair, target, options, 'finalize');
+  });
+}
+
+function haCreateSwitchTask(pair, target, options, action) {
+  var payload = $.extend(true, {}, options || {});
+  payload.pair_id = pair.pair_id;
+  payload.target_host_id = target.host_id;
+  payload.action = action;
+  haApi('request_switch', payload, function(data) {
+    if (!data) return;
+    if (action === 'prepare') {
+      haSwitchWizard.prepareRunId = data.switch_run_id;
+      haSwitchWizard.prepareStatus = 'running';
+      haSwitchWizard.prepareLog = '预上线任务已创建，等待目标插件领取执行...';
+      haSwitchWizard.step = 3;
+      haRenderSwitchWizard();
+      haShowSwitchLogWindow('正在执行预备上线...', data.switch_run_id, true);
+      return;
+    }
+    haShowSwitchLogWindow('正在执行正式上线...', data.switch_run_id, false);
+    layer.msg('正式上线任务已创建', {icon: 1});
+    haLoadPairs();
+  });
+}
+
+function haStopSwitchLogPolling() {
+  if (haSwitchLogTimer) {
+    clearInterval(haSwitchLogTimer);
+    haSwitchLogTimer = null;
+  }
+}
+
+function haCloseSwitchLogWindow() {
+  if (haSwitchLogLayerIndex !== null) {
+    var index = haSwitchLogLayerIndex;
+    haSwitchLogLayerIndex = null;
+    layer.close(index);
+  }
+  var liveLayer = $('#haSwitchLiveLog').closest('.layui-layer');
+  if (liveLayer.length) {
+    var layerId = liveLayer.attr('id') || '';
+    var layerIndex = parseInt(layerId.replace('layui-layer', ''), 10);
+    if (!isNaN(layerIndex)) layer.close(layerIndex);
+  }
+}
+
+function haUpdateSwitchLogWindow(logText, stateText, stateClass) {
+  var displayText = logText || '正在准备切换任务...';
+  if (stateClass === 'ha-live-state-running') {
+    haSwitchLogHeartbeat = (haSwitchLogHeartbeat + 1) % 4;
+    displayText += '\n\n|- 正在执行中，等待新的日志输出' + new Array(haSwitchLogHeartbeat + 1).join('.');
+  }
+  $('#haSwitchLiveLog').text(displayText);
+  $('#haSwitchLiveState').removeClass('ha-live-state-running ha-live-state-success ha-live-state-failed').addClass(stateClass || 'ha-live-state-running').text(stateText || '执行中');
+  var box = document.getElementById('haSwitchLiveLog');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
+  haApi('read_log', {switch_run_id: switchRunId, offset: 0}, function(data) {
+    if (!data) return;
+    var logText = data.content || '';
+    var run = data.run && data.run.switch_run_id === switchRunId ? data.run : {};
+    var status = run.status || '';
+    var currentPhase = run.current_phase || '';
+    var currentStep = run.current_step || '';
+    var prepareDone = prepareMode && currentPhase === 'prepare_online' && (status === 'prepare_success' || status === 'success' || /预上线完成|预备上线完成/.test(currentStep + '\n' + logText));
+    var finalizeDone = !prepareMode && (status === 'success' || /正式上线完成/.test(currentStep + '\n' + logText));
+    var done = prepareDone || finalizeDone;
+    var failed = status === 'waiting_retry' || status === 'failed' || status === 'cancelled';
+    var stateClass = done ? 'ha-live-state-success' : failed ? 'ha-live-state-failed' : 'ha-live-state-running';
+    var stateText = done ? (prepareMode ? '预上线完成' : '正式上线完成') : failed ? '执行失败' : '执行中';
+    haUpdateSwitchLogWindow(logText, stateText, stateClass);
+    if (prepareMode) {
+      haSwitchWizard.prepareLog = logText;
+      haSwitchWizard.prepareStatus = done ? 'success' : failed ? 'failed' : 'running';
+      if (done || failed) {
+        haStopSwitchLogPolling();
+        haCloseSwitchLogWindow();
+        haRenderSwitchWizard();
+      }
+    } else if (done || failed) {
+      haStopSwitchLogPolling();
+      if (done) haCloseSwitchLogWindow();
+      haLoadPairs();
+    }
+    haApi('get_list', {}, function(listData) {
+      if (listData && $.isArray(listData.list)) haPairs = listData.list;
+    }, {quiet: true});
+  });
+}
+
+function haShowSwitchLogWindow(title, switchRunId, prepareMode) {
+  haStopSwitchLogPolling();
+  haSwitchLogHeartbeat = 0;
+  var html = '<div class="ha-live-log-wrap">' +
+    '<div class="ha-live-log-head"><span id="haSwitchLiveState" class="ha-live-state ha-live-state-running">执行中</span><span class="ha-live-run-id">' + haEscape(switchRunId) + '</span></div>' +
+    '<pre id="haSwitchLiveLog" class="ha-live-log-box">正在准备切换任务...</pre>' +
+    '<div class="ha-live-log-tip">执行期间请勿重复发起切换；窗口关闭后仍可在“切换日志”页签查看。</div>' +
+    '</div>';
+  haSwitchLogLayerIndex = layer.open({
+    title: title,
+    type: 1,
+    closeBtn: 2,
+    shade: 0.3,
+    shadeClose: false,
+    area: '760px',
+    offset: '20%',
+    content: html,
+    end: function() {
+      haStopSwitchLogPolling();
+      haSwitchLogLayerIndex = null;
     }
   });
+  haRefreshSwitchLogWindow(switchRunId, prepareMode);
+  haSwitchLogTimer = setInterval(function() { haRefreshSwitchLogWindow(switchRunId, prepareMode); }, 1500);
+}
+
+$(document).off('click', '.ha-prepare-log-link').on('click', '.ha-prepare-log-link', function() {
+  var runId = $(this).data('run-id') || '';
+  haShowSwitchLogWindow('预上线日志', runId, true);
+});
+
+function haPrepareResultStatusMeta(status) {
+  if (status === 'ok') return {text: '完成', cls: 'normal'};
+  if (status === 'warning') return {text: '提醒', cls: 'warning'};
+  if (status === 'failed') return {text: '失败', cls: 'danger'};
+  return {text: '未执行', cls: 'info'};
+}
+
+function haSwitchResultPill(cls, text) {
+  var status = cls === 'danger' ? 'danger' : cls === 'warning' ? 'warning' : cls === 'normal' ? 'normal' : 'info';
+  return '<span class="ha-status-pill ' + haStatusClass(status) + '">' + haEscape(text) + '</span>';
+}
+
+function haParsePrepareResults(logText, success) {
+  var names = {xtrabackup: '增量恢复', checksum: 'checksum 检查', sync: 'rsync 同步', site_setting: '恢复网站配置', plugin_setting: '面板插件配置'};
+  var order = ['xtrabackup', 'checksum', 'sync', 'site_setting', 'plugin_setting'];
+  var resultMap = {};
+  order.forEach(function(key) { resultMap[key] = {key: key, name: names[key], status: 'skipped', detail: '未执行'}; });
+  (logText || '').split('\n').forEach(function(line) {
+    var idx = line.indexOf('PREPARE_RESULT ');
+    if (idx === -1) return;
+    var parts = line.substring(idx + 'PREPARE_RESULT '.length).trim().split(' ');
+    var key = parts.shift();
+    var status = parts.shift();
+    if (!resultMap[key]) return;
+    resultMap[key] = {key: key, name: names[key], status: status || 'ok', detail: parts.join(' ') || '执行完成'};
+  });
+  var rows = order.map(function(key) { return resultMap[key]; }).filter(function(item) { return item.status !== 'skipped'; });
+  if (!rows.length) rows = [{key: 'prepare', name: '预备上线', status: success ? 'ok' : 'failed', detail: success ? '执行完成' : '等待执行或执行失败'}];
+  return rows;
+}
+
+function haBuildPrepareResultContent(switchRunId, logText, success) {
+  var rows = haParsePrepareResults(logText, success).map(function(item) {
+    var meta = haPrepareResultStatusMeta(item.status);
+    return '<tr><td>' + haEscape(item.name) + '</td><td>' + haSwitchResultPill(meta.cls, meta.text) + '</td><td>' + haEscape(item.detail) + '</td></tr>';
+  }).join('');
+  return '<div><div class="ha-muted mb10">Run ID: ' + haEscape(switchRunId || '') + '</div>' +
+    '<table class="table table-hover ha-detail-data-table"><thead><tr><th>流程</th><th style="width:90px">结果</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="mt10"><a class="btlink ha-prepare-log-link" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">查看完整切换日志</a></div></div>';
 }
 
 function haOpenDetailDialog(pairId) {

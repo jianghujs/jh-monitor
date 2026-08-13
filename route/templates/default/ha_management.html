@@ -58,7 +58,7 @@
   </div>
 </div>
 
-<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}"></script>
+<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608131710"></script>
 
 <style>
 .ha-page {
@@ -341,6 +341,19 @@
 .ha-switch-host-meta { font-size: 12px; color: #888; line-height: 20px; margin-left: 21px; }
 .ha-switch-options { border: 1px solid #e6e9ef; border-radius: 4px; background: #fff; padding: 12px; margin-top: 10px; }
 .ha-switch-options-title { font-weight: 600; color: #333; margin-bottom: 10px; }
+.ha-switch-risk-tip { border: 1px solid #f0c6c4; background: #fff7f6; color: #555; border-radius: 4px; padding: 8px 10px; margin: 0 0 12px 0; line-height: 22px; font-size: 12px; }
+.ha-switch-risk-tip span { color: #d9534f; font-weight: 600; }
+.ha-switch-wizard { padding: 14px; background: #fff; }
+.ha-wizard-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.ha-wizard-step { border: 1px solid #e6e9ef; border-radius: 4px; background: #fafbfc; padding: 9px 10px; color: #777; }
+.ha-wizard-step.active { border-color: #8dbde8; background: #eef7ff; color: #245580; }
+.ha-wizard-step.done { border-color: #bfe4bf; background: #f6fff6; color: #2e7d32; }
+.ha-wizard-step-num { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #dfe4ea; color: #666; font-size: 12px; margin-right: 6px; }
+.ha-wizard-step.active .ha-wizard-step-num { background: #337ab7; color: #fff; }
+.ha-wizard-step.done .ha-wizard-step-num { background: #5cb85c; color: #fff; }
+.ha-wizard-body { min-height: 300px; }
+.ha-wizard-actions { border-top: 1px solid #edf0f4; margin-top: 12px; padding-top: 12px; text-align: right; }
+.ha-wizard-actions .btn { margin-left: 6px; }
 .ha-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
 .ha-option-check { display: flex; align-items: center; height: 26px; margin: 0; font-weight: normal; color: #555; line-height: 26px; }
 .ha-option-check input { margin: 0 8px 0 0; flex: 0 0 auto; }
@@ -362,5 +375,15 @@
   line-height: 20px;
   white-space: pre-wrap;
 }
+.ha-live-log-wrap { padding: 14px; background: #fff; }
+.ha-live-log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: #777; font-size: 12px; }
+.ha-live-state { display: inline-flex; align-items: center; gap: 6px; border-radius: 3px; padding: 3px 8px; border: 1px solid transparent; font-size: 12px; line-height: 16px; }
+.ha-live-state-running { color: #9a6200; background: #fff7e6; border-color: #f1d399; }
+.ha-live-state-success { color: #2e7d32; background: #f0fff0; border-color: #bfe4bf; }
+.ha-live-state-failed { color: #b02a25; background: #fff1f0; border-color: #f0c6c4; }
+.ha-live-state-running:before { content: ""; display: inline-block; width: 11px; height: 11px; border: 2px solid #f1d399; border-top-color: #f0ad4e; border-radius: 50%; animation: haSpin .8s linear infinite; box-sizing: border-box; }
+.ha-live-run-id { font-family: Menlo, Consolas, monospace; color: #999; }
+.ha-live-log-box { margin: 0; height: 420px; text-align: left; background: #000; color: #fff; white-space: pre-wrap; border: 0; border-radius: 3px; padding: 10px; overflow: auto; font-family: Menlo, Consolas, monospace; font-size: 12px; line-height: 20px; }
+.ha-live-log-tip { margin-top: 8px; color: #888; font-size: 12px; line-height: 20px; }
 </style>
 {% endblock %}
