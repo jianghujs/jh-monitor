@@ -764,8 +764,13 @@ function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
       if (haSyncPrepareWizardStatus(run, logText)) return;
     } else if (done || failed) {
       haStopSwitchLogPolling();
-      if (done) haCloseSwitchLogWindow();
-      haLoadPairs();
+      if (done) {
+        setTimeout(function() {
+          haLoadPairs(function() { haCloseSwitchLogWindow(); });
+        }, 3000);
+      } else {
+        haLoadPairs();
+      }
     }
     haApi('get_list', {}, function(listData) {
       if (listData && $.isArray(listData.list)) haPairs = listData.list;
