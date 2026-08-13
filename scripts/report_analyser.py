@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import copy
+import re
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -81,6 +82,146 @@ OVERVIEW_REPORT_DATA_STREAM_PREFIX = 'host-report-overview'
 
 ANALYSIS_STALE_SECONDS = 15 * 60
 PAGE_SIZE = 500
+
+
+def _sensor_name(value):
+    return str(value or '').strip()
+
+
+def _sensor_number(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if value == '' or value.upper() == 'N/A':
+            return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _is_obvious_temperature_noise(temp):
+    name = _sensor_name(temp.get('name', '')) if isinstance(temp, dict) else ''
+    normalized_name = name.lower()
+    value = _sensor_number(temp.get('value')) if isinstance(temp, dict) else None
+    if value is None:
+        return True
+    if normalized_name.startswith('auxtin') and value >= 100:
+        return True
+    if value == 127:
+        return True
+    if value <= -40:
+        return True
+    if normalized_name.startswith('pch_') and value == 0:
+        return True
+    return False
+
+
+def _is_zero_default_fan_noise(fan):
+    if not isinstance(fan, dict):
+        return False
+    name = _sensor_name(fan.get('name', ''))
+    value = _sensor_number(fan.get('value'))
+    return bool(re.match(r'^fan\d+$', name.lower())) and value == 0
+
+
+def _is_intrusion_sensor_noise(item):
+    if not isinstance(item, dict):
+        return False
+    name = _sensor_name(item.get('name', ''))
+    return name.lower() in ('intrusion0', 'intrusion1')
+
+
+def _is_zero_range_voltage_alarm_noise(volt):
+    if not isinstance(volt, dict):
+        return False
+    name = _sensor_name(volt.get('name', ''))
+    if not re.match(r'^in\d+$', name.lower()):
+        return False
+    min_value = _sensor_number(volt.get('min'))
+    max_value = _sensor_number(volt.get('max'))
+    alarm_text = '{0} {1} {2}'.format(volt.get('status', ''), volt.get('alarm', ''), volt.get('flags', ''))
+    return min_value == 0 and max_value == 0 and 'ALARM' in alarm_text.upper()
+
+
+def _issue_mentions_any(issue, names):
+    if not isinstance(issue, dict):
+        return False
+    text = '{0} {1} {2}'.format(issue.get('category', ''), issue.get('message', ''), issue.get('detail', '')).lower()
+    for name in names:
+        if name and name.lower() in text:
+            return True
+    return False
+
+
+def _is_obvious_sensor_noise_issue(issue, removed_names):
+    if not isinstance(issue, dict):
+        return False
+    category = str(issue.get('category', '') or '').strip()
+    text = '{0} {1} {2}'.format(category, issue.get('message', ''), issue.get('detail', '')).lower()
+    if _issue_mentions_any(issue, removed_names):
+        return True
+    removed_default_fan = any(re.match(r'^fan\d+$', str(name or '').lower()) for name in removed_names)
+    if category == '风扇' and removed_default_fan and 'cpu' not in text and ('风扇停转' in text or 'fan' in text):
+        return True
+    if 'intrusion0' in text or 'intrusion1' in text:
+        return True
+    if re.search(r'\bin\d+\b', text) and 'alarm' in text and re.search(r'min\s*[:=]\s*0', text) and re.search(r'max\s*[:=]\s*0', text):
+        return True
+    return False
+
+
+def filter_obvious_sensor_noise(sensors, issues=None):
+    """过滤 lm-sensors 中明显无效或未接传感器读数，保留真实硬件指标。"""
+    if not isinstance(sensors, dict):
+        sensors = {}
+    cleaned = copy.deepcopy(sensors)
+    removed_names = set()
+
+    temperatures = []
+    for temp in cleaned.get('temperatures', []) or []:
+        if _is_obvious_temperature_noise(temp):
+            removed_names.add(_sensor_name(temp.get('name', '')))
+            continue
+        temperatures.append(temp)
+    cleaned['temperatures'] = temperatures
+
+    fans = []
+    for fan in cleaned.get('fans', []) or []:
+        if _is_zero_default_fan_noise(fan):
+            removed_names.add(_sensor_name(fan.get('name', '')))
+            continue
+        fans.append(fan)
+    cleaned['fans'] = fans
+
+    voltages = []
+    for volt in cleaned.get('voltages', []) or []:
+        if _is_zero_range_voltage_alarm_noise(volt):
+            removed_names.add(_sensor_name(volt.get('name', '')))
+            continue
+        voltages.append(volt)
+    cleaned['voltages'] = voltages
+
+    for key in ('intrusions', 'intrusion'):
+        if key in cleaned and isinstance(cleaned.get(key), list):
+            kept_items = []
+            for item in cleaned.get(key, []) or []:
+                if _is_intrusion_sensor_noise(item):
+                    removed_names.add(_sensor_name(item.get('name', '')))
+                    continue
+                kept_items.append(item)
+            cleaned[key] = kept_items
+
+    if not isinstance(issues, list):
+        return cleaned, [] if issues is not None else issues
+
+    cleaned_issues = []
+    for issue in issues:
+        if _is_obvious_sensor_noise_issue(issue, removed_names):
+            continue
+        cleaned_issues.append(issue)
+    return cleaned, cleaned_issues
 
 
 
@@ -1188,6 +1329,7 @@ class HostReportAnalyser(object):
                 })
 
         sensors = pve_data.get('sensors', {})
+        sensors, pve_issues = filter_obvious_sensor_noise(sensors, pve_issues)
         if sensors.get('error'):
             collect_errors.append('传感器：' + str(sensors.get('error')))
         else:
