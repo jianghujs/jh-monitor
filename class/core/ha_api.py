@@ -517,7 +517,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
         if not states:
             return 'unknown', '等待插件上报'
-        masters = [x for x in states if x.get('role') == 'master' or 'master' in (x.get('_alias_roles') or [])]
+        masters = [x for x in states if x.get('role') == 'master']
         online = dict([(x.get('host_id'), x.get('online_status')) for x in states])
         warnings = []
         danger = []
