@@ -126,6 +126,22 @@ def main():
         assert remote['online_status'] == 'online', remote
         assert remote['site_scope'] == 'remote', remote
 
+    same_ip_pair_id = pair_id + '_SAME_IP'
+    cleanup_pair_ids.append(same_ip_pair_id)
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (same_ip_pair_id, 'SameIpAcrossDc', 'H_DC_B', api_secret, 'unknown', '等待插件上报', now, now))
+    api._upsertState(same_ip_pair_id, {'host_id': 'H_DC_A', 'host_name': 'DC-A', 'host_ip': '192.168.3.33', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local', 'site_scope': 'local', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'standby', now)
+    api._upsertState(same_ip_pair_id, {'host_id': 'H_DC_B', 'host_name': 'DC-B', 'host_ip': '192.168.3.33', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_DC_A', 'site_scope': 'remote', 'health_detail': {'script_checks': [{'name': 'OpenResty', 'status': 'pass'}]}}, 'master', now)
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair = [x for x in res['data']['list'] if x['pair_id'] == same_ip_pair_id][0]
+        assert len(pair['hosts']) == 2, pair
+        assert sorted([x['host_id'] for x in pair['hosts']]) == ['H_DC_A', 'H_DC_B'], pair
+        remote = [x for x in pair['hosts'] if x['host_id'] == 'H_DC_B'][0]
+        assert remote['collect_status'] == 'success', remote
+        assert remote['online_status'] == 'online', remote
+        assert remote['collect_method'] == 'ssh_peer', remote
+
     same_site_pair_id = pair_id + '_SAME_SITE'
     cleanup_pair_ids.append(same_site_pair_id)
     jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (same_site_pair_id, 'SameSite', 'H_SITE_A', api_secret, 'unknown', '等待插件上报', now, now))

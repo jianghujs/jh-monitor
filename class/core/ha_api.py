@@ -487,12 +487,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             candidates = rows
         selected = candidates[0]
         for row in candidates[1:]:
-            if self._hostStateScore(row) > self._hostStateScore(selected):
+            row_score = self._hostStateScore(row)
+            selected_score = self._hostStateScore(selected)
+            if row_score > selected_score or (row_score == selected_score and row.get('collect_method') == 'local' and selected.get('collect_method') != 'local'):
                 selected = row
         return selected
 
     def _displayStates(self, states):
-        all_states = list(states)
         batch_ids = [row.get('report_batch_id') for row in states if row.get('report_batch_id')]
         if batch_ids:
             latest_batch_id = None
@@ -505,9 +506,25 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                     latest_ts = batch_ts
             if latest_batch_id:
                 states = [row for row in states if row.get('report_batch_id') == latest_batch_id]
+        local_host_key_by_ip = {}
+        real_host_key_by_ip = {}
+        for row in states:
+            if row.get('collect_method') == 'local' and row.get('host_ip') and row.get('host_id') and row.get('host_ip') not in local_host_key_by_ip:
+                local_host_key_by_ip[row.get('host_ip')] = row.get('host_id')
+            if not self._isPlaceholderHost(row) and row.get('host_ip') and row.get('host_id') and row.get('host_ip') not in real_host_key_by_ip:
+                real_host_key_by_ip[row.get('host_ip')] = row.get('host_id')
         grouped = {}
         for row in states:
-            key = row.get('host_ip') or row.get('host_id') or str(row.get('id'))
+            detail = self._jsonLoads(row.get('health_detail'), {})
+            source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
+            if row.get('host_id', '').startswith('H_ALIAS_') and source_host_id:
+                key = source_host_id
+            elif row.get('collect_method') == 'ssh_peer' and row.get('site_scope') == 'local' and row.get('host_ip') in local_host_key_by_ip:
+                key = local_host_key_by_ip.get(row.get('host_ip'))
+            elif self._isPlaceholderHost(row) and row.get('host_ip'):
+                key = real_host_key_by_ip.get(row.get('host_ip')) or ('placeholder_ip:' + row.get('host_ip'))
+            else:
+                key = row.get('host_id') or row.get('host_ip') or str(row.get('id'))
             grouped.setdefault(key, []).append(row)
         result = []
         for rows in grouped.values():
@@ -524,9 +541,6 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
                 if source_host_id and source_host_id not in alias_ids:
                     alias_ids.append(source_host_id)
-                for source_row in all_states:
-                    if source_row.get('host_ip') == row.get('host_ip') and source_row.get('host_id') and source_row.get('host_id') not in alias_ids:
-                        alias_ids.append(source_row.get('host_id'))
                 if row.get('host_name') and row.get('host_name') not in alias_names:
                     alias_names.append(row.get('host_name'))
                 if row.get('role') and row.get('role') not in alias_roles:
