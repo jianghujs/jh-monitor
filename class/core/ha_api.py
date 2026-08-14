@@ -507,10 +507,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if latest_batch_id:
                 states = [row for row in states if row.get('report_batch_id') == latest_batch_id]
         local_host_key_by_ip = {}
+        local_host_ids_by_ip = {}
         real_host_key_by_ip = {}
         for row in states:
             if row.get('collect_method') == 'local' and row.get('host_ip') and row.get('host_id') and row.get('host_ip') not in local_host_key_by_ip:
                 local_host_key_by_ip[row.get('host_ip')] = row.get('host_id')
+            if row.get('collect_method') == 'local' and row.get('host_ip') and row.get('host_id'):
+                local_host_ids_by_ip.setdefault(row.get('host_ip'), []).append(row.get('host_id'))
             if not self._isPlaceholderHost(row) and row.get('host_ip') and row.get('host_id') and row.get('host_ip') not in real_host_key_by_ip:
                 real_host_key_by_ip[row.get('host_ip')] = row.get('host_id')
         grouped = {}
@@ -519,7 +522,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
             if row.get('host_id', '').startswith('H_ALIAS_') and source_host_id:
                 key = source_host_id
-            elif row.get('collect_method') == 'ssh_peer' and row.get('site_scope') == 'local' and row.get('host_ip') in local_host_key_by_ip:
+            elif row.get('collect_method') == 'ssh_peer' and row.get('site_scope') == 'local' and row.get('host_ip') in local_host_key_by_ip and (not row.get('host_id', '').startswith('H_PANEL_') or (source_host_id or row.get('host_id')) in local_host_ids_by_ip.get(row.get('host_ip'), [])):
                 key = local_host_key_by_ip.get(row.get('host_ip'))
             elif self._isPlaceholderHost(row) and row.get('host_ip'):
                 key = real_host_key_by_ip.get(row.get('host_ip')) or ('placeholder_ip:' + row.get('host_ip'))
