@@ -28,7 +28,7 @@ class ha_api:
     state_fields = (
         'id,pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,'
         'collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,'
-        'current_step,next_step,last_error,log_path,last_report_at,addtime,update_time'
+        'current_step,next_step,last_error,log_path,last_report_at,report_batch_id,addtime,update_time'
     )
 
     run_fields = (
@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS ha_host_state (
   last_error TEXT,
   log_path TEXT,
   last_report_at TEXT,
+  report_batch_id TEXT,
   addtime TEXT,
   update_time TEXT
 )
@@ -273,7 +274,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'collect_status': "TEXT DEFAULT 'unknown'", 'collect_method': 'TEXT', 'report_host_id': 'TEXT',
                 'site_scope': 'TEXT', 'health_detail': 'TEXT', 'switch_run_id': 'TEXT', 'switch_phase': 'TEXT', 'switch_status': 'TEXT',
                 'current_step': 'TEXT', 'next_step': 'TEXT', 'last_error': 'TEXT', 'log_path': 'TEXT',
-                'last_report_at': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
+                'last_report_at': 'TEXT', 'report_batch_id': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
             },
             'ha_switch_run': {
                 'switch_run_id': 'TEXT', 'pair_id': 'TEXT', 'old_master_host_id': 'TEXT',
@@ -470,23 +471,47 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             score -= 100
         return score
 
+    def _reportTimestamp(self, row):
+        last_report_at = row.get('last_report_at') or row.get('update_time') or row.get('addtime') or ''
+        try:
+            return int(time.mktime(time.strptime(last_report_at, '%Y-%m-%d %H:%M:%S')))
+        except Exception:
+            return 0
+
+    def _selectDisplayState(self, rows):
+        if not rows:
+            return {}
+        latest_ts = max([self._reportTimestamp(row) for row in rows])
+        candidates = [row for row in rows if self._reportTimestamp(row) == latest_ts]
+        if not candidates:
+            candidates = rows
+        selected = candidates[0]
+        for row in candidates[1:]:
+            if self._hostStateScore(row) > self._hostStateScore(selected):
+                selected = row
+        return selected
+
     def _displayStates(self, states):
+        all_states = list(states)
+        batch_ids = [row.get('report_batch_id') for row in states if row.get('report_batch_id')]
+        if batch_ids:
+            latest_batch_id = None
+            latest_ts = -1
+            for batch_id in batch_ids:
+                batch_rows = [row for row in states if row.get('report_batch_id') == batch_id]
+                batch_ts = max([self._reportTimestamp(row) for row in batch_rows]) if batch_rows else 0
+                if batch_ts > latest_ts:
+                    latest_batch_id = batch_id
+                    latest_ts = batch_ts
+            if latest_batch_id:
+                states = [row for row in states if row.get('report_batch_id') == latest_batch_id]
         grouped = {}
         for row in states:
             key = row.get('host_ip') or row.get('host_id') or str(row.get('id'))
             grouped.setdefault(key, []).append(row)
         result = []
         for rows in grouped.values():
-            selected = rows[0]
-            for row in rows[1:]:
-                if self._hostStateScore(row) > self._hostStateScore(selected):
-                    selected = row
-            local_rows = [row for row in rows if row.get('collect_method') == 'local']
-            if local_rows:
-                selected = local_rows[0]
-                for row in local_rows[1:]:
-                    if self._hostStateScore(row) > self._hostStateScore(selected):
-                        selected = row
+            selected = self._selectDisplayState(rows)
             item = dict(selected)
             alias_ids = []
             alias_names = []
@@ -495,6 +520,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             for row in rows:
                 if row.get('host_id') and row.get('host_id') not in alias_ids:
                     alias_ids.append(row.get('host_id'))
+                detail = self._jsonLoads(row.get('health_detail'), {})
+                source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
+                if source_host_id and source_host_id not in alias_ids:
+                    alias_ids.append(source_host_id)
+                for source_row in all_states:
+                    if source_row.get('host_ip') == row.get('host_ip') and source_row.get('host_id') and source_row.get('host_id') not in alias_ids:
+                        alias_ids.append(source_row.get('host_id'))
                 if row.get('host_name') and row.get('host_name') not in alias_names:
                     alias_names.append(row.get('host_name'))
                 if row.get('role') and row.get('role') not in alias_roles:
@@ -588,7 +620,11 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 detail = self._jsonLoads(item.get('health_detail'), {})
                 warnings.append(detail.get('summary') or '{0} 自检提醒'.format(self._displayHostName(item, pair)))
         desired = pair.get('desired_master_host_id') or ''
-        actual_aliases = masters[0].get('_alias_host_ids') or [masters[0].get('host_id')] if len(masters) == 1 else []
+        actual_aliases = []
+        if len(masters) == 1:
+            actual_aliases = masters[0].get('_alias_host_ids') or []
+            if masters[0].get('host_id') not in actual_aliases:
+                actual_aliases.append(masters[0].get('host_id'))
         if desired and actual_aliases and desired not in actual_aliases:
             danger.append('期望主机和实际主机不一致')
         if danger:
@@ -605,14 +641,19 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         hosts = [self._normalizeHost(x, pair) for x in states]
         actual_master = ''
         for host in hosts:
-            if host.get('role') == 'master' or 'master' in (host.get('host_alias_roles') or []):
+            if host.get('role') == 'master':
                 actual_master = host.get('host_id')
                 break
         desired_master = pair.get('desired_master_host_id') or actual_master
         for host in hosts:
-            if desired_master in (host.get('host_alias_ids') or []):
+            if host.get('role') == 'master' and desired_master in (host.get('host_alias_ids') or []):
                 desired_master = host.get('host_id')
                 break
+        else:
+            for host in hosts:
+                if desired_master in (host.get('host_alias_ids') or []):
+                    desired_master = host.get('host_id')
+                    break
         data = dict(pair)
         data['status'] = status
         data['status_text'] = status_text
@@ -908,6 +949,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         host_ip = self._safeText(host.get('host_ip') or host.get('ip'), 64)
         collect_method = self._safeText(host.get('collect_method') or '', 32)
         report_host_id = self._safeText(host.get('report_host_id') or '', 128)
+        last_report_at = self._safeText(host.get('last_report_at') or now, 32)
+        report_batch_id = self._safeText(host.get('report_batch_id') or '', 128)
+        original_host_id = host_id
+        health_detail = host.get('health_detail') or {}
+        if collect_method == 'ssh_peer' and isinstance(health_detail, dict) and original_host_id:
+            health_detail.setdefault('_source_host_id', original_host_id)
         exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id,collect_method').find()
         if collect_method == 'ssh_peer' and isinstance(exists, dict) and exists.get('collect_method') == 'local':
             source = '{0}:{1}:{2}'.format(report_host_id, host_ip, host_id)
@@ -923,7 +970,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             collect_method,
             report_host_id,
             self._safeText(host.get('site_scope') or '', 32),
-            json.dumps(host.get('health_detail') or {}, ensure_ascii=False),
+            json.dumps(health_detail, ensure_ascii=False),
             self._safeText(host.get('switch_run_id') or '', 128),
             self._safeText(host.get('switch_phase') or '', 64),
             self._safeText(host.get('switch_status') or '', 64),
@@ -931,17 +978,23 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._safeText(host.get('next_step') or '', 255),
             self._safeText(host.get('last_error') or '', 512),
             self._safeText(host.get('log_path') or '', 512),
-            now,
+            last_report_at,
+            report_batch_id,
             now
         )
         if isinstance(exists, dict) and exists.get('id'):
             jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
-                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,update_time', values
+                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,update_time', values
             )
         else:
             jh.M('ha_host_state').add(
-                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,addtime,update_time',
+                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,addtime,update_time',
                 (pair_id, host_id) + values + (now,)
+            )
+        if report_batch_id:
+            jh.M('ha_host_state').originExecute(
+                'UPDATE ha_host_state SET report_batch_id=?, update_time=? WHERE pair_id=? AND host_id=?',
+                (report_batch_id, now, pair_id, host_id)
             )
 
     def publicPullDesiredState(self):
@@ -977,7 +1030,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             return jh.returnJson(False, 'unknown pair_id')
         now = self._now()
         hosts = payload.get('hosts') if isinstance(payload.get('hosts'), list) else [payload]
+        report_batch_id = self._safeText(payload.get('report_batch_id') or '', 128)
+        if not report_batch_id and len(hosts) > 1:
+            report_batch_id = 'HRB_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(6))
         for host in hosts:
+            if report_batch_id and isinstance(host, dict) and not host.get('report_batch_id'):
+                host['report_batch_id'] = report_batch_id
             self._upsertState(pair_id, host, host.get('role') or host.get('actual_role') or 'unknown', now)
         states = self._displayStates(self._getStates(pair_id))
         pair = self._getPair(pair_id)
@@ -991,6 +1049,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         current_run = self._getRun(pair.get('current_switch_run_id') or '') if pair.get('current_switch_run_id') else {}
         if current_run.get('status') == 'prepare_success':
             desired = ''
+        if not desired and actual and not pair.get('current_switch_run_id'):
+            desired = actual
         if desired:
             pair['desired_master_host_id'] = desired
             status, status_text = self.deriveStatus(pair, states)

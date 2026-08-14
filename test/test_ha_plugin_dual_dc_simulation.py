@@ -85,12 +85,23 @@ def _event(api, pair_id, secret, run_id, origin, report, method, seq, nonce):
 
 def _assert_pair(api, pair_id):
     pair = api._normalizePair(api._getPair(pair_id))
-    hosts = dict((x['host_id'], x) for x in pair['hosts'])
-    assert set(hosts.keys()) == {'H_DC_A', 'H_DC_B'}
-    assert hosts['H_DC_A']['collect_method'] in ('local', 'ssh_peer')
-    assert hosts['H_DC_B']['collect_method'] in ('local', 'ssh_peer')
-    assert hosts['H_DC_A']['collect_status'] == 'success'
-    assert hosts['H_DC_B']['collect_status'] == 'success'
+    hosts = dict((x['name'], x) for x in pair['hosts'])
+    assert set(hosts.keys()) == {'DC-A', 'DC-B'}, pair
+    assert hosts['DC-A']['collect_method'] in ('local', 'ssh_peer'), hosts
+    assert hosts['DC-B']['collect_method'] in ('local', 'ssh_peer'), hosts
+    assert hosts['DC-A']['collect_status'] == 'success', hosts
+    assert hosts['DC-B']['collect_status'] == 'success', hosts
+
+
+def _assert_latest_plugin_view(api, pair_id, expected_roles, expected_methods):
+    pair = api._normalizePair(api._getPair(pair_id))
+    hosts = dict((x['name'], x) for x in pair['hosts'])
+    assert len(hosts) == 2, pair
+    for name, role in expected_roles.items():
+        assert hosts[name]['role'] == role, (name, hosts[name], pair)
+    for name, method in expected_methods.items():
+        assert hosts[name]['collect_method'] == method, (name, hosts[name], pair)
+    assert pair['status'] == 'normal', pair
 
 
 def main():
@@ -110,6 +121,14 @@ def main():
 
     _report_state(api, pair_a, secret, [dict(host_a, collect_status='success', collect_method='local', report_host_id='H_DC_A', health_status='normal'), dict(host_b, collect_status='success', collect_method='ssh_peer', report_host_id='H_DC_A', health_status='normal')], pair_a + '-state')
     _report_state(api, pair_b, secret, [dict(host_b, collect_status='success', collect_method='local', report_host_id='H_DC_B', health_status='normal'), dict(host_a, collect_status='success', collect_method='ssh_peer', report_host_id='H_DC_B', health_status='normal')], pair_b + '-state')
+
+    switched_host_a = dict(host_a, role='standby')
+    switched_host_b = dict(host_b, role='master')
+    _report_state(api, pair_a, secret, [
+        dict(switched_host_b, collect_status='success', collect_method='local', report_host_id='H_DC_B', health_status='normal'),
+        dict(switched_host_a, collect_status='success', collect_method='ssh_peer', report_host_id='H_DC_B', health_status='normal')
+    ], pair_a + '-state-latest')
+    _assert_latest_plugin_view(api, pair_a, {'DC-A': 'standby', 'DC-B': 'master'}, {'DC-A': 'ssh_peer', 'DC-B': 'local'})
 
     for pair_id, reporter in ((pair_a, 'H_DC_A'), (pair_b, 'H_DC_B')):
         with app.test_request_context('/ha/request_switch', method='POST', data={'pair_id': pair_id, 'target_host_id': 'H_DC_B'}):

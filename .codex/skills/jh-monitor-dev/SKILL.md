@@ -28,6 +28,12 @@ jhm 1 -y
 
 Do not use `jh 1 -y` for this project; that command is for Jianghu Panel.
 
+After restarting, verify the gunicorn process start time changed if code still appears stale:
+
+```bash
+ps -eo pid,lstart,cmd | grep -E '/www/server/jh-monitor/.+gunicorn|jh-monitor' | grep -v grep
+```
+
 ## Validation
 
 Use focused checks based on changed files:
@@ -45,4 +51,3 @@ Use focused checks based on changed files:
   ```
 
 When changing browser-loaded JS or CSS, bump the query version in the corresponding template to avoid stale cache.
-
