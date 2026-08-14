@@ -414,6 +414,14 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'finish_time': run.get('finish_time') or ''
         }
 
+    def _getRuns(self, pair_id, limit=20):
+        if not pair_id:
+            return []
+        rows = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).field(self.run_fields).order('id desc').limit(str(limit)).select()
+        if not isinstance(rows, list):
+            rows = []
+        return [self._normalizeRun(row) for row in rows]
+
     def _normalizeEvent(self, row):
         return {
             'event_id': row.get('event_id') or '',
@@ -607,6 +615,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         data['switch_run_id'] = pair.get('current_switch_run_id') or ''
         data['log_path'] = ''
         data['switch_run'] = {}
+        data['switch_runs'] = []
         data['switch_events'] = []
         if data['switch_run_id']:
             run = self._getRun(data['switch_run_id'])
@@ -614,6 +623,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             data['log_path'] = run.get('log_path') or ''
             if include_events:
                 data['switch_events'] = [self._normalizeEvent(x) for x in self._getEvents(data['switch_run_id'])]
+        if include_log or include_events:
+            data['switch_runs'] = self._getRuns(pair.get('pair_id'), 20)
         data['health'] = self._summaryHealth(hosts)
         data['warnings'] = [] if status == 'normal' else status_text.split('；')
         data['log'] = self._readLogText(data.get('log_path')) if include_log and data.get('log_path') else ''
