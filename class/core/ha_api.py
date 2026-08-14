@@ -508,8 +508,11 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 states = [row for row in states if row.get('report_batch_id') == latest_batch_id]
         local_host_key_by_ip = {}
         local_host_ids_by_ip = {}
+        local_host_ids = set()
         real_host_key_by_ip = {}
         for row in states:
+            if row.get('collect_method') == 'local' and row.get('host_id'):
+                local_host_ids.add(row.get('host_id'))
             if row.get('collect_method') == 'local' and row.get('host_ip') and row.get('host_id') and row.get('host_ip') not in local_host_key_by_ip:
                 local_host_key_by_ip[row.get('host_ip')] = row.get('host_id')
             if row.get('collect_method') == 'local' and row.get('host_ip') and row.get('host_id'):
@@ -522,7 +525,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
             if row.get('host_id', '').startswith('H_ALIAS_') and source_host_id:
                 key = source_host_id
-            elif row.get('collect_method') == 'ssh_peer' and row.get('site_scope') == 'local' and row.get('host_ip') in local_host_key_by_ip and (not row.get('host_id', '').startswith('H_PANEL_') or (source_host_id or row.get('host_id')) in local_host_ids_by_ip.get(row.get('host_ip'), [])):
+            elif row.get('collect_method') == 'ssh_peer' and (source_host_id or row.get('host_id')) in local_host_ids and row.get('host_ip') in local_host_key_by_ip:
                 key = local_host_key_by_ip.get(row.get('host_ip'))
             elif self._isPlaceholderHost(row) and row.get('host_ip'):
                 key = real_host_key_by_ip.get(row.get('host_ip')) or ('placeholder_ip:' + row.get('host_ip'))
@@ -533,6 +536,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         for rows in grouped.values():
             selected = self._selectDisplayState(rows)
             item = dict(selected)
+            if item.get('collect_method') == 'ssh_peer' and item.get('host_id') not in local_host_ids:
+                item['site_scope'] = 'remote'
             alias_ids = []
             alias_names = []
             alias_roles = []
