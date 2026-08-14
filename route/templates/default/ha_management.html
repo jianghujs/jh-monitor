@@ -21,6 +21,24 @@
         <div class="ha-toolbar">
           <div>
             <button onclick="haRefreshList()" class="btn btn-default btn-sm btn-title ml-2" type="button">刷新</button>
+            <div id="haRefreshControl" class="ha-refresh-control">
+              <div class="btn-group">
+                <button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                  刷新间隔: <span id="haCurrentInterval">60</span>秒
+                  <span class="caret"></span>
+                </button>
+                <ul class="dropdown-menu">
+                  <li><a href="javascript:;" onclick="haSetRefreshInterval(5)">5秒</a></li>
+                  <li><a href="javascript:;" onclick="haSetRefreshInterval(10)">10秒</a></li>
+                  <li><a href="javascript:;" onclick="haSetRefreshInterval(30)">30秒</a></li>
+                  <li><a href="javascript:;" onclick="haSetRefreshInterval(60)">1分钟</a></li>
+                </ul>
+              </div>
+              <button id="haToggleRefresh" class="btn btn-default btn-sm" onclick="haToggleRefresh()">
+                <span class="glyphicon glyphicon-pause"></span>
+                <span>停止刷新</span>
+              </button>
+            </div>
           </div>
           <span class="set-info c7">主备关系由 ha_manager 插件绑定并上报到云监控</span>
         </div>
@@ -58,7 +76,7 @@
   </div>
 </div>
 
-<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608141755"></script>
+<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608141836"></script>
 
 <style>
 .ha-page {
@@ -95,6 +113,9 @@
   gap: 12px;
   margin-bottom: 12px;
 }
+.ha-toolbar > div:first-child { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ha-refresh-control { display: inline-flex; align-items: center; gap: 6px; }
+.ha-refresh-control .dropdown-menu { min-width: 96px; }
 .ha-table-wrap {
   flex: 1;
   min-height: 0;
@@ -275,6 +296,9 @@
 .ha-log-run-type { color: #1f2d3d; font-weight: 600; line-height: 20px; }
 .ha-log-run-id { color: #8a97a6; font-family: Menlo, Consolas, monospace; font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ha-log-status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; font-size: 12px; line-height: 22px; }
+.ha-log-route { display: grid; grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr); align-items: center; gap: 5px; color: #445466; line-height: 20px; }
+.ha-log-route span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-log-route b { color: #8a97a6; font-weight: 600; text-align: center; }
 .ha-log-step { color: #3d4b5c; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ha-log-time { color: #5f6b7a; font-family: Menlo, Consolas, monospace; font-size: 12px; white-space: nowrap; }
 .ha-log-view-btn { min-width: 48px; }

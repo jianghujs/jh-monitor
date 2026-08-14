@@ -1,0 +1,4 @@
+interface:
+  display_name: "JH Monitor Dev"
+  short_description: "Jianghu Monitor project development conventions."
+  default_prompt: "Use jh-monitor-dev for Jianghu Monitor development in /www/server/jh-monitor."

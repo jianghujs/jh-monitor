@@ -8,6 +8,11 @@ var haSwitchLogHeartbeat = 0;
 var haSwitchLiveBaseText = '';
 var haSwitchWizard = {step: 1, pairId: '', targetHostId: '', options: null, prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
 var haLogPager = {};
+var haRefreshTimer = null;
+var haRefreshInterval = 60000;
+var haHealthRefreshTimer = null;
+var haHealthRefreshLoading = false;
+var haHealthRefreshInterval = 3000;
 
 function haApi(action, data, callback, options) {
   options = options || {};
@@ -182,14 +187,31 @@ function haDetailChecksHtml(pair) {
     '</div>';
 }
 
-function haRefreshHealthPage(pairId) {
-  $('#haHealthRefreshBtn').prop('disabled', true).text('刷新中');
+function haRefreshHealthPage(pairId, silent) {
+  if (haHealthRefreshLoading) return;
+  haHealthRefreshLoading = true;
+  if (!silent) $('#haHealthRefreshBtn').prop('disabled', true).text('刷新中');
   haApi('get_detail', {pair_id: pairId}, function(data) {
-    $('#haHealthRefreshBtn').prop('disabled', false).text('刷新');
+    haHealthRefreshLoading = false;
+    if (!silent) $('#haHealthRefreshBtn').prop('disabled', false).text('刷新');
     if (!data) return;
     haStorePair(data);
     haRenderDetailTab(pairId, 'health', null, true);
   }, {quiet: true});
+}
+
+function haStartHealthAutoRefresh(pairId) {
+  haStopHealthAutoRefresh();
+  haHealthRefreshTimer = setInterval(function() {
+    haRefreshHealthPage(pairId, true);
+  }, haHealthRefreshInterval);
+}
+
+function haStopHealthAutoRefresh() {
+  if (haHealthRefreshTimer) {
+    clearInterval(haHealthRefreshTimer);
+    haHealthRefreshTimer = null;
+  }
 }
 
 function haRoleMark(role) {
@@ -1002,6 +1024,9 @@ function haOpenDetailDialog(pairId, defaultTab) {
         var tabEl = $('.ha-detail-menu p').filter(function() { return $(this).attr('onclick').indexOf("'" + tab + "'") !== -1; }).get(0);
         haRenderDetailTab(pair.pair_id, tab, tabEl);
       });
+    },
+    end: function() {
+      haStopHealthAutoRefresh();
     }
   });
 }
@@ -1009,6 +1034,7 @@ function haOpenDetailDialog(pairId, defaultTab) {
 function haRenderDetailTab(pairId, tab, el, skipRefresh) {
   var pair = haFindPair(pairId);
   if (!pair) return layer.msg('主备关系不存在', {icon: 2});
+  haStopHealthAutoRefresh();
   if (el) $(el).addClass('bgw').siblings().removeClass('bgw');
   var html = '';
   if (tab === 'hosts') html = haDetailHostsHtml(pair);
@@ -1016,6 +1042,7 @@ function haRenderDetailTab(pairId, tab, el, skipRefresh) {
   else if (tab === 'log') html = haDetailLogHtml(pair);
   else html = haDetailSummaryHtml(pair);
   $('#haDetailCon').html(html);
+  if (tab === 'health') haStartHealthAutoRefresh(pairId);
   if (tab === 'log' && !skipRefresh) haRefreshLogPage(pairId);
 }
 
@@ -1076,16 +1103,18 @@ function haDetailLogHtml(pair) {
   var rows = runs.map(function(run) {
     var action = haSwitchRunActionText(run);
     var status = haNormalizeSwitchStatus(run.status || '');
+    var route = haSwitchRunHostRoute(pair, run);
     return '<tr>' +
       '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-id" title="' + haAttr(run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div></td>' +
       '<td><span class="ha-log-status ' + haSwitchStatusClass(status) + '">' + haEscape(haSwitchRunStatusText(run.status || '')) + '</span></td>' +
+      '<td><div class="ha-log-route" title="' + haAttr(route.title) + '"><span>' + haEscape(route.from) + '</span><b>→</b><span>' + haEscape(route.to) + '</span></div></td>' +
       '<td><div class="ha-log-step" title="' + haAttr(run.current_step || run.current_phase || '--') + '">' + haEscape(run.current_step || run.current_phase || '--') + '</div></td>' +
       '<td><div class="ha-log-time">' + haEscape(run.addtime || '--') + '</div></td>' +
       '<td><div class="ha-log-time">' + haEscape(run.finish_time || run.update_time || '--') + '</div></td>' +
       '<td class="text-right"><button type="button" class="btn btn-default btn-xs ha-log-view-btn" onclick="haShowSwitchReadOnlyLogWindow(\'' + haAttr(action + '日志') + '\', \'' + haAttr(run.switch_run_id || '') + '\')">查看</button></td>' +
     '</tr>';
   }).join('');
-  if (!rows) rows = '<tr><td colspan="6" class="ha-muted text-center ha-log-empty">暂无日志记录。</td></tr>';
+  if (!rows) rows = '<tr><td colspan="7" class="ha-muted text-center ha-log-empty">暂无日志记录。</td></tr>';
   var total = runData.total || 0;
   var page = runData.page || 1;
   var totalPage = runData.total_page || 1;
@@ -1096,7 +1125,7 @@ function haDetailLogHtml(pair) {
       '<div><div class="monitor-task-section-title">日志</div><div class="ha-muted">每页 20 条，预切换和正式上线分别记录。</div></div>' +
       '<button type="button" id="haLogRefreshBtn" class="btn btn-default btn-sm" onclick="haRefreshLogPage(\'' + haAttr(pair.pair_id) + '\')">刷新</button>' +
     '</div>' +
-    '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="230">任务</th><th width="105">状态</th><th>当前步骤</th><th width="155">创建时间</th><th width="155">完成/更新时间</th><th width="82" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="215">任务</th><th width="100">状态</th><th width="210">主机切换</th><th>当前步骤</th><th width="145">创建时间</th><th width="145">完成/更新时间</th><th width="76" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="ha-log-pager"><span>共 ' + haEscape(total) + ' 条</span><span>第 ' + haEscape(page) + ' / ' + haEscape(totalPage) + ' 页</span><button type="button" class="btn btn-default btn-xs" ' + prevDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page - 1) + ')">上一页</button><button type="button" class="btn btn-default btn-xs" ' + nextDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page + 1) + ')">下一页</button></div>' +
     '</div>';
 }
@@ -1124,6 +1153,29 @@ function haGoLogPage(pairId, page) {
   haRefreshLogPage(pairId);
 }
 
+function haSwitchRunHostText(pair, hostId) {
+  var host = haFindHost(pair, hostId) || {};
+  if (!hostId) return '--';
+  if (host.host_id) return (host.name || host.host_id) + (host.ip ? ' / ' + host.ip : '');
+  return hostId;
+}
+
+function haSwitchRunHostShort(pair, hostId) {
+  var host = haFindHost(pair, hostId) || {};
+  if (!hostId) return '--';
+  return host.name || host.ip || hostId;
+}
+
+function haSwitchRunHostRoute(pair, run) {
+  var fromId = run.old_master_host_id || '';
+  var toId = run.new_master_host_id || run.desired_master_host_id || '';
+  return {
+    from: haSwitchRunHostShort(pair, fromId),
+    to: haSwitchRunHostShort(pair, toId),
+    title: haSwitchRunHostText(pair, fromId) + ' -> ' + haSwitchRunHostText(pair, toId)
+  };
+}
+
 function haSwitchRunActionText(run) {
   var phase = run.current_phase || '';
   var status = run.status || '';
@@ -1146,8 +1198,52 @@ function haRefreshList() {
   });
 }
 
+function haStartAutoRefresh() {
+  if (haRefreshTimer) clearInterval(haRefreshTimer);
+  haRefreshTimer = setInterval(function() {
+    haLoadPairs();
+  }, haRefreshInterval);
+  haUpdateRefreshButtonState(true);
+}
+
+function haStopAutoRefresh() {
+  if (haRefreshTimer) {
+    clearInterval(haRefreshTimer);
+    haRefreshTimer = null;
+  }
+  haUpdateRefreshButtonState(false);
+}
+
+function haUpdateRefreshButtonState(isRefreshing) {
+  var $btn = $('#haToggleRefresh');
+  if (!$btn.length) return;
+  if (isRefreshing) {
+    $btn.html('<span class="glyphicon glyphicon-pause"></span> <span>停止刷新</span>');
+    $btn.removeClass('btn-success').addClass('btn-default');
+  } else {
+    $btn.html('<span class="glyphicon glyphicon-play"></span> <span>开始刷新</span>');
+    $btn.removeClass('btn-default').addClass('btn-success');
+  }
+}
+
+function haSetRefreshInterval(interval) {
+  haRefreshInterval = interval * 1000;
+  $('#haCurrentInterval').text(interval);
+  if (haRefreshTimer) {
+    haStopAutoRefresh();
+    haStartAutoRefresh();
+  }
+}
+
+function haToggleRefresh() {
+  if (haRefreshTimer) haStopAutoRefresh();
+  else haStartAutoRefresh();
+}
+
 $(function() {
+  $('#haCurrentInterval').text(haRefreshInterval / 1000);
   setTimeout(function() {
     haLoadPairs();
+    haStartAutoRefresh();
   }, 200);
 });

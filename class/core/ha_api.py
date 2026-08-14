@@ -725,6 +725,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
     def _advanceSwitchRun(self, run, phase, phase_status, step):
         now = self._now()
         if phase not in ('prepare_online', 'offline', 'online'):
+            if run.get('status') in ('success', 'prepare_success'):
+                return run.get('status') or 'running'
             jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('current_step,update_time', (step, now))
             return run.get('status') or 'running'
         if phase_status in ('failed', 'error'):
@@ -1025,8 +1027,10 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'switch_run_id,pair_id,event_id,origin_host_id,report_host_id,collect_method,seq,phase,step,status,log_text,addtime',
             (switch_run_id, pair_id, event_id, origin_host_id, self._safeText(payload.get('report_host_id'), 128), self._safeText(payload.get('collect_method'), 32), seq, phase, step, status, log_text, now)
         )
-        line = '[{0}] [{1}] [{2}] [{3}] {4}'.format(now, origin_host_id or 'unknown', phase or 'event', status or 'info', log_text or step)
-        self._appendLog(run.get('log_path'), line)
+        is_aux_after_done = phase not in ('prepare_online', 'offline', 'online') and run.get('status') in ('success', 'prepare_success')
+        if not is_aux_after_done:
+            line = '[{0}] [{1}] [{2}] [{3}] {4}'.format(now, origin_host_id or 'unknown', phase or 'event', status or 'info', log_text or step)
+            self._appendLog(run.get('log_path'), line)
         db_status = self._advanceSwitchRun(run, phase, status, step or log_text)
         return jh.returnJson(True, '事件已上报')
 
