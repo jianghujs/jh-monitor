@@ -58,7 +58,7 @@
   </div>
 </div>
 
-<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608141705"></script>
+<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608141745"></script>
 
 <style>
 .ha-page {
@@ -265,10 +265,22 @@
 }
 .ha-detail-data-table th { background: #f8fafc; color: #5f6b7a; font-weight: 600; }
 .ha-detail-data-table td { background: #fff; }
-.ha-switch-run-table { table-layout: fixed; }
+.ha-log-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ha-log-list-shell { border: 1px solid #dfe6ee; border-radius: 6px; overflow: hidden; background: #fff; }
+.ha-switch-run-table { table-layout: fixed; margin-bottom: 0; border: 0; border-radius: 0; }
 .ha-switch-run-table th,
-.ha-switch-run-table td { vertical-align: middle !important; }
-.ha-switch-run-table .ha-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-switch-run-table td { vertical-align: middle !important; border-color: #eef2f6 !important; }
+.ha-switch-run-table th { height: 38px; color: #526171; background: #f6f8fb; }
+.ha-switch-run-table td { height: 54px; }
+.ha-log-run-type { color: #1f2d3d; font-weight: 600; line-height: 20px; }
+.ha-log-run-id { color: #8a97a6; font-family: Menlo, Consolas, monospace; font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-log-status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; font-size: 12px; line-height: 22px; }
+.ha-log-step { color: #3d4b5c; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-log-time { color: #5f6b7a; font-family: Menlo, Consolas, monospace; font-size: 12px; white-space: nowrap; }
+.ha-log-view-btn { min-width: 48px; }
+.ha-log-empty { height: 160px !important; background: #fbfcfd !important; }
+.ha-log-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; height: 42px; color: #6b7785; font-size: 12px; }
+.ha-log-pager .btn { min-width: 58px; }
 .ha-detail-switch-row .ha-health-item { background: #fff; border-color: #e3e8ef; border-radius: 6px; }
 .ha-detail-log-box { height: 430px; }
 .ha-health-detail-table { min-width: 760px; }

@@ -414,13 +414,20 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'finish_time': run.get('finish_time') or ''
         }
 
-    def _getRuns(self, pair_id, limit=20):
+    def _getRuns(self, pair_id, page=1, page_size=20):
         if not pair_id:
-            return []
-        rows = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).field(self.run_fields).order('id desc').limit(str(limit)).select()
+            return {'list': [], 'page': 1, 'page_size': page_size, 'total': 0, 'total_page': 1}
+        page = max(1, self._safeInt(page, 1))
+        page_size = max(1, min(100, self._safeInt(page_size, 20)))
+        total = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).count()
+        total_page = max(1, int((total + page_size - 1) / page_size))
+        if page > total_page:
+            page = total_page
+        offset = (page - 1) * page_size
+        rows = jh.M('ha_switch_run').where('pair_id=?', (pair_id,)).field(self.run_fields).order('id desc').limit('{0},{1}'.format(offset, page_size)).select()
         if not isinstance(rows, list):
             rows = []
-        return [self._normalizeRun(row) for row in rows]
+        return {'list': [self._normalizeRun(row) for row in rows], 'page': page, 'page_size': page_size, 'total': total, 'total_page': total_page}
 
     def _normalizeEvent(self, row):
         return {
@@ -624,7 +631,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if include_events:
                 data['switch_events'] = [self._normalizeEvent(x) for x in self._getEvents(data['switch_run_id'])]
         if include_log or include_events:
-            data['switch_runs'] = self._getRuns(pair.get('pair_id'), 20)
+            data['switch_runs'] = self._getRuns(pair.get('pair_id'), 1, 20)
         data['health'] = self._summaryHealth(hosts)
         data['warnings'] = [] if status == 'normal' else status_text.split('；')
         data['log'] = self._readLogText(data.get('log_path')) if include_log and data.get('log_path') else ''
@@ -661,6 +668,15 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if not pair:
             return jh.returnJson(False, '主备关系不存在')
         return jh.returnJson(True, 'ok', self._normalizePair(pair, include_log=True, include_events=True))
+
+    def getLogsApi(self):
+        pair_id = request.form.get('pair_id', '').strip()
+        pair = self._getPair(pair_id)
+        if not pair:
+            return jh.returnJson(False, '主备关系不存在')
+        page = self._safeInt(request.form.get('page', 1), 1)
+        page_size = self._safeInt(request.form.get('page_size', 20), 20)
+        return jh.returnJson(True, 'ok', self._getRuns(pair_id, page, page_size))
 
     def deletePairApi(self):
         self.ensureHaSchema()
@@ -708,6 +724,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
 
     def _advanceSwitchRun(self, run, phase, phase_status, step):
         now = self._now()
+        if phase not in ('prepare_online', 'offline', 'online'):
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('current_step,update_time', (step, now))
+            return run.get('status') or 'running'
         if phase_status in ('failed', 'error'):
             jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,update_time', ('waiting_retry', phase, step, step, now))
             return 'waiting_retry'

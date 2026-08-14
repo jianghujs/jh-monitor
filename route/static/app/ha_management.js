@@ -7,6 +7,7 @@ var haSwitchLogHeartbeatTimer = null;
 var haSwitchLogHeartbeat = 0;
 var haSwitchLiveBaseText = '';
 var haSwitchWizard = {step: 1, pairId: '', targetHostId: '', options: null, prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
+var haLogPager = {};
 
 function haApi(action, data, callback, options) {
   options = options || {};
@@ -74,6 +75,11 @@ function haStorePair(pair) {
     }
   }
   haPairs.push(pair);
+}
+
+function haPairLogPager(pairId) {
+  if (!haLogPager[pairId]) haLogPager[pairId] = {page: 1, page_size: 20, loading: false};
+  return haLogPager[pairId];
 }
 
 function haStatusClass(status) {
@@ -823,7 +829,7 @@ function haShowSwitchLogWindow(title, switchRunId, prepareMode) {
   var html = '<div class="ha-live-log-wrap">' +
     '<div class="ha-live-log-head"><span id="haSwitchLiveState" class="ha-live-state ha-live-state-running">执行中</span><span class="ha-live-run-id">' + haEscape(switchRunId) + '</span></div>' +
     '<pre id="haSwitchLiveLog" class="ha-live-log-box">正在准备切换任务...</pre>' +
-    '<div class="ha-live-log-tip">执行期间请勿重复发起切换；窗口关闭后仍可在“切换日志”页签查看。</div>' +
+    '<div class="ha-live-log-tip">执行期间请勿重复发起切换；窗口关闭后仍可在“日志”页签查看。</div>' +
     '</div>';
   haSwitchLogLayerIndex = layer.open({
     title: title,
@@ -927,7 +933,7 @@ function haBuildPrepareResultContent(switchRunId, logText, success) {
   }).join('');
   return '<div><div class="ha-muted mb10">Run ID: ' + haEscape(switchRunId || '') + '</div>' +
     '<table class="table table-hover ha-detail-data-table"><thead><tr><th>流程</th><th style="width:90px">结果</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<div class="mt10"><a class="btlink ha-prepare-log-link" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">查看完整切换日志</a> <a class="btlink ha-refresh-prepare-status" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">刷新状态</a></div></div>';
+    '<div class="mt10"><a class="btlink ha-prepare-log-link" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">查看完整日志</a> <a class="btlink ha-refresh-prepare-status" href="javascript:;" data-run-id="' + haAttr(switchRunId || '') + '">刷新状态</a></div></div>';
 }
 
 function haSyncPrepareWizardStatus(run, logText) {
@@ -958,7 +964,7 @@ function haOpenDetailDialog(pairId, defaultTab) {
     {title: '组别概览', tab: 'summary'},
     {title: '主机列表', tab: 'hosts'},
     {title: '自检状态', tab: 'health'},
-    {title: '切换日志', tab: 'log'}
+    {title: '日志', tab: 'log'}
   ];
   var html = '<div class="bt-form ha-detail-shell">' +
     '<div class="bt-w-menu pull-left ha-detail-menu">' +
@@ -988,7 +994,7 @@ function haOpenDetailDialog(pairId, defaultTab) {
   });
 }
 
-function haRenderDetailTab(pairId, tab, el) {
+function haRenderDetailTab(pairId, tab, el, skipRefresh) {
   var pair = haFindPair(pairId);
   if (!pair) return layer.msg('主备关系不存在', {icon: 2});
   if (el) $(el).addClass('bgw').siblings().removeClass('bgw');
@@ -998,9 +1004,12 @@ function haRenderDetailTab(pairId, tab, el) {
   else if (tab === 'log') html = haDetailLogHtml(pair);
   else html = haDetailSummaryHtml(pair);
   $('#haDetailCon').html(html);
+  if (tab === 'log' && !skipRefresh) haRefreshLogPage(pairId);
 }
 
 function haOpenLogDialog(pairId) {
+  var pager = haPairLogPager(pairId);
+  pager.page = 1;
   haOpenDetailDialog(pairId, 'log');
 }
 
@@ -1046,30 +1055,68 @@ function haDetailHostsHtml(pair) {
 }
 
 function haDetailLogHtml(pair) {
-  var runs = pair.switch_runs || [];
+  var pager = haPairLogPager(pair.pair_id);
+  var runData = pair.switch_runs || {list: [], page: pager.page || 1, page_size: 20, total: 0, total_page: 1};
+  if ($.isArray(runData)) runData = {list: runData, page: 1, page_size: 20, total: runData.length, total_page: 1};
+  pager.page = runData.page || pager.page || 1;
+  pager.page_size = runData.page_size || 20;
+  var runs = runData.list || [];
   var rows = runs.map(function(run) {
+    var action = haSwitchRunActionText(run);
+    var status = haNormalizeSwitchStatus(run.status || '');
     return '<tr>' +
-      '<td><div class="ha-main">' + haEscape(haSwitchRunActionText(run)) + '</div><div class="ha-sub">' + haEscape(run.switch_run_id || '') + '</div></td>' +
-      '<td><span class="ha-status-pill ' + haSwitchStatusClass(haNormalizeSwitchStatus(run.status || '')) + '">' + haEscape(haSwitchRunStatusText(run.status || '')) + '</span></td>' +
-      '<td>' + haEscape(run.current_step || run.current_phase || '--') + '</td>' +
-      '<td>' + haEscape(run.addtime || '--') + '</td>' +
-      '<td>' + haEscape(run.finish_time || run.update_time || '--') + '</td>' +
-      '<td class="text-right"><a class="btlink" href="javascript:;" onclick="haShowSwitchReadOnlyLogWindow(\'' + haAttr(haSwitchRunActionText(run) + '日志') + '\', \'' + haAttr(run.switch_run_id || '') + '\')">查看</a></td>' +
+      '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-id" title="' + haAttr(run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div></td>' +
+      '<td><span class="ha-log-status ' + haSwitchStatusClass(status) + '">' + haEscape(haSwitchRunStatusText(run.status || '')) + '</span></td>' +
+      '<td><div class="ha-log-step" title="' + haAttr(run.current_step || run.current_phase || '--') + '">' + haEscape(run.current_step || run.current_phase || '--') + '</div></td>' +
+      '<td><div class="ha-log-time">' + haEscape(run.addtime || '--') + '</div></td>' +
+      '<td><div class="ha-log-time">' + haEscape(run.finish_time || run.update_time || '--') + '</div></td>' +
+      '<td class="text-right"><button type="button" class="btn btn-default btn-xs ha-log-view-btn" onclick="haShowSwitchReadOnlyLogWindow(\'' + haAttr(action + '日志') + '\', \'' + haAttr(run.switch_run_id || '') + '\')">查看</button></td>' +
     '</tr>';
   }).join('');
-  if (!rows) rows = '<tr><td colspan="6" class="ha-muted text-center">暂无切换日志记录。</td></tr>';
+  if (!rows) rows = '<tr><td colspan="6" class="ha-muted text-center ha-log-empty">暂无日志记录。</td></tr>';
+  var total = runData.total || 0;
+  var page = runData.page || 1;
+  var totalPage = runData.total_page || 1;
+  var prevDisabled = page <= 1 ? 'disabled' : '';
+  var nextDisabled = page >= totalPage ? 'disabled' : '';
   return '<div class="ha-detail-section">' +
-    '<div class="monitor-task-section-title">切换日志</div>' +
-    '<div class="ha-muted mb10">最近执行的切换任务记录，预切换和正式上线会分别显示为独立记录。</div>' +
-    '<table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="220">任务</th><th width="90">状态</th><th>当前步骤</th><th width="155">创建时间</th><th width="155">完成/更新时间</th><th width="80" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="ha-log-toolbar">' +
+      '<div><div class="monitor-task-section-title">日志</div><div class="ha-muted">每页 20 条，预切换和正式上线分别记录。</div></div>' +
+      '<button type="button" id="haLogRefreshBtn" class="btn btn-default btn-sm" onclick="haRefreshLogPage(\'' + haAttr(pair.pair_id) + '\')">刷新</button>' +
+    '</div>' +
+    '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="230">任务</th><th width="105">状态</th><th>当前步骤</th><th width="155">创建时间</th><th width="155">完成/更新时间</th><th width="82" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="ha-log-pager"><span>共 ' + haEscape(total) + ' 条</span><span>第 ' + haEscape(page) + ' / ' + haEscape(totalPage) + ' 页</span><button type="button" class="btn btn-default btn-xs" ' + prevDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page - 1) + ')">上一页</button><button type="button" class="btn btn-default btn-xs" ' + nextDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page + 1) + ')">下一页</button></div>' +
     '</div>';
+}
+
+function haRefreshLogPage(pairId) {
+  var pair = haFindPair(pairId);
+  if (!pair) return layer.msg('主备关系不存在', {icon: 2});
+  var pager = haPairLogPager(pairId);
+  if (pager.loading) return;
+  pager.loading = true;
+  $('#haLogRefreshBtn').prop('disabled', true).text('刷新中');
+  haApi('get_logs', {pair_id: pairId, page: pager.page || 1, page_size: pager.page_size || 20}, function(data) {
+    pager.loading = false;
+    $('#haLogRefreshBtn').prop('disabled', false).text('刷新');
+    if (!data) return;
+    pair.switch_runs = data;
+    haStorePair(pair);
+    haRenderDetailTab(pairId, 'log', null, true);
+  }, {quiet: true});
+}
+
+function haGoLogPage(pairId, page) {
+  var pager = haPairLogPager(pairId);
+  pager.page = Math.max(1, page || 1);
+  haRefreshLogPage(pairId);
 }
 
 function haSwitchRunActionText(run) {
   var phase = run.current_phase || '';
   var status = run.status || '';
   if (phase === 'prepare_online' || status === 'pending_prepare' || status === 'prepare_success') return '预切换';
-  if (phase === 'offline' || phase === 'online' || status === 'pending_finalize' || status === 'pending_online' || status === 'success') return '正式上线';
+  if (phase === 'offline' || phase === 'online' || phase === 'peer_log' || status === 'pending_finalize' || status === 'pending_online' || status === 'success') return '正式上线';
   return phase || '切换任务';
 }
 
