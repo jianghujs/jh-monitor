@@ -78,6 +78,22 @@ def main():
         assert detail['pair_name'] == 'HA UI Flow'
         assert sorted([x['host_id'] for x in detail['hosts']]) == ['H_UI_A', 'H_UI_B']
 
+    sort_pair_id = pair_id + '_SORT'
+    cleanup_pair_ids.append(sort_pair_id)
+    now = api._now()
+    sort_id = api._nextPairSortId()
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,sort_id,addtime,update_time', (sort_pair_id, 'SortPair', 'H_SORT_A', secret, 'normal', '状态正常', sort_id, now, now))
+    first_id = jh.M('ha_pair').where('pair_id=?', (pair_id,)).getField('id')
+    second_id = jh.M('ha_pair').where('pair_id=?', (sort_pair_id,)).getField('id')
+    with app.test_request_context('/ha/save_list_sort', method='POST', data={'row_ids': '{0},{1}'.format(second_id, first_id)}):
+        res = _json(api.saveListSortApi())
+        assert res['status']
+    with app.test_request_context('/ha/get_list', method='POST'):
+        res = _json(api.getListApi())
+        assert res['status']
+        pair_ids = [x['pair_id'] for x in res['data']['list'] if x['pair_id'] in (pair_id, sort_pair_id)]
+        assert pair_ids == [sort_pair_id, pair_id], pair_ids
+
     api._upsertState(pair_id, {'host_id': 'H_PEER_PLACEHOLDER', 'host_name': '对端 10.10.1.1', 'host_ip': '10.10.1.1', 'role': 'standby', 'online_status': 'unknown'}, 'standby', api._now())
     with app.test_request_context('/ha/get_list', method='POST'):
         res = _json(api.getListApi())

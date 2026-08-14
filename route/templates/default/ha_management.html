@@ -52,6 +52,7 @@
           <div class="tablescroll ha-table-scroll">
             <table class="table table-hover ha-table">
               <colgroup>
+                <col style="width: 36px;">
                 <col style="width: 230px;">
                 <col style="width: 430px;">
                 <col style="width: 140px;">
@@ -60,6 +61,7 @@
               </colgroup>
               <thead>
                 <tr>
+                  <th title="拖动排序"></th>
                   <th>主备关系</th>
                   <th>主机</th>
                   <th class="text-center">状态</th>
@@ -76,7 +78,7 @@
   </div>
 </div>
 
-<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608141836"></script>
+<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608142038"></script>
 
 <style>
 .ha-page {
@@ -130,6 +132,55 @@
 .ha-table { min-width: 1100px; table-layout: fixed; }
 .ha-table th,
 .ha-table td { vertical-align: middle !important; }
+.ha-sort-handle {
+  cursor: move;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+.ha-sort-handle i {
+  display: block;
+  width: 14px;
+  height: 2px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: #c8c8c8;
+}
+.ha-sort-handle.disabled { cursor: not-allowed; }
+.ha-sort-handle.disabled i { background: #e6e6e6; }
+.ha-sort-placeholder td {
+  background: #f7f7f7 !important;
+  padding: 0 !important;
+  border-top: 0 none !important;
+  border-bottom: 0 none !important;
+}
+.ha-sort-placeholder-inner {
+  margin: 4px 6px;
+  border: 1px dashed #20a53a;
+  border-radius: 4px;
+  background: rgba(32, 165, 58, 0.08);
+}
+.ha-sort-drag-preview {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0.96;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+.ha-sort-drag-preview .table {
+  margin-bottom: 0;
+  background: #fff;
+}
+body.host-sort-dragging,
+body.host-sort-dragging * {
+  user-select: none;
+}
 .ha-main { font-size: 13px; font-weight: 600; color: #222; line-height: 20px; }
 .ha-sub { color: #999; font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ha-status-pill {

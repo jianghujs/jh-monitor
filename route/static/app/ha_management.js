@@ -13,6 +13,9 @@ var haRefreshInterval = 60000;
 var haHealthRefreshTimer = null;
 var haHealthRefreshLoading = false;
 var haHealthRefreshInterval = 3000;
+var haSortSaving = false;
+var haSortResumeRefresh = false;
+var haSortDragContext = null;
 
 function haApi(action, data, callback, options) {
   options = options || {};
@@ -103,6 +106,230 @@ function haStatusLabel(status) {
 
 function haStatusWeight(status) {
   return {danger: 0, switching: 1, warning: 2, normal: 3}[status] || 4;
+}
+
+function canDragSortHaList() {
+  return normalizeText(haCurrentSearch).trim() === '';
+}
+
+function updateHaSortHandleState(enabled, title) {
+  var handleTitle = title || (enabled ? '拖动排序' : '仅完整列表支持拖动排序');
+  $('#haPairBody .ha-sort-handle').toggleClass('disabled', !enabled).attr('title', handleTitle);
+}
+
+function getHaSortRowIds() {
+  return $('#haPairBody tr').map(function() {
+    return $(this).attr('data-ha-row-id');
+  }).get().filter(function(item) {
+    return !!item;
+  });
+}
+
+function isSameHaSortRowOrder(beforeRows, afterRows) {
+  if (!beforeRows || !afterRows || beforeRows.length !== afterRows.length) return false;
+  for (var i = 0; i < beforeRows.length; i++) {
+    if (beforeRows[i] !== afterRows[i]) return false;
+  }
+  return true;
+}
+
+function createHaSortPlaceholder(row) {
+  var columnCount = row.children().length || 1;
+  var height = Math.max(row.outerHeight() - 8, 24);
+  return $("<tr class='ha-sort-placeholder'><td colspan='" + columnCount + "'><div class='ha-sort-placeholder-inner' style='height:" + height + "px'></div></td></tr>");
+}
+
+function createHaSortPreviewTable(row) {
+  var preview = $("<div class='ha-sort-drag-preview'></div>");
+  var table = $("<table class='table table-hover ha-table'></table>");
+  var tbody = $('<tbody></tbody>');
+  row.children().each(function() {
+    $(this).width($(this).outerWidth());
+  });
+  tbody.append(row);
+  table.append(tbody);
+  preview.append(table);
+  $('body').append(preview);
+  return preview;
+}
+
+function moveHaSortPreview(pageX, pageY) {
+  if (!haSortDragContext || !haSortDragContext.preview) return;
+  haSortDragContext.preview.css({
+    left: pageX - haSortDragContext.pointerOffsetLeft,
+    top: pageY - haSortDragContext.pointerOffsetTop
+  });
+}
+
+function updateHaSortPlaceholderPosition(pageY) {
+  if (!haSortDragContext || !haSortDragContext.placeholder) return;
+  var body = haSortDragContext.body;
+  var placeholder = haSortDragContext.placeholder;
+  var inserted = false;
+  body.children('tr').not(placeholder).each(function() {
+    var currentRow = $(this);
+    var middleY = currentRow.offset().top + (currentRow.outerHeight() / 2);
+    if (pageY < middleY) {
+      currentRow.before(placeholder);
+      inserted = true;
+      return false;
+    }
+  });
+  if (!inserted) body.append(placeholder);
+}
+
+function updateHaSortAutoScroll(pageY) {
+  if (!haSortDragContext || !haSortDragContext.scrollContainer) return;
+  var scrollContainer = haSortDragContext.scrollContainer;
+  if (!scrollContainer.length) return;
+  var offset = scrollContainer.offset();
+  if (!offset) return;
+  var threshold = 48;
+  var topEdge = offset.top;
+  var bottomEdge = topEdge + scrollContainer.outerHeight();
+  var delta = 0;
+  if (pageY < topEdge + threshold) {
+    delta = -Math.max(6, Math.ceil((topEdge + threshold - pageY) / 4));
+  } else if (pageY > bottomEdge - threshold) {
+    delta = Math.max(6, Math.ceil((pageY - (bottomEdge - threshold)) / 4));
+  }
+  if (delta !== 0) scrollContainer.scrollTop(scrollContainer.scrollTop() + delta);
+}
+
+function cleanupHaSortDragContext() {
+  if (!haSortDragContext) return;
+  if (haSortDragContext.preview) haSortDragContext.preview.remove();
+  $(document).off('.haSortDrag');
+  $('body').removeClass('host-sort-dragging');
+  haSortDragContext = null;
+}
+
+function startHaSortDrag(event, row) {
+  var draggedRow = $(row);
+  var body = $('#haPairBody');
+  var placeholder = createHaSortPlaceholder(draggedRow);
+  haSortDragContext = {
+    started: true,
+    body: body,
+    dragRow: draggedRow,
+    placeholder: placeholder,
+    preview: null,
+    scrollContainer: body.closest('.tablescroll'),
+    initialOrder: getHaSortRowIds(),
+    pointerOffsetLeft: event.pageX - draggedRow.offset().left,
+    pointerOffsetTop: event.pageY - draggedRow.offset().top
+  };
+  draggedRow.before(placeholder);
+  haSortDragContext.preview = createHaSortPreviewTable(draggedRow);
+  moveHaSortPreview(event.pageX, event.pageY);
+  updateHaSortPlaceholderPosition(event.pageY);
+  $('body').addClass('host-sort-dragging');
+  haSortResumeRefresh = !!haRefreshTimer;
+  if (haSortResumeRefresh) haStopAutoRefresh();
+}
+
+function finishHaSortDrag() {
+  if (!haSortDragContext || !haSortDragContext.started) {
+    cleanupHaSortDragContext();
+    return false;
+  }
+  var placeholder = haSortDragContext.placeholder;
+  var draggedRow = haSortDragContext.dragRow;
+  var beforeOrder = haSortDragContext.initialOrder || [];
+  if (placeholder && placeholder.length) {
+    placeholder.before(draggedRow);
+    placeholder.remove();
+  }
+  var afterOrder = getHaSortRowIds();
+  cleanupHaSortDragContext();
+  if (!isSameHaSortRowOrder(beforeOrder, afterOrder)) {
+    saveHaListSort();
+    return true;
+  }
+  if (haSortResumeRefresh && !haSortSaving) {
+    haSortResumeRefresh = false;
+    haStartAutoRefresh();
+  }
+  return false;
+}
+
+function bindHaSortPointerEvents() {
+  $('#haPairBody').off('mousedown.haSort', '.ha-sort-handle').on('mousedown.haSort', '.ha-sort-handle', function(event) {
+    if ($(this).hasClass('disabled')) return false;
+    if (event.which !== 1) return true;
+    event.preventDefault();
+    var draggedRow = $(this).closest('tr');
+    var startX = event.pageX;
+    var startY = event.pageY;
+    var dragStarted = false;
+    $(document).off('.haSortDrag')
+      .on('mousemove.haSortDrag', function(moveEvent) {
+        if (!dragStarted) {
+          var diffX = Math.abs(moveEvent.pageX - startX);
+          var diffY = Math.abs(moveEvent.pageY - startY);
+          if (Math.max(diffX, diffY) < 4) return;
+          dragStarted = true;
+          startHaSortDrag(event, draggedRow);
+        }
+        if (!haSortDragContext || !haSortDragContext.started) return;
+        moveHaSortPreview(moveEvent.pageX, moveEvent.pageY);
+        updateHaSortAutoScroll(moveEvent.pageY);
+        updateHaSortPlaceholderPosition(moveEvent.pageY);
+      })
+      .on('mouseup.haSortDrag', function() {
+        if (dragStarted) {
+          finishHaSortDrag();
+          return;
+        }
+        $(document).off('.haSortDrag');
+      });
+    return false;
+  });
+}
+
+function saveHaListSort() {
+  if (!canDragSortHaList()) return;
+  var rowIds = getHaSortRowIds();
+  if (rowIds.length <= 1) {
+    if (haSortResumeRefresh) {
+      haSortResumeRefresh = false;
+      haStartAutoRefresh();
+    }
+    return;
+  }
+  haSortSaving = true;
+  var sortLoading = layer.msg('正在保存排序!', {icon: 16, time: 0, shade: [0.3, '#000']});
+  $.post('/ha/save_list_sort', {row_ids: rowIds}, function(res) {
+    if (typeof res === 'string') {
+      try { res = JSON.parse(res); } catch (e) { res = {status: false, msg: res}; }
+    }
+    layer.close(sortLoading);
+    layer.msg((res && res.msg) || '排序保存完成', {icon: res && res.status ? 1 : 2});
+    if (res && res.status) haLoadPairs();
+  }, 'json').fail(function() {
+    layer.close(sortLoading);
+    layer.msg('排序保存失败!', {icon: 2});
+  }).always(function() {
+    haSortSaving = false;
+    if (haSortResumeRefresh) {
+      haSortResumeRefresh = false;
+      haStartAutoRefresh();
+    }
+  });
+}
+
+function initHaDragSort() {
+  cleanupHaSortDragContext();
+  bindHaSortPointerEvents();
+  if (!canDragSortHaList()) {
+    updateHaSortHandleState(false, '搜索结果不支持拖动排序，请清空搜索后排序');
+    return;
+  }
+  if ($('#haPairBody tr').length <= 1) {
+    updateHaSortHandleState(false, '至少需要两条主备关系才能拖动排序');
+    return;
+  }
+  updateHaSortHandleState(true, '拖动排序');
 }
 
 function haNormalizeChecks(host) {
@@ -470,9 +697,7 @@ function haStatusTooltip(pair) {
 function haRenderList(search) {
   if (typeof search !== 'undefined') haCurrentSearch = search || '';
   var keyword = normalizeText(haCurrentSearch).toLowerCase();
-  var rows = haPairs.slice().sort(function(a, b) {
-    return haStatusWeight(a.status) - haStatusWeight(b.status);
-  }).filter(function(pair) {
+  var rows = haPairs.slice().filter(function(pair) {
     if (!keyword) return true;
     var haystack = [pair.pair_name, pair.pair_id, pair.status_text]
       .concat(pair.hosts.map(function(host) { return host.name + ' ' + host.host_id + ' ' + host.ip; }))
@@ -482,13 +707,15 @@ function haRenderList(search) {
   if (rows.length === 0) {
     $('#haPairBody').html('');
     $('#haEmptyState').show();
+    initHaDragSort();
     return;
   }
   $('#haEmptyState').hide();
   var html = '';
   rows.forEach(function(pair) {
     var statusTip = haStatusTooltip(pair);
-    html += '<tr>' +
+    html += '<tr data-ha-row-id="' + haAttr(pair.id) + '">' +
+      '<td class="text-center"><span class="ha-sort-handle" aria-hidden="true" title="拖动排序"><i></i><i></i><i></i></span></td>' +
       '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div></td>' +
       '<td>' + haHostsCell(pair) + '</td>' +
       '<td class="text-center"><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(statusTip) + '">' + haStatusLabel(pair.status) + '</span><div class="ha-status-desc" title="' + haAttr(pair.status_text || '') + '">' + haEscape(pair.status_text || '') + '</div></td>' +
@@ -502,6 +729,7 @@ function haRenderList(search) {
       '</tr>';
   });
   $('#haPairBody').html(html);
+  initHaDragSort();
 }
 
 function haDeletePair(pairId) {

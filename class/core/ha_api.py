@@ -22,7 +22,7 @@ class ha_api:
     pair_fields = (
         'id,pair_id,pair_name,desired_master_host_id,actual_master_host_id,status,status_text,'
         'last_report_at,current_switch_run_id,callback_url,callback_enabled,callback_status,'
-        'api_secret,addtime,update_time'
+        'api_secret,sort_id,addtime,update_time'
     )
 
     state_fields = (
@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS ha_pair (
   callback_enabled INTEGER DEFAULT 0,
   callback_status TEXT,
   api_secret TEXT,
+  sort_id INTEGER DEFAULT 0,
   addtime TEXT,
   update_time TEXT
 )
@@ -266,7 +267,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'actual_master_host_id': 'TEXT', 'status': "TEXT DEFAULT 'unknown'", 'status_text': 'TEXT',
                 'last_report_at': 'TEXT', 'current_switch_run_id': 'TEXT', 'callback_url': 'TEXT',
                 'callback_enabled': 'INTEGER DEFAULT 0', 'callback_status': 'TEXT', 'api_secret': 'TEXT',
-                'addtime': 'TEXT', 'update_time': 'TEXT'
+                'sort_id': 'INTEGER DEFAULT 0', 'addtime': 'TEXT', 'update_time': 'TEXT'
             },
             'ha_host_state': {
                 'pair_id': 'TEXT', 'host_id': 'TEXT', 'host_name': 'TEXT', 'host_ip': 'TEXT',
@@ -319,7 +320,38 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 db.originExecute(sql)
             except Exception:
                 pass
+        self._ensurePairSortOrder()
         return True
+
+    def _ensurePairSortOrder(self):
+        db = jh.M('ha_pair')
+        try:
+            sort_count_row = db.originExecute(
+                'SELECT COUNT(*) FROM ha_pair WHERE sort_id IS NOT NULL AND sort_id > 0'
+            ).fetchone()
+            sort_count = sort_count_row[0] if sort_count_row else 0
+            if sort_count == 0:
+                rows = db.originExecute('SELECT id FROM ha_pair ORDER BY id DESC').fetchall()
+                sort_value = 1
+                for row in rows:
+                    db.execute('UPDATE ha_pair SET sort_id=? WHERE id=?', (sort_value, row[0]))
+                    sort_value += 1
+                return
+            max_row = db.originExecute('SELECT MAX(sort_id) FROM ha_pair').fetchone()
+            sort_value = (int(max_row[0]) if max_row and max_row[0] else 0) + 1
+            rows = db.originExecute('SELECT id FROM ha_pair WHERE sort_id IS NULL OR sort_id <= 0 ORDER BY id DESC').fetchall()
+            for row in rows:
+                db.execute('UPDATE ha_pair SET sort_id=? WHERE id=?', (sort_value, row[0]))
+                sort_value += 1
+        except Exception:
+            pass
+
+    def _nextPairSortId(self):
+        try:
+            row = jh.M('ha_pair').originExecute('SELECT MAX(sort_id) FROM ha_pair').fetchone()
+            return (int(row[0]) if row and row[0] else 0) + 1
+        except Exception:
+            return 1
 
     def _getPair(self, pair_id):
         self.ensureHaSchema()
@@ -720,10 +752,48 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
     def getListApi(self):
         if not self.ensureHaSchema():
             return jh.returnJson(False, 'HA表结构初始化失败')
-        rows = jh.M('ha_pair').field(self.pair_fields).order('id desc').select()
+        rows = jh.M('ha_pair').field(self.pair_fields).order('sort_id asc,id desc').select()
         if not isinstance(rows, list):
             rows = []
         return jh.returnJson(True, 'ok', {'list': [self._normalizePair(row, include_log=False, include_events=False) for row in rows]})
+
+    def saveListSortApi(self):
+        if not self.ensureHaSchema():
+            return jh.returnJson(False, 'HA表结构初始化失败')
+        row_ids = request.form.getlist('row_ids[]')
+        if len(row_ids) == 0:
+            row_ids = request.form.getlist('row_ids')
+        if len(row_ids) == 0:
+            row_ids_text = request.form.get('row_ids', '').strip()
+            if row_ids_text:
+                row_ids = row_ids_text.split(',')
+
+        normalized_ids = []
+        for row_id in row_ids:
+            if isinstance(row_id, str) and ',' in row_id:
+                for item in row_id.split(','):
+                    try:
+                        item_id = int(str(item).strip())
+                    except Exception:
+                        continue
+                    if item_id not in normalized_ids:
+                        normalized_ids.append(item_id)
+                continue
+            try:
+                row_id = int(str(row_id).strip())
+            except Exception:
+                continue
+            if row_id not in normalized_ids:
+                normalized_ids.append(row_id)
+
+        if len(normalized_ids) == 0:
+            return jh.returnJson(False, '请先选择有效的主备关系排序数据!')
+
+        sort_value = 1
+        for row_id in normalized_ids:
+            jh.M('ha_pair').where('id=?', (row_id,)).setField('sort_id', sort_value)
+            sort_value += 1
+        return jh.returnJson(True, '主备关系排序已保存!')
 
     def getDetailApi(self):
         pair_id = request.form.get('pair_id', '').strip()
@@ -959,7 +1029,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('pair_name,desired_master_host_id,api_secret,update_time', (pair_name, master_id, stored_secret, now))
             api_secret = stored_secret
         else:
-            jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,addtime,update_time', (pair_id, pair_name, master_id, api_secret, 'unknown', '等待插件上报', now, now))
+            sort_id = self._nextPairSortId()
+            jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,sort_id,addtime,update_time', (pair_id, pair_name, master_id, api_secret, 'unknown', '等待插件上报', sort_id, now, now))
         for host in (local, peer):
             if isinstance(host, dict) and host.get('host_id'):
                 self._upsertState(pair_id, host, host.get('role') or ('master' if host.get('host_id') == master_id else 'standby'), now)
