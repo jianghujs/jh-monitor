@@ -766,7 +766,7 @@ function haOpenSwitchDialog(pairId) {
   haSwitchWizard = {step: 1, pairId: pair.pair_id, targetHostId: target.host_id, options: $.extend(true, {}, haDefaultSwitchOptions()), prepared: false, prepareRunId: '', prepareLog: '', prepareStatus: ''};
   haSwitchDialogIndex = layer.open({
     type: 1,
-    title: '切换主备 - ' + pair.pair_name,
+    title: haSwitchDialogTitle(pair),
     area: ['780px', '560px'],
     closeBtn: 1,
     shadeClose: false,
@@ -802,6 +802,18 @@ function haSwitchWizardRoot() {
   return haSwitchDialogIndex ? $('#layui-layer' + haSwitchDialogIndex).find('#haSwitchWizardBox') : $('#haSwitchWizardBox');
 }
 
+function haSwitchDialogTitle(pair) {
+  pair = pair || haFindPair(haSwitchWizard.pairId) || {};
+  var target = haFindHost(pair, haSwitchWizard.targetHostId) || {};
+  var targetText = target.name || target.ip || target.host_id || '未选择主机';
+  return '切换主备 - 切换到 ' + targetText;
+}
+
+function haUpdateSwitchDialogTitle(pair) {
+  if (haSwitchDialogIndex === null) return;
+  $('#layui-layer' + haSwitchDialogIndex).find('.layui-layer-title').text(haSwitchDialogTitle(pair));
+}
+
 function haSwitchWizardSteps() {
   var items = [{num: 1, text: '选择主机'}, {num: 2, text: '预上线'}, {num: 3, text: '正式切换'}];
   return '<div class="ha-wizard-steps">' + items.map(function(item) {
@@ -814,11 +826,17 @@ function haSwitchWizardHostSelect(pair) {
   return '<div class="ha-switch-hosts">' + pair.hosts.map(function(host) {
     var checked = host.host_id === haSwitchWizard.targetHostId ? 'checked' : '';
     var roleText = host.role === 'master' ? '主' : '备';
-    return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" ' + checked + '>' +
+    return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" onchange="haSwitchTargetChanged(this.value)" ' + checked + '>' +
       '<span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' +
       '<div class="ha-switch-host-meta">当前: ' + roleText + ' / IP: ' + haEscape(host.ip || '--') + '</div>' +
     '</label>';
   }).join('') + '</div>';
+}
+
+function haSwitchTargetChanged(hostId) {
+  haSwitchWizard.targetHostId = hostId || '';
+  haUpdateSwitchDialogTitle();
+  haRenderSwitchWizard();
 }
 
 function haBuildSwitchOptionsForm(o) {
@@ -871,6 +889,7 @@ function haRenderSwitchWizard() {
   } else {
     actions = '<button type="button" class="btn btn-default btn-sm" onclick="haWizardBackOptions()">返回预上线选项</button>' + (haSwitchWizard.prepareStatus === 'success' ? '<button type="button" class="btn btn-success btn-sm" onclick="haStartFinalizeFromWizard()">正式切换</button>' : '');
   }
+  haUpdateSwitchDialogTitle(pair);
   root.html(haSwitchWizardSteps() + '<div class="ha-wizard-body">' + haBuildSwitchWizardBody(pair) + '</div><div class="ha-wizard-actions">' + actions + '</div>');
   haToggleSyncOptions();
 }
