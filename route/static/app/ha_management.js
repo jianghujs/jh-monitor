@@ -644,12 +644,23 @@ function haReadSwitchOptions() {
   return data;
 }
 
+function haSwitchOptionsConfirmHtml(options) {
+  options = options || haDefaultSwitchOptions();
+  return '<div class="ha-switch-confirm-options">' +
+    '<div>同步文件：<b>' + (options.sync_files ? '是' : '否') + '</b></div>' +
+    '<div>检查 checksum：<b>' + (options.run_checksum ? '是' : '否') + '</b></div>' +
+    '<div>执行增量恢复：<b>' + (options.run_xtrabackup_inc_restore ? '是' : '否') + '</b></div>' +
+    '<div>同步目录：' + haEscape(options.sync_file_dirs || '--') + '</div>' +
+    '<div>忽略目录：' + haEscape(options.sync_ignore_dirs || '--') + '</div>' +
+  '</div>';
+}
+
 function haWizardRunPrepare() {
   var pair = haFindPair(haSwitchWizard.pairId);
   var target = pair ? haFindHost(pair, haSwitchWizard.targetHostId) : null;
   if (!pair || !target) return layer.msg('目标主机不存在', {icon: 2});
   var options = haReadSwitchOptions();
-  var content = haSwitchWizardRiskTip() + '<div>确认在目标主机（' + haEscape(target.name || target.ip || target.host_id) + '）执行预备上线？<br>将按预上线选项执行同步文件、checksum 检查、增量恢复等操作。</div>';
+  var content = haSwitchWizardRiskTip() + '<div>确认在目标主机（' + haEscape(target.name || target.ip || target.host_id) + '）执行预备上线？</div>' + haSwitchOptionsConfirmHtml(options);
   layer.confirm(content, {icon: 3, title: '确认预备上线', btn: ['确认执行', '取消']}, function(confirmIndex) {
     layer.close(confirmIndex);
     haCreateSwitchTask(pair, target, options, 'prepare');
@@ -806,9 +817,36 @@ function haShowSwitchLogWindow(title, switchRunId, prepareMode) {
   haSwitchLogTimer = setInterval(function() { haRefreshSwitchLogWindow(switchRunId, prepareMode); }, 1500);
 }
 
+function haShowSwitchReadOnlyLogWindow(title, switchRunId) {
+  if (!switchRunId) return layer.msg('切换任务不存在', {icon: 2});
+  haApi('read_log', {switch_run_id: switchRunId, offset: 0}, function(data) {
+    if (!data) return;
+    var html = '<div class="ha-live-log-wrap">' +
+      '<div class="ha-live-log-head"><span class="ha-live-state ha-live-state-success">完整日志</span><span class="ha-live-run-id">' + haEscape(switchRunId) + '</span></div>' +
+      '<pre class="ha-live-log-box">' + haEscape(data.content || '暂无日志') + '</pre>' +
+      '<div class="ha-live-log-tip">该窗口不会自动关闭，需要手动关闭。</div>' +
+      '</div>';
+    layer.open({
+      title: title,
+      type: 1,
+      closeBtn: 2,
+      shade: 0.3,
+      shadeClose: false,
+      area: '760px',
+      offset: '20%',
+      content: html,
+      btn: ['刷新', '关闭'],
+      yes: function(index) {
+        layer.close(index);
+        haShowSwitchReadOnlyLogWindow(title, switchRunId);
+      }
+    });
+  });
+}
+
 $(document).off('click', '.ha-prepare-log-link').on('click', '.ha-prepare-log-link', function() {
   var runId = $(this).data('run-id') || '';
-  haShowSwitchLogWindow('预上线日志', runId, true);
+  haShowSwitchReadOnlyLogWindow('预上线日志', runId);
 });
 
 $(document).off('click', '.ha-refresh-prepare-status').on('click', '.ha-refresh-prepare-status', function() {

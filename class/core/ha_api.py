@@ -77,15 +77,45 @@ class ha_api:
     def _runId(self):
         return 'HSR_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(6))
 
+    def _defaultSwitchOptions(self):
+        return {
+            'run_checksum': True,
+            'sync_files': True,
+            'sync_file_dirs': '/www/wwwroot,/www/wwwstorage',
+            'sync_ignore_dirs': '.git,node_modules,logs,run',
+            'restore_site_setting': False,
+            'restore_plugin_setting': False,
+            'run_xtrabackup_inc_restore': False,
+            'promote_mysql': True,
+            'checksum_confirmed': False,
+            'allow_checksum_diff': False,
+        }
+
+    def _boolValue(self, value):
+        return str(value).lower() in ('1', 'true', 'yes', 'on')
+
+    def _switchOptionsSummary(self, options):
+        return '切换选项 sync_files={0}, run_checksum={1}, run_xtrabackup_inc_restore={2}, restore_site_setting={3}, restore_plugin_setting={4}, sync_file_dirs={5}, sync_ignore_dirs={6}'.format(
+            str(options.get('sync_files')).lower(),
+            str(options.get('run_checksum')).lower(),
+            str(options.get('run_xtrabackup_inc_restore')).lower(),
+            str(options.get('restore_site_setting')).lower(),
+            str(options.get('restore_plugin_setting')).lower(),
+            self._safeText(options.get('sync_file_dirs'), 500) or '--',
+            self._safeText(options.get('sync_ignore_dirs'), 500) or '--',
+        )
+
     def _switchOptionsFromRequest(self):
-        options = self._bodyJson()
+        request_options = self._bodyJson()
+        options = self._defaultSwitchOptions()
+        options.update(request_options)
         for key in ('pair_id', 'target_host_id', 'desired_master_host_id', 'action'):
             options.pop(key, None)
         for key in ('local_ip', 'remote_ip', 'remote_ssh_port'):
             options.pop(key, None)
         for key in ('sync_files', 'run_checksum', 'allow_checksum_diff', 'checksum_confirmed', 'restore_site_setting', 'restore_plugin_setting', 'run_xtrabackup_inc_restore'):
             if key in options:
-                options[key] = str(options.get(key)).lower() in ('1', 'true', 'yes', 'on')
+                options[key] = self._boolValue(options.get(key))
         options['promote_mysql'] = True
         return options
 
@@ -110,6 +140,7 @@ class ha_api:
             (target_host_id, switch_run_id, 'switching', current_step, now)
         )
         self._appendLog(log_path, '[{0}] [system] [pending] 创建切换任务 {1}，动作 {2}，目标主机 {3}'.format(now, switch_run_id, action_text, target_host_id))
+        self._appendLog(log_path, '[{0}] [system] [pending] {1}'.format(now, self._switchOptionsSummary(options)))
         return {'switch_run_id': switch_run_id, 'log_path': log_path}
 
     def ensureHaSchema(self):
