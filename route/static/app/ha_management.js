@@ -174,10 +174,22 @@ function haDetailChecksHtml(pair) {
     '</div>';
   }).join('');
   return '<div class="ha-detail-section">' +
-    '<div class="monitor-task-section-title">自检状态</div>' +
-    '<div class="ha-muted mb10">展示 ha_manager 插件上报的真实自检明细；缺失明细时显示摘要或等待上报。</div>' +
+    '<div class="ha-log-toolbar">' +
+      '<div><div class="monitor-task-section-title">自检状态</div><div class="ha-muted">展示 ha_manager 插件上报的真实自检明细；缺失明细时显示摘要或等待上报。</div></div>' +
+      '<button type="button" id="haHealthRefreshBtn" class="btn btn-default btn-sm" onclick="haRefreshHealthPage(\'' + haAttr(pair.pair_id) + '\')">刷新</button>' +
+    '</div>' +
     '<div class="ha-check-grid">' + hostCards + '</div>' +
     '</div>';
+}
+
+function haRefreshHealthPage(pairId) {
+  $('#haHealthRefreshBtn').prop('disabled', true).text('刷新中');
+  haApi('get_detail', {pair_id: pairId}, function(data) {
+    $('#haHealthRefreshBtn').prop('disabled', false).text('刷新');
+    if (!data) return;
+    haStorePair(data);
+    haRenderDetailTab(pairId, 'health', null, true);
+  }, {quiet: true});
 }
 
 function haRoleMark(role) {
@@ -369,7 +381,7 @@ function haHostSwitchState(pair, host) {
 
 function haNormalizeSwitchStatus(status) {
   status = (status || '').toLowerCase();
-  if (status === 'success' || status === 'done' || status.indexOf('_done') !== -1) return 'success';
+  if (status === 'success' || status === 'done' || status === 'prepare_success' || status.indexOf('_done') !== -1) return 'success';
   if (status === 'failed' || status === 'error' || status === 'waiting_retry') return 'error';
   if (status === 'running' || status === 'pending' || status === 'preparing' || status === 'finalizing' || status.indexOf('_running') !== -1) return 'running';
   return status || 'waiting';
