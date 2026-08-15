@@ -1098,7 +1098,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         pair = self._getPair(payload.get('pair_id'))
         if not pair:
             return jh.returnJson(False, 'unknown pair_id')
-        states = self._displayStates(self._getStates(pair.get('pair_id')))
+        raw_states = self._getStates(pair.get('pair_id'))
+        states = self._displayStates(raw_states)
 
         def resolve_executor(target_host_id):
             target_host_id = self._safeText(target_host_id, 128)
@@ -1106,6 +1107,16 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 return '', ''
             if host_id == target_host_id:
                 return target_host_id, 'local'
+            for state in raw_states:
+                detail = self._jsonLoads(state.get('health_detail'), {})
+                alias_ids = [state.get('host_id')]
+                source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
+                if source_host_id:
+                    alias_ids.append(source_host_id)
+                if target_host_id not in alias_ids:
+                    continue
+                if state.get('collect_method') == 'ssh_peer' and state.get('report_host_id') == host_id:
+                    return host_id, 'ssh_peer'
             for state in states:
                 alias_ids = state.get('_alias_host_ids') or []
                 if state.get('host_id') not in alias_ids:

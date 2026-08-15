@@ -839,6 +839,11 @@ function haSwitchTargetChanged(hostId) {
   haRenderSwitchWizard();
 }
 
+function haCanSkipSwitch(pair, target) {
+  var masters = (pair.hosts || []).filter(function(host) { return host.role === 'master'; });
+  return masters.length === 1 && target && target.host_id === masters[0].host_id && pair.status === 'normal';
+}
+
 function haBuildSwitchOptionsForm(o) {
   o = o || haDefaultSwitchOptions();
   return '<form class="bt-form ha-form" id="haLocalSwitchForm">' +
@@ -900,7 +905,7 @@ function haWizardGoOptions() {
   var selectedHostId = haSwitchWizardRoot().find('[name=haSwitchTargetHost]:checked').val();
   var target = haFindHost(pair, selectedHostId);
   if (!target) return layer.msg('请选择切换后的主机', {icon: 2});
-  if (target.host_id === pair.actual_master_host_id) return layer.msg('当前主备关系已符合选择，无需切换', {icon: 0});
+  if (haCanSkipSwitch(pair, target)) return layer.msg('当前主备关系已符合选择，无需切换', {icon: 0});
   haSwitchWizard.targetHostId = target.host_id;
   haSwitchWizard.step = 2;
   haRenderSwitchWizard();
