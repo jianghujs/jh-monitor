@@ -924,13 +924,20 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             old_master_host_id = pair.get('actual_master_host_id') or self._masterHostId(pair_id, '')
         if not finalize_target_host_id:
             finalize_target_host_id = pair.get('desired_master_host_id') or target_host_id
+        should_promote_mysql = True
         if not old_master_host_id or old_master_host_id == finalize_target_host_id:
-            old_master_host_id = self._fallbackOldMasterHostId(pair_id, finalize_target_host_id, '')
+            old_master_host_id = self._fallbackOldMasterHostId(pair_id, finalize_target_host_id, '', True)
+            should_promote_mysql = False
         if old_master_host_id:
+            if not should_promote_mysql:
+                options['promote_mysql'] = False
             data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id)
+            if not should_promote_mysql:
+                self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 未检测到当前旧主机，按选择目标执行：目标主机正式上线，另一台主机下线，跳过数据库主从提升'.format(self._now()))
         else:
+            options['promote_mysql'] = False
             data = self._createSwitchRun(pair, finalize_target_host_id, 'online', '未检测到旧主机，等待目标主机直接领取正式上线阶段', '目标主机正式上线', 'pending_online', options, '正式上线', '')
-            self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 当前主备关系未检测到旧主机，跳过下线阶段，直接执行目标主机正式上线'.format(self._now()))
+            self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 当前主备关系未检测到另一台主机，跳过下线阶段，直接执行目标主机正式上线，并跳过数据库主从提升'.format(self._now()))
         return jh.returnJson(True, '正式上线任务已创建', data)
 
     def retrySwitchApi(self):
@@ -1153,16 +1160,26 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             run = self._getRun(pair.get('current_switch_run_id'))
             if run:
                 if run.get('current_phase') == 'offline' and not run.get('old_master_host_id'):
-                    repaired_old_master = self._fallbackOldMasterHostId(pair.get('pair_id'), run.get('new_master_host_id') or run.get('desired_master_host_id') or '')
+                    repaired_old_master = self._fallbackOldMasterHostId(pair.get('pair_id'), run.get('new_master_host_id') or run.get('desired_master_host_id') or '', '', True)
                     if repaired_old_master:
+                        options = self._jsonLoads(run.get('options_json'), {})
+                        if not isinstance(options, dict):
+                            options = {}
+                        options['promote_mysql'] = False
                         run['old_master_host_id'] = repaired_old_master
-                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('old_master_host_id,update_time', (repaired_old_master, self._now()))
-                        self._appendLog(run.get('log_path'), '[{0}] [system] [repair] 自动修复旧主机为空，设置 old_master_host_id={1}'.format(self._now(), repaired_old_master))
+                        run['options_json'] = json.dumps(options, ensure_ascii=False)
+                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('old_master_host_id,options_json,update_time', (repaired_old_master, run.get('options_json'), self._now()))
+                        self._appendLog(run.get('log_path'), '[{0}] [system] [repair] 未检测到当前旧主机，设置另一台主机为下线目标 old_master_host_id={1}，并跳过数据库主从提升'.format(self._now(), repaired_old_master))
                     else:
                         now = self._now()
+                        options = self._jsonLoads(run.get('options_json'), {})
+                        if not isinstance(options, dict):
+                            options = {}
+                        options['promote_mysql'] = False
                         run['current_phase'] = 'online'
                         run['status'] = 'pending_online'
-                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time', ('pending_online', 'online', '未检测到旧主机，跳过下线阶段，等待目标主机领取正式上线阶段', '目标主机正式上线', now))
+                        run['options_json'] = json.dumps(options, ensure_ascii=False)
+                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,options_json,update_time', ('pending_online', 'online', '未检测到旧主机，跳过下线阶段，等待目标主机领取正式上线阶段', '目标主机正式上线', run.get('options_json'), now))
                         self._appendLog(run.get('log_path'), '[{0}] [system] [repair] 未检测到旧主机，跳过下线阶段，推进到目标主机正式上线'.format(now))
                 phase = run.get('current_phase') or ''
                 target_host_id = ''
