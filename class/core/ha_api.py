@@ -125,6 +125,20 @@ class ha_api:
                 return state.get('host_id') or fallback
         return fallback
 
+    def _fallbackOldMasterHostId(self, pair_id, target_host_id, fallback='', allow_any_peer=False):
+        target_host_id = self._safeText(target_host_id, 128)
+        states = self._displayStates(self._getStates(pair_id))
+        for state in states:
+            host_id = state.get('host_id') or ''
+            if host_id and host_id != target_host_id and state.get('role') == 'master':
+                return host_id
+        if allow_any_peer:
+            for state in states:
+                host_id = state.get('host_id') or ''
+                if host_id and host_id != target_host_id:
+                    return host_id
+        return fallback
+
     def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text, old_master_host_id=''):
         pair_id = pair.get('pair_id')
         switch_run_id = self._runId()
@@ -910,7 +924,13 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             old_master_host_id = pair.get('actual_master_host_id') or self._masterHostId(pair_id, '')
         if not finalize_target_host_id:
             finalize_target_host_id = pair.get('desired_master_host_id') or target_host_id
-        data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id)
+        if not old_master_host_id or old_master_host_id == finalize_target_host_id:
+            old_master_host_id = self._fallbackOldMasterHostId(pair_id, finalize_target_host_id, '')
+        if old_master_host_id:
+            data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id)
+        else:
+            data = self._createSwitchRun(pair, finalize_target_host_id, 'online', '未检测到旧主机，等待目标主机直接领取正式上线阶段', '目标主机正式上线', 'pending_online', options, '正式上线', '')
+            self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 当前主备关系未检测到旧主机，跳过下线阶段，直接执行目标主机正式上线'.format(self._now()))
         return jh.returnJson(True, '正式上线任务已创建', data)
 
     def retrySwitchApi(self):
@@ -1132,6 +1152,18 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if pair.get('current_switch_run_id'):
             run = self._getRun(pair.get('current_switch_run_id'))
             if run:
+                if run.get('current_phase') == 'offline' and not run.get('old_master_host_id'):
+                    repaired_old_master = self._fallbackOldMasterHostId(pair.get('pair_id'), run.get('new_master_host_id') or run.get('desired_master_host_id') or '')
+                    if repaired_old_master:
+                        run['old_master_host_id'] = repaired_old_master
+                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('old_master_host_id,update_time', (repaired_old_master, self._now()))
+                        self._appendLog(run.get('log_path'), '[{0}] [system] [repair] 自动修复旧主机为空，设置 old_master_host_id={1}'.format(self._now(), repaired_old_master))
+                    else:
+                        now = self._now()
+                        run['current_phase'] = 'online'
+                        run['status'] = 'pending_online'
+                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time', ('pending_online', 'online', '未检测到旧主机，跳过下线阶段，等待目标主机领取正式上线阶段', '目标主机正式上线', now))
+                        self._appendLog(run.get('log_path'), '[{0}] [system] [repair] 未检测到旧主机，跳过下线阶段，推进到目标主机正式上线'.format(now))
                 phase = run.get('current_phase') or ''
                 target_host_id = ''
                 if phase == 'prepare_online':
@@ -1147,6 +1179,14 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 run['execute_phase'] = phase if executor_host_id == host_id and phase in ('prepare_online', 'offline', 'online') else ''
                 run['execute_method'] = execute_method
                 run['execute_target_host_id'] = target_host_id
+                if not target_host_id:
+                    run['dispatch_reason'] = '当前阶段目标主机为空，无法下发执行；请检查切换任务 old_master_host_id/new_master_host_id'
+                elif not executor_host_id:
+                    run['dispatch_reason'] = '未找到可执行主机：目标主机 {0} 不在当前云监控可用上报主机或 ssh_peer 代理关系中'.format(target_host_id)
+                elif executor_host_id != host_id:
+                    run['dispatch_reason'] = '任务由主机 {0} 执行，当前轮询主机 {1} 不执行'.format(executor_host_id, host_id)
+                else:
+                    run['dispatch_reason'] = '任务已下发给当前主机执行'
         return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
 
     def publicReportState(self):
