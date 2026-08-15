@@ -793,8 +793,7 @@ function haDefaultSwitchOptions() {
     restore_plugin_setting: false,
     run_xtrabackup_inc_restore: false,
     promote_mysql: true,
-    checksum_confirmed: false,
-    allow_checksum_diff: false
+    checksum_confirmed: false
   };
 }
 
@@ -823,11 +822,12 @@ function haSwitchWizardSteps() {
 }
 
 function haSwitchWizardHostSelect(pair) {
-  return '<div class="ha-switch-hosts">' + pair.hosts.map(function(host) {
+  return '<div class="ha-switch-hosts">' + pair.hosts.map(function(host, index) {
     var checked = host.host_id === haSwitchWizard.targetHostId ? 'checked' : '';
     var roleText = host.role === 'master' ? '主' : '备';
+    var siteTag = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-switch-site-tag ha-switch-site-local">本机房</span>' : '<span class="ha-switch-site-tag ha-switch-site-remote">远端</span>';
     return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" onchange="haSwitchTargetChanged(this.value)" ' + checked + '>' +
-      '<span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' +
+      '<span class="ha-switch-host-title"><span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' + siteTag + '</span>' +
       '<div class="ha-switch-host-meta">当前: ' + roleText + ' / IP: ' + haEscape(host.ip || '--') + '</div>' +
     '</label>';
   }).join('') + '</div>';
@@ -851,7 +851,6 @@ function haBuildSwitchOptionsForm(o) {
       '<div class="ha-option-grid">' +
         '<label class="ha-option-check"><input type="checkbox" name="sync_files" onchange="haToggleSyncOptions()" ' + (o.sync_files ? 'checked' : '') + '><span>同步文件</span></label>' +
         '<label class="ha-option-check"><input type="checkbox" name="run_checksum" ' + (o.run_checksum ? 'checked' : '') + '><span>检查 checksum</span></label>' +
-        '<label class="ha-option-check"><input type="checkbox" name="allow_checksum_diff" ' + (o.allow_checksum_diff ? 'checked' : '') + '><span>允许忽略 checksum 差异</span></label>' +
         '<label class="ha-option-check"><input type="checkbox" name="restore_site_setting" ' + (o.restore_site_setting ? 'checked' : '') + '><span>恢复网站配置</span></label>' +
         '<label class="ha-option-check"><input type="checkbox" name="restore_plugin_setting" ' + (o.restore_plugin_setting ? 'checked' : '') + '><span>面板插件配置</span></label>' +
         '<label class="ha-option-check"><input type="checkbox" name="run_xtrabackup_inc_restore" ' + (o.run_xtrabackup_inc_restore ? 'checked' : '') + '><span>执行增量恢复</span></label>' +
@@ -927,10 +926,11 @@ function haReadSwitchOptions() {
   var data = $.extend(true, {}, haSwitchWizard.options || haDefaultSwitchOptions());
   if (!form.length) return data;
   form.serializeArray().forEach(function(item) { data[item.name] = item.value; });
-  ['run_checksum','sync_files','allow_checksum_diff','restore_site_setting','restore_plugin_setting','run_xtrabackup_inc_restore'].forEach(function(key) {
+  ['run_checksum','sync_files','restore_site_setting','restore_plugin_setting','run_xtrabackup_inc_restore'].forEach(function(key) {
     data[key] = form.find('input[type="checkbox"][name="' + key + '"]').prop('checked') === true;
   });
-  data.checksum_confirmed = data.allow_checksum_diff;
+  data.allow_checksum_diff = false;
+  data.checksum_confirmed = false;
   data.promote_mysql = true;
   haSwitchWizard.options = $.extend(true, {}, data);
   return data;
