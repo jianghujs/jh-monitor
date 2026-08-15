@@ -1098,20 +1098,45 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         pair = self._getPair(payload.get('pair_id'))
         if not pair:
             return jh.returnJson(False, 'unknown pair_id')
+        states = self._displayStates(self._getStates(pair.get('pair_id')))
+
+        def resolve_executor(target_host_id):
+            target_host_id = self._safeText(target_host_id, 128)
+            if not target_host_id:
+                return '', ''
+            if host_id == target_host_id:
+                return target_host_id, 'local'
+            for state in states:
+                alias_ids = state.get('_alias_host_ids') or []
+                if state.get('host_id') not in alias_ids:
+                    alias_ids.append(state.get('host_id'))
+                if target_host_id not in alias_ids:
+                    continue
+                if state.get('host_id') == host_id:
+                    return host_id, 'local'
+                if state.get('report_host_id') == host_id and state.get('collect_method') == 'ssh_peer':
+                    return host_id, 'ssh_peer'
+            return '', ''
+
         run = {}
         if pair.get('current_switch_run_id'):
             run = self._getRun(pair.get('current_switch_run_id'))
             if run:
                 phase = run.get('current_phase') or ''
+                target_host_id = ''
                 if phase == 'prepare_online':
-                    run['execute_phase'] = 'prepare_online' if host_id == run.get('new_master_host_id') else ''
+                    target_host_id = run.get('new_master_host_id')
                     run['execute_role'] = 'master'
                 elif phase == 'offline':
-                    run['execute_phase'] = 'offline' if host_id == run.get('old_master_host_id') else ''
+                    target_host_id = run.get('old_master_host_id')
                     run['execute_role'] = 'standby'
                 elif phase == 'online':
-                    run['execute_phase'] = 'online' if host_id == run.get('new_master_host_id') else ''
+                    target_host_id = run.get('new_master_host_id')
                     run['execute_role'] = 'master'
+                executor_host_id, execute_method = resolve_executor(target_host_id)
+                run['execute_phase'] = phase if executor_host_id == host_id and phase in ('prepare_online', 'offline', 'online') else ''
+                run['execute_method'] = execute_method
+                run['execute_target_host_id'] = target_host_id
         return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
 
     def publicReportState(self):
