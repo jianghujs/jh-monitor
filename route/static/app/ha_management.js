@@ -1357,16 +1357,15 @@ function haDetailLogHtml(pair) {
     var status = haNormalizeSwitchStatus(run.status || '');
     var route = haSwitchRunHostRoute(pair, run);
     return '<tr>' +
-      '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-id" title="' + haAttr(run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div></td>' +
+      '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-route" title="' + haAttr(route.title) + '"><span>' + haEscape(route.from) + '</span><b>→</b><span>' + haEscape(route.to) + '</span></div><div class="ha-log-run-id" title="' + haAttr(run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div></td>' +
       '<td><span class="ha-log-status ' + haSwitchStatusClass(status) + '">' + haEscape(haSwitchRunStatusText(run.status || '')) + '</span></td>' +
-      '<td><div class="ha-log-route" title="' + haAttr(route.title) + '"><span>' + haEscape(route.from) + '</span><b>→</b><span>' + haEscape(route.to) + '</span></div></td>' +
       '<td><div class="ha-log-step" title="' + haAttr(run.current_step || run.current_phase || '--') + '">' + haEscape(run.current_step || run.current_phase || '--') + '</div></td>' +
       '<td><div class="ha-log-time">' + haEscape(run.addtime || '--') + '</div></td>' +
       '<td><div class="ha-log-time">' + haEscape(run.finish_time || run.update_time || '--') + '</div></td>' +
       '<td class="text-right"><button type="button" class="btn btn-default btn-xs ha-log-view-btn" onclick="haShowSwitchReadOnlyLogWindow(\'' + haAttr(action + '日志') + '\', \'' + haAttr(run.switch_run_id || '') + '\')">查看</button></td>' +
     '</tr>';
   }).join('');
-  if (!rows) rows = '<tr><td colspan="7" class="ha-muted text-center ha-log-empty">暂无日志记录。</td></tr>';
+  if (!rows) rows = '<tr><td colspan="6" class="ha-muted text-center ha-log-empty">暂无日志记录。</td></tr>';
   var total = runData.total || 0;
   var page = runData.page || 1;
   var totalPage = runData.total_page || 1;
@@ -1377,7 +1376,7 @@ function haDetailLogHtml(pair) {
       '<div><div class="monitor-task-section-title">日志</div><div class="ha-muted">每页 20 条，预切换和正式上线分别记录。</div></div>' +
       '<button type="button" id="haLogRefreshBtn" class="btn btn-default btn-sm" onclick="haRefreshLogPage(\'' + haAttr(pair.pair_id) + '\')">刷新</button>' +
     '</div>' +
-    '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="215">任务</th><th width="100">状态</th><th width="210">主机切换</th><th>当前步骤</th><th width="145">创建时间</th><th width="145">完成/更新时间</th><th width="76" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="255">任务</th><th width="100">状态</th><th>当前步骤</th><th width="145">创建时间</th><th width="145">完成/更新时间</th><th width="76" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="ha-log-pager"><span>共 ' + haEscape(total) + ' 条</span><span>第 ' + haEscape(page) + ' / ' + haEscape(totalPage) + ' 页</span><button type="button" class="btn btn-default btn-xs" ' + prevDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page - 1) + ')">上一页</button><button type="button" class="btn btn-default btn-xs" ' + nextDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page + 1) + ')">下一页</button></div>' +
     '</div>';
 }
