@@ -76,6 +76,15 @@ def main():
     def resolve_executor(target_host_id):
         if not target_host_id:
             return '', ''
+        for state in states:
+            alias_ids = state.get('_alias_host_ids') or []
+            if state.get('host_id') not in alias_ids:
+                alias_ids.append(state.get('host_id'))
+            if target_host_id not in alias_ids:
+                continue
+            if state.get('collect_method') == 'ssh_peer' and state.get('report_host_id'):
+                return state.get('report_host_id'), 'ssh_peer'
+            break
         if host_id == target_host_id:
             return target_host_id, 'local'
         for state in raw_states:
@@ -87,16 +96,6 @@ def main():
             if target_host_id not in alias_ids:
                 continue
             if state.get('collect_method') == 'ssh_peer' and state.get('report_host_id') == host_id:
-                return host_id, 'ssh_peer'
-        for state in states:
-            alias_ids = state.get('_alias_host_ids') or []
-            if state.get('host_id') not in alias_ids:
-                alias_ids.append(state.get('host_id'))
-            if target_host_id not in alias_ids:
-                continue
-            if state.get('host_id') == host_id:
-                return host_id, 'local'
-            if state.get('report_host_id') == host_id and state.get('collect_method') == 'ssh_peer':
                 return host_id, 'ssh_peer'
         return '', ''
 
