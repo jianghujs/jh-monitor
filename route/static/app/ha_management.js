@@ -16,6 +16,8 @@ var haHealthRefreshInterval = 3000;
 var haSortSaving = false;
 var haSortResumeRefresh = false;
 var haSortDragContext = null;
+var haStatusTipIndex = null;
+var haStatusTipCloseTimer = null;
 
 function haApi(action, data, callback, options) {
   options = options || {};
@@ -681,17 +683,90 @@ function haPairSyncCell(pair) {
   return '<div class="ha-sync-bad">不一致</div><div class="ha-sub">实际: ' + haEscape(actualMaster.name || '--') + '</div>';
 }
 
-function haStatusTooltip(pair) {
+function haStatusTone(status) {
+  if (status === 'normal' || status === 'success' || status === 'online') return 'ok';
+  if (status === 'warning' || status === 'switching' || status === 'running') return 'warning';
+  if (status === 'danger' || status === 'failed' || status === 'offline' || status === 'error') return 'danger';
+  return 'muted';
+}
+
+function haCheckTone(status) {
+  var normalized = haCheckStatus(status);
+  if (normalized === 'ok') return 'ok';
+  if (normalized === 'failed') return 'danger';
+  return 'muted';
+}
+
+function haStatusTipRow(label, value, tone) {
+  tone = tone || 'muted';
+  return '<div class="ha-status-tip-row is-' + haAttr(tone) + '"><span class="ha-status-tip-label">' + haEscape(label) + '</span><span class="ha-status-tip-value">' + haEscape(value || '--') + '</span></div>';
+}
+
+function haStatusTipCheckVisible(item) {
+  var text = [item.group, item.name, item.key, item.actual, item.message].join(' ').toLowerCase();
+  return text.indexOf('openresty') === -1 && text.indexOf('web 服务') === -1;
+}
+
+function haStatusIssueTooltipHtml(pair) {
+  pair = pair || {};
   var actualMaster = haFindHost(pair, pair.actual_master_host_id) || {};
   var desiredMaster = haFindHost(pair, pair.desired_master_host_id) || {};
-  var warnings = pair.warnings && pair.warnings.length ? pair.warnings.join('；') : '无待处理提醒';
-  var operation = pair.status === 'switching' ? (pair.status_text || '切换中') : '无执行中操作';
-  return '提醒: ' + warnings + '\n' +
-    '当前状态: ' + haStatusLabel(pair.status) + '\n' +
-    '状态说明: ' + (pair.status_text || '--') + '\n' +
-    '正在执行: ' + operation + '\n' +
-    '实际主机: ' + (actualMaster.name || '--') + ' / ' + (actualMaster.ip || '--') + '\n' +
-    '期望主机: ' + (desiredMaster.name || '--') + ' / ' + (desiredMaster.ip || '--');
+  var html = '<div class="ha-status-tip-simple">';
+  var statusTone = haStatusTone(pair.status);
+  html += haStatusTipRow('当前状态', haStatusLabel(pair.status), statusTone);
+  html += haStatusTipRow('状态说明', pair.status_text || '--', statusTone === 'ok' ? 'muted' : statusTone);
+  html += haStatusTipRow('实际主机', (actualMaster.name || '--') + ' / ' + (actualMaster.ip || '--'), 'muted');
+  html += haStatusTipRow('期望主机', (desiredMaster.name || '--') + ' / ' + (desiredMaster.ip || '--'), pair.desired_master_host_id && pair.actual_master_host_id && pair.desired_master_host_id !== pair.actual_master_host_id ? 'warning' : 'muted');
+  (pair.hosts || []).forEach(function(host, index) {
+    var hostName = host.name || host.host_id || ('主机' + (index + 1));
+    var failedChecks = haNormalizeChecks(host).filter(function(item) {
+      return haCheckStatus(item.status) === 'failed' && haStatusTipCheckVisible(item);
+    });
+    failedChecks.slice(0, 8).forEach(function(item) {
+      var value = (item.actual || item.message || '异常') + (item.expected ? '，期望' + item.expected : '');
+      html += haStatusTipRow(hostName + ' / ' + (item.name || '自检项'), value, haCheckTone(item.status));
+    });
+    if (failedChecks.length > 8) {
+      html += haStatusTipRow(hostName + ' / 更多', '其余 ' + (failedChecks.length - 8) + ' 项请查看详情自检状态', 'warning');
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+function haBindStatusTooltip() {
+  $('#haPairBody').off('mouseenter.haStatusTip mouseleave.haStatusTip', '.ha-status-tip-target');
+  $('#haPairBody').on('mouseenter.haStatusTip', '.ha-status-tip-target', function() {
+    var that = this;
+    if (haStatusTipCloseTimer) {
+      clearTimeout(haStatusTipCloseTimer);
+      haStatusTipCloseTimer = null;
+    }
+    if (haStatusTipIndex) layer.close(haStatusTipIndex);
+    var pair = haFindPair($(that).attr('data-ha-pair-id') || '');
+    if (!pair) return;
+    haStatusTipIndex = layer.tips(haStatusIssueTooltipHtml(pair), that, {time: 0, tips: [1, '#fff'], maxWidth: 560});
+    var tipElem = $('#layui-layer' + haStatusTipIndex);
+    tipElem.addClass('ha-status-tip-layer');
+    tipElem.off('mouseenter.haStatusTip mouseleave.haStatusTip');
+    tipElem.on('mouseenter.haStatusTip', function() {
+      if (haStatusTipCloseTimer) {
+        clearTimeout(haStatusTipCloseTimer);
+        haStatusTipCloseTimer = null;
+      }
+    });
+    tipElem.on('mouseleave.haStatusTip', function() {
+      haStatusTipCloseTimer = setTimeout(function() {
+        if (!$(that).is(':hover')) layer.closeAll('tips');
+      }, 120);
+    });
+  }).on('mouseleave.haStatusTip', '.ha-status-tip-target', function() {
+    var that = this;
+    haStatusTipCloseTimer = setTimeout(function() {
+      if (haStatusTipIndex && $('#layui-layer' + haStatusTipIndex).is(':hover')) return;
+      if (!$(that).is(':hover')) layer.closeAll('tips');
+    }, 120);
+  });
 }
 
 function haRenderList(search) {
@@ -713,12 +788,11 @@ function haRenderList(search) {
   $('#haEmptyState').hide();
   var html = '';
   rows.forEach(function(pair) {
-    var statusTip = haStatusTooltip(pair);
     html += '<tr data-ha-row-id="' + haAttr(pair.id) + '">' +
       '<td class="text-center"><span class="ha-sort-handle" aria-hidden="true" title="拖动排序"><i></i><i></i><i></i></span></td>' +
       '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div></td>' +
       '<td>' + haHostsCell(pair) + '</td>' +
-      '<td class="text-center"><span class="ha-status-pill ' + haStatusClass(pair.status) + '" title="' + haAttr(statusTip) + '">' + haStatusLabel(pair.status) + '</span><div class="ha-status-desc" title="' + haAttr(pair.status_text || '') + '">' + haEscape(pair.status_text || '') + '</div></td>' +
+      '<td class="text-center"><div class="ha-status-tip-target" data-ha-pair-id="' + haAttr(pair.pair_id) + '"><div class="ha-status-line"><span class="ha-status-pill ' + haStatusClass(pair.status) + '">' + haStatusLabel(pair.status) + '</span></div><div class="ha-status-desc">' + haEscape(pair.status_text || '') + '</div></div></td>' +
       '<td class="text-center"><div class="ha-sub">' + haEscape(pair.last_report_at) + '</div></td>' +
       '<td class="text-right ha-op-links">' +
         '<a class="btlink" href="javascript:;" onclick="haOpenDetailDialog(\'' + haAttr(pair.pair_id) + '\')">详情</a>' +
@@ -729,6 +803,7 @@ function haRenderList(search) {
       '</tr>';
   });
   $('#haPairBody').html(html);
+  haBindStatusTooltip();
   initHaDragSort();
 }
 

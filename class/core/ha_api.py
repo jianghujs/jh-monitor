@@ -684,9 +684,18 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 danger.append('{0} 主机离线'.format(self._displayHostName(item, pair)))
             if item.get('collect_status') in ('failed', 'partial'):
                 warnings.append('{0} SSH采集异常'.format(self._displayHostName(item, pair)))
-            if item.get('health_status') in ('warning', 'danger', 'failed'):
-                detail = self._jsonLoads(item.get('health_detail'), {})
-                warnings.append(detail.get('summary') or '{0} 自检提醒'.format(self._displayHostName(item, pair)))
+            detail = self._jsonLoads(item.get('health_detail'), {})
+            failed_checks = [x for x in self._normalizeScriptChecks(detail) if x.get('status') == 'failed']
+            if item.get('health_status') in ('warning', 'danger', 'failed') or failed_checks:
+                summary = detail.get('summary') if isinstance(detail, dict) else ''
+                if not summary and failed_checks:
+                    names = [x.get('name') for x in failed_checks if x.get('name')]
+                    summary = '{0} 自检异常 {1} 项'.format(self._displayHostName(item, pair), len(failed_checks))
+                    if names:
+                        summary += '：' + '、'.join(names[:3])
+                        if len(names) > 3:
+                            summary += '等'
+                warnings.append(summary or '{0} 自检提醒'.format(self._displayHostName(item, pair)))
         desired = pair.get('desired_master_host_id') or ''
         actual_aliases = []
         if len(masters) == 1:
