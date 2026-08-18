@@ -1070,7 +1070,6 @@ function haRefreshSwitchLogWindow(switchRunId, prepareMode) {
       if (done) {
         setTimeout(function() {
           haLoadPairs(function() {
-            haCloseSwitchLogWindow();
             haConfirmJumpToHealth(switchRunId, run.pair_id || '');
           });
         }, 3000);
@@ -1096,6 +1095,7 @@ function haConfirmJumpToHealth(switchRunId, pairId) {
   var pair = haFindPairBySwitchRunId(switchRunId, pairId);
   if (!pair) return;
   var jumpToHealth = function() {
+    haCloseSwitchLogWindow();
     haOpenDetailDialog(pair.pair_id, 'health');
   };
   if (typeof openTimoutLayer === 'function') {
