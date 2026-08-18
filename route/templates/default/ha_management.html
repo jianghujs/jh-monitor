@@ -78,7 +78,7 @@
   </div>
 </div>
 
-<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608181610"></script>
+<script type="text/javascript" src="/static/app/ha_management.js?v={{config.version}}.202608181720"></script>
 
 <style>
 .ha-page {
@@ -197,7 +197,7 @@ body.host-sort-dragging * {
 .ha-pill-normal { color: #2e7d32; background: #f0fff0; border-color: #bfe4bf; }
 .ha-pill-switching { color: #245580; background: #eef7ff; border-color: #b8d7ef; }
 .ha-status-desc { margin-top: 4px; color: #999; font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ha-role-mark { display: inline-block; width: 34px; text-align: center; border-radius: 3px; padding: 2px 0; margin-right: 6px; font-size: 12px; }
+.ha-role-mark { display: inline-block; min-width: 22px; text-align: center; border-radius: 3px; padding: 2px 5px; margin-right: 6px; font-size: 12px; line-height: 16px; }
 .ha-role-master { color: #2e7d32; background: #f0fff0; border: 1px solid #bfe4bf; }
 .ha-role-standby { color: #245580; background: #eef7ff; border: 1px solid #b8d7ef; }
 .ha-host-list-cell { display: flex; flex-direction: column; gap: 6px; }
@@ -433,10 +433,7 @@ body.host-sort-dragging * {
 .ha-switch-host input { margin-right: 6px; }
 .ha-switch-host-title { display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); vertical-align: middle; }
 .ha-switch-host-name { font-weight: 600; color: #333; }
-.ha-switch-site-tag { flex: 0 0 auto; display: inline-block; height: 20px; line-height: 18px; padding: 0 7px; border: 1px solid transparent; border-radius: 4px; font-size: 12px; font-weight: 600; }
-.ha-switch-site-local { color: #2e7d32; background: #f2fbf2; border-color: #cfe9cf; }
-.ha-switch-site-remote { color: #7a5a1f; background: #fff8e8; border-color: #f0d69d; }
-.ha-switch-host-meta { font-size: 12px; color: #888; line-height: 20px; margin-left: 21px; }
+.ha-switch-host-meta { margin-top: 5px; font-size: 12px; color: #888; line-height: 20px; margin-left: 21px; }
 .ha-switch-options { border: 1px solid #e6e9ef; border-radius: 4px; background: #fff; padding: 12px; margin-top: 10px; }
 .ha-switch-options-title { font-weight: 600; color: #333; margin-bottom: 10px; }
 .ha-switch-risk-tip { border: 1px solid #f0c6c4; background: #fff7f6; color: #555; border-radius: 4px; padding: 8px 10px; margin: 0 0 12px 0; line-height: 22px; font-size: 12px; }

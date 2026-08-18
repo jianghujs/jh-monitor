@@ -824,11 +824,11 @@ function haSwitchWizardSteps() {
 function haSwitchWizardHostSelect(pair) {
   return '<div class="ha-switch-hosts">' + pair.hosts.map(function(host, index) {
     var checked = host.host_id === haSwitchWizard.targetHostId ? 'checked' : '';
-    var roleText = host.role === 'master' ? '主' : '备';
-    var siteTag = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-switch-site-tag ha-switch-site-local">本机房</span>' : '';
+    var roleText = haRoleMark(host.role);
+    var siteTag = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag">本机房</span>' : '';
     return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" onchange="haSwitchTargetChanged(this.value)" ' + checked + '>' +
       '<span class="ha-switch-host-title"><span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' + siteTag + '</span>' +
-      '<div class="ha-switch-host-meta">当前: ' + roleText + ' / IP: ' + haEscape(host.ip || '--') + '</div>' +
+      '<div class="ha-switch-host-meta">当前角色: ' + roleText + ' <span class="ml10">IP: ' + haEscape(host.ip || '--') + '</span></div>' +
     '</label>';
   }).join('') + '</div>';
 }
