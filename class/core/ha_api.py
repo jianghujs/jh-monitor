@@ -113,16 +113,17 @@ class ha_api:
             options.pop(key, None)
         for key in ('local_ip', 'remote_ip', 'remote_ssh_port'):
             options.pop(key, None)
-        for key in ('sync_files', 'run_checksum', 'allow_checksum_diff', 'checksum_confirmed', 'restore_site_setting', 'restore_plugin_setting', 'run_xtrabackup_inc_restore'):
+        for key in ('sync_files', 'run_checksum', 'allow_checksum_diff', 'checksum_confirmed', 'restore_site_setting', 'restore_plugin_setting', 'run_xtrabackup_inc_restore', 'confirm_failover'):
             if key in options:
                 options[key] = self._boolValue(options.get(key))
         options['promote_mysql'] = True
         return options
 
     def _masterHostId(self, pair_id, fallback=''):
-        for state in self._displayStates(self._getStates(pair_id)):
-            if state.get('role') == 'master':
-                return state.get('host_id') or fallback
+        states = self._displayStates(self._getStates(pair_id))
+        actual = self._actualMasterHostId(states)
+        if actual:
+            return actual
         return fallback
 
     def _fallbackOldMasterHostId(self, pair_id, target_host_id, fallback='', allow_any_peer=False):
@@ -619,6 +620,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
 
     def _normalizeHost(self, row, pair=None):
         detail = self._jsonLoads(row.get('health_detail'), {})
+        failover = detail.get('ha_failover') if isinstance(detail, dict) else {}
+        if not isinstance(failover, dict):
+            failover = {}
         role = row.get('role') or 'unknown'
         script_checks = self._normalizeScriptChecks(detail)
         display_name = self._displayHostName(row, pair)
@@ -642,6 +646,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'report_host_id': row.get('report_host_id') or '',
             'site_scope': row.get('site_scope') or '',
             'health_detail': detail,
+            'failover': failover,
+            'mode': failover.get('mode') or 'normal',
+            'pending_switch_required': bool(failover.get('pending_switch_required')),
+            'pending_switch_host_id': failover.get('pending_switch_host_id') or '',
+            'pending_switch_role': failover.get('pending_switch_role') or '',
+            'recovery_status': failover.get('recovery_status') or '',
             'script_checks': script_checks,
             'switch_run_id': row.get('switch_run_id') or '',
             'switch_phase': row.get('switch_phase') or '',
@@ -653,6 +663,36 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'last_report_at': row.get('last_report_at') or ''
         }
 
+    def _stateFailover(self, row):
+        detail = self._jsonLoads(row.get('health_detail'), {})
+        failover = detail.get('ha_failover') if isinstance(detail, dict) else {}
+        return failover if isinstance(failover, dict) else {}
+
+    def _isRecoveryGuardState(self, row):
+        return self._stateFailover(row).get('recovery_status') == 'recovery_guard'
+
+    def _effectiveMasterStates(self, states):
+        active = [x for x in states if x.get('role') == 'master' and not self._isRecoveryGuardState(x)]
+        return active if active else [x for x in states if x.get('role') == 'master']
+
+    def _actualMasterHostId(self, states):
+        for state in self._effectiveMasterStates(states):
+            if state.get('role') == 'master':
+                return state.get('host_id') or ''
+        return ''
+
+    def _pendingSwitchTargetText(self, failover, states):
+        target_id = failover.get('pending_switch_host_id') or ''
+        if not target_id:
+            return '对端'
+        for state in states:
+            alias_ids = state.get('_alias_host_ids') or []
+            if state.get('host_id') not in alias_ids:
+                alias_ids.append(state.get('host_id'))
+            if target_id in alias_ids:
+                return self._displayHostName(state) or state.get('host_ip') or target_id
+        return target_id
+
     def deriveStatus(self, pair, states):
         current_run_id = pair.get('current_switch_run_id') or ''
         if current_run_id:
@@ -663,9 +703,10 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 return 'switching', running.get('current_step') or running.get('current_phase') or '切换中'
         if not states:
             return 'unknown', '等待插件上报'
-        masters = [x for x in states if x.get('role') == 'master']
+        masters = self._effectiveMasterStates(states)
         online = dict([(x.get('host_id'), x.get('online_status')) for x in states])
         warnings = []
+        degraded = []
         danger = []
         if len(masters) > 1:
             danger.append('双主异常')
@@ -685,6 +726,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if item.get('collect_status') in ('failed', 'partial'):
                 warnings.append('{0} SSH采集异常'.format(self._displayHostName(item, pair)))
             detail = self._jsonLoads(item.get('health_detail'), {})
+            failover = self._stateFailover(item)
+            if isinstance(failover, dict):
+                if failover.get('recovery_status') == 'recovery_guard':
+                    degraded.append('{0} 恢复保护，待恢复为备机'.format(self._displayHostName(item, pair)))
+                elif failover.get('mode') == 'degraded_master' or failover.get('pending_switch_required'):
+                    degraded.append('{0} 降级运行，待 {1} 切换为 {2}'.format(self._displayHostName(item, pair), self._pendingSwitchTargetText(failover, states), failover.get('pending_switch_role') or '备机'))
             failed_checks = [x for x in self._normalizeScriptChecks(detail) if x.get('status') == 'failed']
             if item.get('health_status') in ('warning', 'danger', 'failed') or failed_checks:
                 summary = detail.get('summary') if isinstance(detail, dict) else ''
@@ -706,6 +753,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             danger.append('期望主机和实际主机不一致')
         if danger:
             return 'danger', '；'.join(danger[:3])
+        if degraded:
+            return 'warning', '；'.join(degraded[:3])
         if warnings:
             return 'warning', '；'.join(warnings[:3])
         if any([v == 'offline' for v in online.values()]):
@@ -721,6 +770,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             if host.get('role') == 'master':
                 actual_master = host.get('host_id')
                 break
+        effective_actual_master = self._actualMasterHostId(states)
+        if effective_actual_master:
+            actual_master = effective_actual_master
         desired_master = pair.get('desired_master_host_id') or actual_master
         for host in hosts:
             if host.get('role') == 'master' and desired_master in (host.get('host_alias_ids') or []):
@@ -1234,11 +1286,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         states = self._displayStates(self._getStates(pair_id))
         pair = self._getPair(pair_id)
         status, status_text = self.deriveStatus(pair, states)
-        actual = ''
-        for state in states:
-            if state.get('role') == 'master':
-                actual = state.get('host_id')
-                break
+        actual = self._actualMasterHostId(states)
         desired = self._safeText(payload.get('desired_master_host_id') or '', 128)
         current_run = self._getRun(pair.get('current_switch_run_id') or '') if pair.get('current_switch_run_id') else {}
         if current_run.get('status') == 'prepare_success':

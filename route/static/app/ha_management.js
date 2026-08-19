@@ -70,8 +70,11 @@ function haFindPair(pairId) {
 }
 
 function haFindHost(pair, hostId) {
-  for (var i = 0; i < pair.hosts.length; i++) {
-    if (pair.hosts[i].host_id === hostId) return pair.hosts[i];
+  if (!pair || !hostId) return null;
+  var hosts = pair.hosts || [];
+  for (var i = 0; i < hosts.length; i++) {
+    var aliasIds = hosts[i].host_alias_ids || [];
+    if (hosts[i].host_id === hostId || aliasIds.indexOf(hostId) !== -1) return hosts[i];
   }
   return null;
 }
@@ -560,6 +563,49 @@ function haDetailMetric(label, value, extraCls) {
   return '<div class="ha-detail-metric ' + (extraCls || '') + '"><div class="ha-detail-metric-label">' + haEscape(label) + '</div><div class="ha-detail-metric-value" title="' + haAttr(value || '--') + '">' + haEscape(value || '--') + '</div></div>';
 }
 
+function haFailoverMark(host) {
+  var failover = host.failover || {};
+  if (failover.recovery_status === 'recovery_guard') return '<span class="ha-status-pill ha-pill-warning">恢复保护</span>';
+  if (failover.mode === 'degraded_master' || failover.pending_switch_required) return '<span class="ha-status-pill ha-pill-warning">降级运行</span>';
+  if (failover.recovery_status === 'recovering_standby') return '<span class="ha-status-pill ha-pill-switching">恢复中</span>';
+  return '';
+}
+
+function haFailoverStatusText(failover) {
+  failover = failover || {};
+  if (failover.recovery_status === 'recovery_guard') return '恢复保护';
+  if (failover.recovery_status === 'recovering_standby') return '恢复中';
+  if (failover.recovery_status === 'recovered') return '已恢复';
+  if (failover.mode === 'degraded_master' || failover.pending_switch_required) return '降级运行';
+  return '';
+}
+
+function haPendingSwitchTargetText(pair, failover) {
+  failover = failover || {};
+  var hostId = failover.pending_switch_host_id || '';
+  if (!hostId) return '对端';
+  var host = haFindHost(pair, hostId) || {};
+  return host.name || host.ip || hostId;
+}
+
+function haPairFailoverSummary(pair) {
+  var rows = [];
+  (pair.hosts || []).forEach(function(host) {
+    var failover = host.failover || {};
+    var statusText = haFailoverStatusText(failover);
+    if (statusText && statusText !== '已恢复') {
+      var text = (host.name || host.host_id || '--') + ': ' + statusText;
+      if (failover.recovery_status === 'recovery_guard') {
+        text += '，待恢复为备机';
+      } else if (failover.pending_switch_required || failover.pending_switch_host_id) {
+        text += '，待 ' + haPendingSwitchTargetText(pair, failover) + ' 切换为 ' + (failover.pending_switch_role || '备机');
+      }
+      rows.push(text);
+    }
+  });
+  return rows.join('；');
+}
+
 function haDetailHostCard(pair, host, index) {
   var isMaster = host.role === 'master';
   var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag">本机房</span>' : '';
@@ -567,7 +613,7 @@ function haDetailHostCard(pair, host, index) {
   var cls = isMaster ? 'ha-detail-host-card is-master' : 'ha-detail-host-card';
   return '<div class="' + cls + '">' +
     '<div class="ha-detail-host-top">' +
-      '<div class="ha-detail-host-title">' + haHostStatusDot(pair, host) + haRoleMark(host.role) + '<span title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span></div>' +
+      '<div class="ha-detail-host-title">' + haHostStatusDot(pair, host) + haRoleMark(host.role) + '<span title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + haFailoverMark(host) + '</div>' +
       currentMark +
     '</div>' +
     '<div class="ha-detail-host-ip">' + haEscape(host.ip || '--') + '</div>' +
@@ -788,9 +834,11 @@ function haRenderList(search) {
   $('#haEmptyState').hide();
   var html = '';
   rows.forEach(function(pair) {
+    var failoverSummary = haPairFailoverSummary(pair);
+    var pairNameExtra = failoverSummary ? '<div class="ha-sub"><span class="ha-status-pill ha-pill-warning" title="' + haAttr(failoverSummary) + '">故障恢复</span> ' + haEscape(failoverSummary) + '</div>' : '';
     html += '<tr data-ha-row-id="' + haAttr(pair.id) + '">' +
       '<td class="text-center"><span class="ha-sort-handle" aria-hidden="true" title="拖动排序"><i></i><i></i><i></i></span></td>' +
-      '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div></td>' +
+      '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div>' + pairNameExtra + '</td>' +
       '<td>' + haHostsCell(pair) + '</td>' +
       '<td class="text-center"><div class="ha-status-tip-target" data-ha-pair-id="' + haAttr(pair.pair_id) + '"><div class="ha-status-line"><span class="ha-status-pill ' + haStatusClass(pair.status) + '">' + haStatusLabel(pair.status) + '</span></div><div class="ha-status-desc">' + haEscape(pair.status_text || '') + '</div></div></td>' +
       '<td class="text-center"><div class="ha-sub">' + haEscape(pair.last_report_at) + '</div></td>' +
@@ -901,8 +949,9 @@ function haSwitchWizardHostSelect(pair) {
     var checked = host.host_id === haSwitchWizard.targetHostId ? 'checked' : '';
     var roleText = haRoleMark(host.role);
     var siteTag = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag">本机房</span>' : '';
+    var failoverMark = haFailoverMark(host);
     return '<label class="ha-switch-host"><input type="radio" name="haSwitchTargetHost" value="' + haAttr(host.host_id) + '" onchange="haSwitchTargetChanged(this.value)" ' + checked + '>' +
-      '<span class="ha-switch-host-title"><span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' + siteTag + '</span>' +
+      '<span class="ha-switch-host-title"><span class="ha-switch-host-name">' + haEscape(host.name) + '</span>' + siteTag + failoverMark + '</span>' +
       '<div class="ha-switch-host-meta">当前角色: ' + roleText + ' <span class="ml10">IP: ' + haEscape(host.ip || '--') + '</span></div>' +
     '</label>';
   }).join('') + '</div>';
@@ -1030,6 +1079,7 @@ function haWizardRunPrepare() {
   var content = haSwitchWizardRiskTip() + '<div>确认在目标主机（' + haEscape(target.name || target.ip || target.host_id) + '）执行预备上线？</div>' + haSwitchOptionsConfirmHtml(options);
   layer.confirm(content, {icon: 3, title: '确认预备上线', btn: ['确认执行', '取消']}, function(confirmIndex) {
     layer.close(confirmIndex);
+    options.confirm_failover = true;
     haCreateSwitchTask(pair, target, options, 'prepare');
   });
 }
@@ -1046,6 +1096,7 @@ function haStartFinalizeFromWizard() {
       layer.close(haSwitchDialogIndex);
       haSwitchDialogIndex = null;
     }
+    options.confirm_failover = true;
     haCreateSwitchTask(pair, target, options, 'finalize');
   });
 }
@@ -1383,6 +1434,7 @@ function haDetailSummaryHtml(pair) {
   var actualMaster = haFindHost(pair, pair.actual_master_host_id) || {};
   var desiredMaster = haFindHost(pair, pair.desired_master_host_id) || {};
   var warnings = pair.warnings && pair.warnings.length ? pair.warnings.join('；') : '无待处理提醒';
+  var failoverSummary = haPairFailoverSummary(pair);
   var statusText = pair.status_text || haStatusLabel(pair.status);
   var hostCards = (pair.hosts || []).map(function(host, index) { return haDetailHostCard(pair, host, index); }).join('');
   return '<div class="ha-detail-section">' +
@@ -1395,6 +1447,7 @@ function haDetailSummaryHtml(pair) {
       haDetailMetric('期望主机', (desiredMaster.name || '--') + ' / ' + (desiredMaster.ip || '--'), 'is-desired') +
       haDetailMetric('最近上报', pair.last_report_at || '--', '') +
       haDetailMetric('当前任务', pair.switch_run_id || '无执行中任务', '') +
+      (failoverSummary ? haDetailMetric('故障恢复', failoverSummary, '') : '') +
     '</div>' +
     '<div class="ha-detail-host-grid">' + hostCards + '</div>' +
     '<div class="ha-detail-note"><span>提醒摘要</span><div title="' + haAttr(warnings) + '">' + haEscape(warnings) + '</div></div>' +
