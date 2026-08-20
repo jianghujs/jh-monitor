@@ -13,18 +13,20 @@
 - [ ] 2.3 实现当前活跃异常集合生成方法，每个 alert 包含 key、type、level、message、recovery_message、host_id 和上下文信息。
 - [ ] 2.4 实现主通知方判断：本机 host_id 等于 `primary_notifier_host_id` 时允许处理通知状态机。
 - [ ] 2.5 实现备用接管判断：非主通知方连续检测主通知方不可达达到阈值后进入接管模式，恢复达到阈值后退出接管。
-- [ ] 2.6 将通知主方配置不一致、接管进入和接管退出写入 `/www/server/logs` 下的插件交互日志。
+- [ ] 2.6 实现异常周期通知方判断：已有 `notification_owner_host_id` 时，只有 owner 可以发送恢复通知和更新通知发送状态。
+- [ ] 2.7 将通知主方配置不一致、接管进入、接管退出和异常周期 owner 固定写入 `/www/server/logs` 下的插件交互日志。
 
 ## 3. 通知状态机与邮件发送
 
-- [ ] 3.1 新增 `alert_state.json` 读写方法，保存主备关系整体异常态、active_keys、当前异常明细和恢复通知所需信息。
+- [ ] 3.1 新增 `alert_state.json` 读写方法，保存主备关系整体异常态、`notification_owner_host_id`、active_keys、当前异常明细和恢复通知所需信息。
 - [ ] 3.2 新增通知接管状态文件读写方法，记录主通知方连续失败次数、连续恢复次数、接管状态和接管时间。
 - [ ] 3.3 按主备关系整体异常态实现通知状态机：从无异常进入有异常时发送一次异常通知，异常期间新增其他异常只更新状态不发送通知。
 - [ ] 3.4 实现全部异常恢复判断：只有 current active alerts 为空且 previous active alerts 非空时发送一次恢复通知。
-- [ ] 3.5 使用 `mw.notifyMessage` 发送 HTML 格式异常通知，标题和内容包含主备关系、当前全部异常摘要、检测主机、当前角色、发现时间和处理建议。
-- [ ] 3.6 使用 `mw.notifyMessage` 发送 HTML 格式恢复通知，内容包含已恢复异常周期、恢复时间、异常持续信息和当前主备状态。
-- [ ] 3.7 处理通知发送失败：记录失败原因，避免把整体异常态误标记为已成功通知。
-- [ ] 3.8 确保异常期间新增其他异常不会重复发邮件，全部异常恢复后只发送一次恢复提醒。
+- [ ] 3.5 在首次异常通知发送成功后写入 `notification_owner_host_id`，并确保当前异常周期内不更换 owner。
+- [ ] 3.6 使用 `mw.notifyMessage` 发送 HTML 格式异常通知，标题和内容包含主备关系、当前全部异常摘要、检测主机、当前角色、发现时间和处理建议。
+- [ ] 3.7 使用 `mw.notifyMessage` 发送 HTML 格式恢复通知，内容包含已恢复异常周期、恢复时间、异常持续信息和当前主备状态。
+- [ ] 3.8 处理通知发送失败：记录失败原因，避免把整体异常态误标记为已成功通知。
+- [ ] 3.9 确保异常期间新增其他异常不会重复发邮件，全部异常恢复后只由原 owner 发送一次恢复提醒。
 
 ## 4. 插件 UI 展示与操作
 
@@ -49,10 +51,11 @@
 - [ ] 6.4 验证主备关系从无异常进入有异常时只发送一次异常通知。
 - [ ] 6.5 验证异常期间新增其他异常时不再发送异常通知，但活跃异常明细会更新。
 - [ ] 6.6 验证部分异常恢复但仍有其他异常时不发送恢复通知。
-- [ ] 6.7 验证全部异常恢复时发送一次恢复通知，并清除整体异常态。
-- [ ] 6.8 验证通知发送失败时不会错误抑制下一次发送尝试。
-- [ ] 6.9 验证插件通知事件可以在云监控页面展示，并可被日报汇总。
-- [ ] 6.10 运行 `python3 -m py_compile /www/server/jh-panel/plugins/ha_manager/index.py`。
-- [ ] 6.11 运行 `node --check /www/server/jh-panel/plugins/ha_manager/js/ha_manager.js`。
-- [ ] 6.12 运行 `python3 -m py_compile /www/server/jh-monitor/class/core/ha_api.py`。
-- [ ] 6.13 运行 `node --check /www/server/jh-monitor/route/static/app/ha_management.js`。
+- [ ] 6.7 验证全部异常恢复时只由首次异常通知的 `notification_owner_host_id` 对应插件发送一次恢复通知，并清除整体异常态。
+- [ ] 6.8 验证备用方发起异常周期后，即使主通知方恢复，也不会在该周期内更换通知方。
+- [ ] 6.9 验证通知发送失败时不会错误抑制下一次发送尝试。
+- [ ] 6.10 验证插件通知事件可以在云监控页面展示，并可被日报汇总。
+- [ ] 6.11 运行 `python3 -m py_compile /www/server/jh-panel/plugins/ha_manager/index.py`。
+- [ ] 6.12 运行 `node --check /www/server/jh-panel/plugins/ha_manager/js/ha_manager.js`。
+- [ ] 6.13 运行 `python3 -m py_compile /www/server/jh-monitor/class/core/ha_api.py`。
+- [ ] 6.14 运行 `node --check /www/server/jh-monitor/route/static/app/ha_management.js`。

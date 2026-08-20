@@ -12,6 +12,7 @@
 - 主通知方在线时，只有主通知方插件发送主备异常通知。
 - 主通知方连续不可达时，备用通知方进入接管模式并发送通知。
 - 异常通知按主备关系整体异常态去重：从无异常变为有异常时发送一次，异常期间新增其他异常不重复发送，全部异常恢复时发送一次恢复通知。
+- 每个异常周期固定一个 `notification_owner_host_id`，异常通知和恢复通知必须由同一个通知方发送，不在异常未完全恢复前更换通知方。
 - 插件复用江湖面板已有通知渠道 `mw.notifyMessage`，不新增独立邮件配置。
 - 插件将通知事件上报云监控，云监控只展示、归档和日报汇总。
 
@@ -45,6 +46,13 @@
 
 第一版建议阈值：`alert_check` 每 30 秒执行一次，主通知方连续 3 次不可达后接管，连续 2 次可达后退出接管。
 
+通知负责人分为“配置负责人”和“异常周期负责人”：
+
+- `primary_notifier_host_id` 是配置负责人，决定正常情况下由谁发起新的异常周期通知。
+- `notification_owner_host_id` 是某个异常周期的负责人，在首次异常通知发送时写入 `alert_state.json`。
+- 一旦 `notification_owner_host_id` 写入，在该异常周期全部恢复前，只有该 owner 可以更新通知状态并发送最终恢复通知。
+- 如果主通知方恢复时当前仍处于备用方接管发起的异常周期，通知职责不立即切回；等本轮全部异常恢复并发送恢复通知后，下一轮新异常再回到主通知方。
+
 ### 3. 参考 systemTask 的整体异常态状态机
 
 插件维护本地通知状态文件，例如 `/www/server/ha_manager/data/alert_state.json`：
@@ -55,6 +63,8 @@
   "first_seen_at": "2026-08-20 10:00:00",
   "last_seen_at": "2026-08-20 10:05:00",
   "last_notify_at": "2026-08-20 10:00:00",
+  "notification_owner_host_id": "H_PANEL_A",
+  "notification_owner_mode": "primary",
   "active_keys": ["HA_xxx:host_unreachable:H_PANEL_A"],
   "alerts": {
     "HA_xxx:host_unreachable:H_PANEL_A": {
@@ -81,6 +91,12 @@ current_abnormal = current_active_keys 非空
 - `previous_abnormal=true` 且 `current_abnormal=false` 时，合并上一轮活跃异常的恢复文案发送一封恢复通知。
 - `previous_abnormal=false` 且 `current_abnormal=false` 时，不发送通知。
 - 通知发送后保存当前整体异常态和 active alert 明细；异常通知发送失败时保留上一轮正常态，避免发送失败后误认为已经通知。
+
+执行状态机前必须先判断本机是否为当前异常周期负责人：
+
+- 无已保存异常周期时，当前可通知方可以成为新的 `notification_owner_host_id`。
+- 已保存异常周期时，本机不是 `notification_owner_host_id` 则不得发送恢复通知，也不得更改通知发送状态，只能更新本机观测或上报云监控。
+- 已保存异常周期时，即使配置主通知方恢复，也不得抢回当前周期的恢复通知。
 
 ### 4. 异常 key 必须稳定且标准化
 
@@ -114,7 +130,7 @@ current_abnormal = current_active_keys 非空
 }
 ```
 
-主通知方恢复后，备用方退出接管。是否发送“通知职责切回主通知方”的恢复通知可作为配置项，第一版可以随主通知方不可达 alert 的恢复通知一起表达。
+主通知方恢复后，备用方退出“新异常接管资格”，但如果当前异常周期的 `notification_owner_host_id` 是备用方，备用方仍负责该周期直到全部异常恢复并发送恢复通知。是否发送“通知职责切回主通知方”的提示不作为单独通知周期；第一版可在恢复通知内容中表达。
 
 ### 6. 配置同步和 UI
 
@@ -151,7 +167,7 @@ current_abnormal = current_active_keys 非空
 
 ## Risks / Trade-offs
 
-- [Risk] 主通知方异常后，备用方接管时不知道主通知方是否已经发送过当前异常，可能在接管瞬间发送一封重复或接管类通知。→ Mitigation: 备用接管通知内容明确说明“主通知方不可达，备用方接管”；接管后仍按主备关系整体异常态只发送一次。
+- [Risk] 主通知方异常后，备用方接管时不知道主通知方是否已经发送过当前异常，可能在接管瞬间发送一封重复或接管类通知。→ Mitigation: 首次发送成功后写入 `notification_owner_host_id`；该异常周期内只有 owner 可发送恢复通知和更新通知状态；备用接管通知内容明确说明“主通知方不可达，备用方接管”。
 - [Risk] 网络分区时两边都可能认为对方不可达。→ Mitigation: 允许严重网络分区场景下两边各发风险通知；通知文案明确存在双主/网络分区风险，且本地整体异常态状态机防止持续刷屏。
 - [Risk] 两台插件的 `primary_notifier_host_id` 不一致。→ Mitigation: 保存配置时同步对端；自检中增加通知主方配置一致性检查；不一致时展示 warning 并记录日志。
 - [Risk] 面板通知配置未开启导致邮件未发送。→ Mitigation: 使用 `mw.notifyMessage` 返回值记录发送失败，上报云监控，UI 展示通知配置异常或发送失败。

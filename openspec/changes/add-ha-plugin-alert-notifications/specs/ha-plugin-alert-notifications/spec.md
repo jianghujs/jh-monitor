@@ -39,7 +39,27 @@ The backup notifier plugin SHALL take over HA alert notifications only after the
 #### Scenario: Primary notifier recovers
 - **WHEN** the backup notifier is in takeover mode and the primary notifier becomes reachable for the configured number of consecutive checks
 - **THEN** the backup notifier SHALL exit takeover mode
-- **AND** ordinary HA alert notifications SHALL return to the primary notifier
+- **AND** ordinary HA alert notifications for new abnormal cycles SHALL return to the primary notifier
+
+### Requirement: Notification cycle owner stability
+Each abnormal notification cycle SHALL have one `notification_owner_host_id`, and the system SHALL NOT change the notification owner until all alerts in that cycle recover.
+
+#### Scenario: Abnormal cycle starts
+- **WHEN** the HA pair enters abnormal state and the active notifier sends the first HA alert notification for that cycle
+- **THEN** the plugin SHALL save the local host id as `notification_owner_host_id` for the abnormal cycle
+
+#### Scenario: New alerts appear during owned cycle
+- **WHEN** an abnormal cycle already has a saved `notification_owner_host_id` and new alert keys appear
+- **THEN** no plugin whose host id differs from `notification_owner_host_id` SHALL send an HA alert notification for that cycle
+
+#### Scenario: Recovery notification uses original owner
+- **WHEN** all alerts recover for an abnormal cycle with a saved `notification_owner_host_id`
+- **THEN** only the plugin whose host id equals `notification_owner_host_id` SHALL send the HA recovery notification
+
+#### Scenario: Primary notifier recovers during backup-owned cycle
+- **WHEN** the primary notifier recovers while an abnormal cycle is still owned by the backup notifier
+- **THEN** the primary notifier SHALL NOT take over notifications for the active abnormal cycle
+- **AND** notification ownership SHALL return to the primary notifier only for the next new abnormal cycle after the current cycle recovers
 
 ### Requirement: Pair-level abnormal notification state
 The plugin SHALL maintain a local pair-level abnormal state and use it to send one alert notification when the HA pair enters any abnormal state and one recovery notification only after all active alerts recover.
