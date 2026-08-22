@@ -835,10 +835,7 @@ function haRenderList(search) {
   var html = '';
   rows.forEach(function(pair) {
     var failoverSummary = haPairFailoverSummary(pair);
-    var latestAlert = pair.latest_alert_event || {};
-    var latestAlertRecovered = latestAlert.event_type === 'ha_alert_recovery' && latestAlert.status === 'sent';
-    var alertExtra = latestAlert.title ? '<div class="ha-sub"><span class="ha-status-pill ' + (latestAlertRecovered ? 'ha-pill-normal' : 'ha-pill-warning') + '" title="' + haAttr(latestAlertRecovered ? '异常已恢复' : (latestAlert.message || latestAlert.title)) + '">' + (latestAlertRecovered ? '恢复' : '通知') + '</span> ' + haEscape(latestAlertRecovered ? '异常已恢复' : latestAlert.title) + ' <span class="c9">' + haEscape(latestAlert.addtime || '') + '</span></div>' : '';
-    var pairNameExtra = (failoverSummary ? '<div class="ha-sub"><span class="ha-status-pill ha-pill-warning" title="' + haAttr(failoverSummary) + '">故障恢复</span> ' + haEscape(failoverSummary) + '</div>' : '') + alertExtra;
+    var pairNameExtra = failoverSummary ? '<div class="ha-sub"><span class="ha-status-pill ha-pill-warning" title="' + haAttr(failoverSummary) + '">故障恢复</span> ' + haEscape(failoverSummary) + '</div>' : '';
     html += '<tr data-ha-row-id="' + haAttr(pair.id) + '">' +
       '<td class="text-center"><span class="ha-sort-handle" aria-hidden="true" title="拖动排序"><i></i><i></i><i></i></span></td>' +
       '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div>' + pairNameExtra + '</td>' +
