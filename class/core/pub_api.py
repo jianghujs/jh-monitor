@@ -52,6 +52,9 @@ class pub_api:
     def haReportSwitchEventApi(self):
         return self._haApi().publicReportSwitchEvent()
 
+    def haReportAlertEventApi(self):
+        return self._haApi().publicReportAlertEvent()
+
     def haAckSwitchPhaseApi(self):
         return self._haApi().publicAckSwitchPhase()
     

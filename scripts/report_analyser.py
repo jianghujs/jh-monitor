@@ -58,6 +58,11 @@ try:
 except Exception:
     monitor_task_api = None
 
+try:
+    from ha_api import ha_api
+except Exception:
+    ha_api = None
+
 h_api = host_api()
 c_api = config_api()
 
@@ -232,6 +237,8 @@ class HostReportAnalyser(object):
         self.logger = logger
         self.log_tool = LogTool('report', callback=self.logger)
         self._es = es_client or jh.getES()
+        self.es_available = True
+        self.es_skip_reason = ''
         self._last_schedule_debug_rows = []
         self._overview_env = Environment(
             loader=FileSystemLoader(OVERVIEW_TEMPLATE_DIR),
@@ -438,6 +445,21 @@ class HostReportAnalyser(object):
             ))
         return ds_document
 
+    def _try_save_report_outputs(self, index_name, doc_id, data_stream_name, document, report_run_id):
+        """ES 可用时保存报告；ES 不可用时记录并跳过，不阻断日报生成。"""
+        if not self.es_available:
+            self.log('[report-analysis] skip es save index={0} doc_id={1} reason={2}'.format(index_name, doc_id, self.es_skip_reason or 'ES不可用'))
+            return False
+        try:
+            self._save_report_document(index_name, doc_id, document)
+            self._append_report_data_stream_document(data_stream_name, document, report_run_id)
+            return True
+        except Exception as e:
+            self.es_available = False
+            self.es_skip_reason = 'ES保存报告失败，已跳过ES落库：{0}'.format(str(e))
+            self.log('[report-analysis] skip es save index={0} doc_id={1} reason={2}'.format(index_name, doc_id, self.es_skip_reason))
+            return False
+
     def _analyze_series(self, docs, extractor, threshold):
         """统计监控序列的平均值、当前值和超阈次数。"""
         values = []
@@ -554,30 +576,52 @@ class HostReportAnalyser(object):
         if len(host_ids) == 0:
             return {}
 
-        status_docs = self._es.searchAll(
-            index=RAW_STATUS_INDEX,
-            body={'query': self._build_status_window_query(host_ids, window)},
-            page_size=PAGE_SIZE,
-            scroll='1m'
-        )
-        xtrabackup_docs = self._es.searchAll(
-            index=RAW_XTRABACKUP_INDEX,
-            body={'query': self._build_simple_window_query(host_ids, window)},
-            page_size=PAGE_SIZE,
-            scroll='1m'
-        )
-        xtrabackup_inc_docs = self._es.searchAll(
-            index=RAW_XTRABACKUP_INC_INDEX,
-            body={'query': self._build_simple_window_query(host_ids, window)},
-            page_size=PAGE_SIZE,
-            scroll='1m'
-        )
-        backup_docs = self._es.searchAll(
-            index=RAW_BACKUP_INDEX,
-            body={'query': self._build_host_only_query(host_ids)},
-            page_size=PAGE_SIZE,
-            scroll='1m'
-        )
+        grouped = {}
+        for row in host_rows:
+            grouped[row.get('host_id')] = {
+                'status': [],
+                'xtrabackup': [],
+                'xtrabackup_inc': [],
+                'backup': []
+            }
+
+        try:
+            status_docs = self._es.searchAll(
+                index=RAW_STATUS_INDEX,
+                body={'query': self._build_status_window_query(host_ids, window)},
+                page_size=PAGE_SIZE,
+                scroll='1m'
+            )
+            xtrabackup_docs = self._es.searchAll(
+                index=RAW_XTRABACKUP_INDEX,
+                body={'query': self._build_simple_window_query(host_ids, window)},
+                page_size=PAGE_SIZE,
+                scroll='1m'
+            )
+            xtrabackup_inc_docs = self._es.searchAll(
+                index=RAW_XTRABACKUP_INC_INDEX,
+                body={'query': self._build_simple_window_query(host_ids, window)},
+                page_size=PAGE_SIZE,
+                scroll='1m'
+            )
+            backup_docs = self._es.searchAll(
+                index=RAW_BACKUP_INDEX,
+                body={'query': self._build_host_only_query(host_ids)},
+                page_size=PAGE_SIZE,
+                scroll='1m'
+            )
+        except Exception as e:
+            self.es_available = False
+            self.es_skip_reason = 'ES连接失败，已跳过主机运行数据：{0}'.format(str(e))
+            self.log('[report-analysis] skip es raw docs report_date={0} reason={1}'.format(window['report_date'], self.es_skip_reason))
+            return grouped
+
+        if not isinstance(status_docs, list) or not isinstance(xtrabackup_docs, list) or not isinstance(xtrabackup_inc_docs, list) or not isinstance(backup_docs, list):
+            self.es_available = False
+            self.es_skip_reason = 'ES查询返回异常，已跳过主机运行数据：{0}'.format(self._get_es_error_message() or 'empty_or_invalid_response')
+            self.log('[report-analysis] skip es raw docs report_date={0} reason={1}'.format(window['report_date'], self.es_skip_reason))
+            return grouped
+
         backup_docs = [doc for doc in backup_docs if self._is_doc_in_window(doc, window)]
         self.log(
             '[report-analysis] raw docs loaded report_date={0} status_index={1} status={2} xtrabackup={3} xtrabackup_inc={4} backup={5}'.format(
@@ -589,17 +633,6 @@ class HostReportAnalyser(object):
                 len(backup_docs)
             )
         )
-
-        grouped = {}
-        for row in host_rows:
-            host_id = row.get('host_id')
-            grouped[host_id] = {
-                'status': [],
-                'xtrabackup': [],
-                'xtrabackup_inc': [],
-                'backup': []
-            }
-
         for doc in status_docs:
             host_id = value_tool.getNested(doc, ['host', 'host_id'], '') or doc.get('host_id', '')
             if host_id in grouped:
@@ -1535,11 +1568,16 @@ class HostReportAnalyser(object):
             try:
                 latest_event = monitor_task_event_service_utils.getLatestTaskEvent(task_id, host_id, es_client=self._es) or {}
             except Exception as e:
-                status = 'error'
-                msg = '任务事件查询失败：{0}'.format(str(e))
+                self.es_available = False
+                self.es_skip_reason = 'ES查询任务事件失败，已跳过任务事件状态：{0}'.format(str(e))
+                status = 'skipped'
+                msg = self.es_skip_reason
                 run_at_ts = 0
             else:
-                status, msg, run_at_ts = self._classify_monitor_task_status(task_row, latest_event, now_ts)
+                if not self.es_available and not latest_event:
+                    status, msg, run_at_ts = 'skipped', self.es_skip_reason or 'ES不可用，已跳过任务事件状态', 0
+                else:
+                    status, msg, run_at_ts = self._classify_monitor_task_status(task_row, latest_event, now_ts)
 
             result = {
                 'task_id': task_id,
@@ -1566,6 +1604,8 @@ class HostReportAnalyser(object):
             except Exception:
                 pass
 
+            if status == 'skipped':
+                continue
             if status == 'error':
                 summary_tips.append("<span style='color: red;'>任务【{0}】异常：{1}</span>".format(
                     value_tool.escapeHtml(task_name), value_tool.escapeHtml(msg)))
@@ -1601,7 +1641,10 @@ class HostReportAnalyser(object):
         latest_event_map = {}
         try:
             latest_event_map = monitor_task_event_service_utils.getLatestTaskEventsBatch(task_host_pairs, es_client=self._es) or {}
-        except Exception:
+        except Exception as e:
+            self.es_available = False
+            self.es_skip_reason = 'ES查询任务事件失败，已跳过任务事件状态：{0}'.format(str(e))
+            self.log('[report-analysis] skip es monitor task events reason={0}'.format(self.es_skip_reason))
             latest_event_map = {}
 
         for t in all_task_rows:
@@ -1610,7 +1653,10 @@ class HostReportAnalyser(object):
             task_id = str(t.get('task_id', '') or '').strip()
             host_id = str(t.get('host_id', '') or '').strip()
             latest_event = latest_event_map.get(task_id, {}) if task_id else {}
-            status, msg, run_at = self._classify_monitor_task_status(t, latest_event, now_ts)
+            if not self.es_available and not latest_event:
+                status, msg, run_at = 'skipped', self.es_skip_reason or 'ES不可用，已跳过任务事件状态', 0
+            else:
+                status, msg, run_at = self._classify_monitor_task_status(t, latest_event, now_ts)
             event_at = value_tool.parseTime(latest_event.get('@timestamp', '')) if latest_event else 0
 
             try:
@@ -1640,6 +1686,81 @@ class HostReportAnalyser(object):
 
         return monitor_task_overview
 
+    def _ha_status_text(self, status):
+        return {
+            'normal': '正常',
+            'warning': '提醒',
+            'danger': '异常',
+            'switching': '切换中',
+            'unknown': '待上报'
+        }.get(str(status or ''), str(status or '') or '未知')
+
+    def _build_ha_management_overview(self):
+        """汇总当前主备管理状态，判断逻辑复用主备管理页面。"""
+        overview = {
+            'total': 0,
+            'normal': 0,
+            'abnormal': 0,
+            'warning': 0,
+            'danger': 0,
+            'switching': 0,
+            'unknown': 0,
+            'items': [],
+            'abnormal_items': [],
+            'danger_items': [],
+            'warning_items': []
+        }
+        if ha_api is None:
+            return overview
+        try:
+            api = ha_api()
+            api.ensureHaSchema()
+            rows = jh.M('ha_pair').field(api.pair_fields).order('sort_id asc,id desc').select()
+        except Exception:
+            return overview
+        if not isinstance(rows, list):
+            return overview
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            try:
+                pair = api._normalizePair(row)
+            except Exception:
+                pair = dict(row)
+                pair['status'] = row.get('status') or 'unknown'
+                pair['status_text'] = row.get('status_text') or '状态读取失败'
+                pair['hosts'] = []
+            status = str(pair.get('status') or 'unknown')
+            status_text = str(pair.get('status_text') or self._ha_status_text(status))
+            hosts = []
+            for host in pair.get('hosts') or []:
+                hosts.append('{0}({1}) {2}'.format(host.get('name') or host.get('host_id') or '未知主机', host.get('ip') or '--', host.get('role') or '--'))
+            item = {
+                'pair_id': pair.get('pair_id') or row.get('pair_id') or '',
+                'pair_name': pair.get('pair_name') or row.get('pair_name') or pair.get('pair_id') or row.get('pair_id') or '未知主备',
+                'status': status,
+                'status_label': self._ha_status_text(status),
+                'status_text': status_text,
+                'hosts_text': '；'.join(hosts) if hosts else '暂无主机上报',
+                'last_report_at': pair.get('last_report_at') or row.get('last_report_at') or ''
+            }
+            overview['items'].append(item)
+            overview['total'] += 1
+            if status == 'normal':
+                overview['normal'] += 1
+            else:
+                overview['abnormal'] += 1
+                overview['abnormal_items'].append(item)
+                if status == 'danger':
+                    overview['danger_items'].append(item)
+                else:
+                    overview['warning_items'].append(item)
+                if status in overview:
+                    overview[status] += 1
+                else:
+                    overview['unknown'] += 1
+        return overview
+
     def build_single_host_report(self, host_row, host_group, window):
         """基于单台主机原始数据生成单机报告文档。"""
         host_id = host_row.get('host_id', '')
@@ -1651,7 +1772,7 @@ class HostReportAnalyser(object):
         xtrabackup_inc_docs = host_group.get('xtrabackup_inc', []) or []
         backup_docs = host_group.get('backup', []) or []
         validation_errors = []
-        if len(status_docs) == 0:
+        if self.es_available and len(status_docs) == 0:
             validation_errors.append('missing_system_status')
 
         is_pve_host = self._is_pve_host(host_row, status_docs)
@@ -1682,7 +1803,9 @@ class HostReportAnalyser(object):
             error_tips.extend(backup_section.get('error_tips', []))
             error_tips.extend(site_section.get('error_tips', []))
 
-            if len(status_docs) == 0:
+            if not self.es_available:
+                summary_tips.append("<span style='color: orange;'>ES 不可用，已跳过主机运行数据</span>")
+            elif len(status_docs) == 0:
                 summary_tips.append("<span style='color: red;'>系统监控原始数据缺失，报告未生成完整</span>")
                 error_tips.append('系统监控原始数据缺失')
 
@@ -1728,9 +1851,16 @@ class HostReportAnalyser(object):
         )
 
         doc_id = '{0}:{1}'.format(window['report_date'], host_id)
-        existing_doc = self._es.get(SINGLE_REPORT_INDEX, doc_id)
-        if isinstance(existing_doc, dict):
-            existing_doc = existing_doc.get('_source', {})
+        existing_doc = {}
+        if self.es_available:
+            try:
+                existing_doc = self._es.get(SINGLE_REPORT_INDEX, doc_id)
+                if isinstance(existing_doc, dict):
+                    existing_doc = existing_doc.get('_source', existing_doc)
+            except Exception as e:
+                self.es_available = False
+                self.es_skip_reason = 'ES读取历史报告失败，已跳过ES回读：{0}'.format(str(e))
+                self.log('[report-analysis] skip es get single doc_id={0} reason={1}'.format(doc_id, self.es_skip_reason))
         delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
         single_is_abnormal = len(error_tips) > 0
@@ -1796,6 +1926,8 @@ class HostReportAnalyser(object):
                 },
                 'latest_status_time': latest_doc.get('add_time', '') if isinstance(latest_doc, dict) else '',
                 'monitor_task_results': monitor_task_results,
+                'es_available': self.es_available,
+                'es_skip_reason': self.es_skip_reason,
             }
         }
         return doc_id, document
@@ -1900,8 +2032,11 @@ class HostReportAnalyser(object):
 
         # 监控任务总览：生成报告时实时查询 ES 最新事件，避免发送旧的 SQLite 状态。
         monitor_task_overview = self._build_monitor_task_overview(self.now_ts)
+        ha_overview = self._build_ha_management_overview()
 
         overview_summary_messages = []
+        if not self.es_available:
+            overview_summary_messages.append({'level': 'info', 'text': self.es_skip_reason or 'ES 不可用，已跳过 ES 相关信息'})
 
         def append_grouped_summary(rows, level, subject, status_text, default_desc):
             grouped = {}
@@ -1936,10 +2071,19 @@ class HostReportAnalyser(object):
                 warning_tasks.append(item)
         append_grouped_summary(error_tasks, 'error', '任务', '异常', '需要关注')
         append_grouped_summary(warning_tasks, 'warning', '任务', '有提醒', '需要关注')
+        if ha_overview.get('abnormal'):
+            ha_desc = '共 {0} 个，正常 {1} 个，异常/提醒 {2} 个'.format(ha_overview.get('total', 0), ha_overview.get('normal', 0), ha_overview.get('abnormal', 0))
+            overview_summary_messages.append({'level': 'warning', 'text': '主备管理：' + ha_desc})
+            for item in ha_overview.get('danger_items') or []:
+                overview_summary_messages.append({'level': 'error', 'text': '主备异常：{0} {1}'.format(item.get('pair_name') or item.get('pair_id'), item.get('status_text') or item.get('status_label'))})
+            for item in ha_overview.get('warning_items') or []:
+                overview_summary_messages.append({'level': 'warning', 'text': '主备提醒：{0} {1}'.format(item.get('pair_name') or item.get('pair_id'), item.get('status_text') or item.get('status_label'))})
 
         title_alert_parts = []
-        title_error_count = len(exception_host_summary_tips) + len(error_tasks)
-        title_warning_count = len(warning_host_summary_tips) + len(warning_tasks)
+        ha_danger_count = len([x for x in ha_overview.get('abnormal_items') or [] if x.get('status') == 'danger'])
+        ha_warning_count = max(len(ha_overview.get('abnormal_items') or []) - ha_danger_count, 0)
+        title_error_count = len(exception_host_summary_tips) + len(error_tasks) + ha_danger_count
+        title_warning_count = len(warning_host_summary_tips) + len(warning_tasks) + ha_warning_count
         if title_error_count > 0:
             title_alert_parts.append('❌{0}异常'.format(title_error_count))
         if title_warning_count > 0:
@@ -1986,6 +2130,7 @@ class HostReportAnalyser(object):
             'warning_host_summary_tips': warning_host_summary_tips,
             'overview_summary_messages': overview_summary_messages,
             'monitor_task_overview': monitor_task_overview,
+            'ha_overview': ha_overview,
             'single_host_report_list': single_host_report_list,
         }
 
@@ -2007,9 +2152,16 @@ class HostReportAnalyser(object):
         )
 
         doc_id = window['report_date']
-        existing_doc = self._es.get(OVERVIEW_REPORT_INDEX, doc_id)
-        if isinstance(existing_doc, dict):
-            existing_doc = existing_doc.get('_source', {})
+        existing_doc = {}
+        if self.es_available:
+            try:
+                existing_doc = self._es.get(OVERVIEW_REPORT_INDEX, doc_id)
+                if isinstance(existing_doc, dict):
+                    existing_doc = existing_doc.get('_source', existing_doc)
+            except Exception as e:
+                self.es_available = False
+                self.es_skip_reason = 'ES读取总览历史报告失败，已跳过ES回读：{0}'.format(str(e))
+                self.log('[report-analysis] skip es get overview doc_id={0} reason={1}'.format(doc_id, self.es_skip_reason))
         delivery_state = normalize_delivery_state(existing_doc.get('delivery')) if isinstance(existing_doc, dict) and existing_doc.get('delivery') else build_delivery_state()
 
         document = {
@@ -2032,10 +2184,14 @@ class HostReportAnalyser(object):
             'validation': validation,
             'delivery': delivery_state,
             'monitor_task_overview': monitor_task_overview,
+            'ha_overview': ha_overview,
             'extra_info': {
                 'normal_host_count': len(normal_documents),
                 'offline_host_count': host_offline,
                 'error_host_ids': [doc.get('host_id') for doc in abnormal_documents],
+                'ha_overview': ha_overview,
+                'es_available': self.es_available,
+                'es_skip_reason': self.es_skip_reason,
             }
         }
         return doc_id, document
@@ -2053,42 +2209,42 @@ class HostReportAnalyser(object):
         report_run_id = self._build_report_run_id(window)
         raw_groups = self.load_raw_groups(host_rows, window)
         single_documents = []
+        single_data_stream_name = self._get_single_report_data_stream_name(window['report_date'])
+        overview_data_stream_name = self._get_overview_report_data_stream_name(window['report_date'])
         for row in host_rows:
             host_id = row.get('host_id')
             host_group = raw_groups.get(host_id, {'status': [], 'xtrabackup': [], 'xtrabackup_inc': [], 'backup': []})
             doc_id, document = self.build_single_host_report(row, host_group, window)
-            self._save_report_document(SINGLE_REPORT_INDEX, doc_id, document)
-            single_data_stream_name = self._get_single_report_data_stream_name(window['report_date'])
-            self._append_report_data_stream_document(single_data_stream_name, document, report_run_id)
+            saved_to_es = self._try_save_report_outputs(SINGLE_REPORT_INDEX, doc_id, single_data_stream_name, document, report_run_id)
             single_documents.append(document)
             self.log(
-                '[report-analysis] single report saved doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4} report_run_id={5} data_stream={6}'.format(
+                '[report-analysis] single report built doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4} report_run_id={5} data_stream={6} saved_to_es={7}'.format(
                     doc_id,
                     host_id,
                     value_tool.getNested(document, ['validation', 'status'], ''),
                     bool(document.get('is_abnormal')),
                     value_tool.getNested(document, ['extra_info', 'raw_counts'], {}),
                     report_run_id,
-                    single_data_stream_name
+                    single_data_stream_name,
+                    saved_to_es
                 )
             )
 
         overview_doc_id, overview_document = self.build_overview_report(host_rows, single_documents, window)
-        self._save_report_document(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_document)
-        overview_data_stream_name = self._get_overview_report_data_stream_name(window['report_date'])
-        self._append_report_data_stream_document(overview_data_stream_name, overview_document, report_run_id)
+        overview_saved_to_es = self._try_save_report_outputs(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_data_stream_name, overview_document, report_run_id)
 
         ready_count = len([doc for doc in single_documents if value_tool.getNested(doc, ['validation', 'is_complete'], False)])
         abnormal_count = len([doc for doc in single_documents if doc.get('is_abnormal')])
         self.log(
-            '[report-analysis] overview saved doc_id={0} validation={1} host_total={2} ready={3} abnormal={4} report_run_id={5} data_stream={6}'.format(
+            '[report-analysis] overview built doc_id={0} validation={1} host_total={2} ready={3} abnormal={4} report_run_id={5} data_stream={6} saved_to_es={7}'.format(
                 overview_doc_id,
                 value_tool.getNested(overview_document, ['validation', 'status'], ''),
                 len(host_rows),
                 ready_count,
                 abnormal_count,
                 report_run_id,
-                overview_data_stream_name
+                overview_data_stream_name,
+                overview_saved_to_es
             )
         )
         return {
@@ -2101,6 +2257,11 @@ class HostReportAnalyser(object):
             'single_ready': ready_count,
             'single_abnormal': abnormal_count,
             'overview_ready': bool(value_tool.getNested(overview_document, ['validation', 'is_complete'], False)),
+            'es_available': self.es_available,
+            'es_skipped': not self.es_available,
+            'es_skip_reason': self.es_skip_reason,
+            'overview_document': overview_document,
+            'single_documents': single_documents,
         }
 
 

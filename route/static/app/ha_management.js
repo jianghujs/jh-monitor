@@ -835,7 +835,10 @@ function haRenderList(search) {
   var html = '';
   rows.forEach(function(pair) {
     var failoverSummary = haPairFailoverSummary(pair);
-    var pairNameExtra = failoverSummary ? '<div class="ha-sub"><span class="ha-status-pill ha-pill-warning" title="' + haAttr(failoverSummary) + '">故障恢复</span> ' + haEscape(failoverSummary) + '</div>' : '';
+    var latestAlert = pair.latest_alert_event || {};
+    var latestAlertRecovered = latestAlert.event_type === 'ha_alert_recovery' && latestAlert.status === 'sent';
+    var alertExtra = latestAlert.title ? '<div class="ha-sub"><span class="ha-status-pill ' + (latestAlertRecovered ? 'ha-pill-normal' : 'ha-pill-warning') + '" title="' + haAttr(latestAlertRecovered ? '异常已恢复' : (latestAlert.message || latestAlert.title)) + '">' + (latestAlertRecovered ? '恢复' : '通知') + '</span> ' + haEscape(latestAlertRecovered ? '异常已恢复' : latestAlert.title) + ' <span class="c9">' + haEscape(latestAlert.addtime || '') + '</span></div>' : '';
+    var pairNameExtra = (failoverSummary ? '<div class="ha-sub"><span class="ha-status-pill ha-pill-warning" title="' + haAttr(failoverSummary) + '">故障恢复</span> ' + haEscape(failoverSummary) + '</div>' : '') + alertExtra;
     html += '<tr data-ha-row-id="' + haAttr(pair.id) + '">' +
       '<td class="text-center"><span class="ha-sort-handle" aria-hidden="true" title="拖动排序"><i></i><i></i><i></i></span></td>' +
       '<td><div class="ha-main">' + haEscape(pair.pair_name) + '</div><div class="ha-sub">' + haEscape(pair.pair_id) + '</div>' + pairNameExtra + '</td>' +
@@ -1499,11 +1502,24 @@ function haDetailLogHtml(pair) {
   var totalPage = runData.total_page || 1;
   var prevDisabled = page <= 1 ? 'disabled' : '';
   var nextDisabled = page >= totalPage ? 'disabled' : '';
+  var alertEvents = pair.alert_events || [];
+  var alertRows = alertEvents.map(function(item) {
+    var cls = item.status === 'sent' ? 'ha-pill-normal' : item.status === 'failed' ? 'ha-pill-danger' : 'ha-pill-warning';
+    return '<tr>' +
+      '<td><div class="ha-log-run-type">' + haEscape(item.title || item.event_type || '--') + '</div><div class="ha-log-run-id" title="' + haAttr(item.alert_key || '') + '">' + haEscape(item.alert_type || item.alert_key || '--') + '</div></td>' +
+      '<td><span class="ha-log-status ' + cls + '">' + haEscape(item.status || '--') + '</span></td>' +
+      '<td><div class="ha-log-step" title="' + haAttr(item.message || '--') + '">' + haEscape(item.message || '--') + '</div></td>' +
+      '<td><div class="ha-log-time">' + haEscape(item.sent_by_host_id || '--') + '</div></td>' +
+      '<td><div class="ha-log-time">' + haEscape(item.addtime || '--') + '</div></td>' +
+    '</tr>';
+  }).join('');
+  if (!alertRows) alertRows = '<tr><td colspan="5" class="ha-muted text-center">暂无异常通知事件。</td></tr>';
   return '<div class="ha-detail-section">' +
     '<div class="ha-log-toolbar">' +
       '<div><div class="monitor-task-section-title">日志</div><div class="ha-muted">每页 20 条，预切换和正式上线分别记录。</div></div>' +
       '<button type="button" id="haLogRefreshBtn" class="btn btn-default btn-sm" onclick="haRefreshLogPage(\'' + haAttr(pair.pair_id) + '\')">刷新</button>' +
     '</div>' +
+    '<div class="ha-log-list-shell ha-alert-event-shell"><table class="table table-hover ha-detail-data-table"><thead><tr><th width="255">异常通知</th><th width="100">状态</th><th>内容</th><th width="170">通知方</th><th width="145">时间</th></tr></thead><tbody>' + alertRows + '</tbody></table></div>' +
     '<div class="ha-log-list-shell"><table class="table table-hover ha-detail-data-table ha-switch-run-table"><thead><tr><th width="255">任务</th><th width="100">状态</th><th>当前步骤</th><th width="145">创建时间</th><th width="145">完成/更新时间</th><th width="76" class="text-right">操作</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="ha-log-pager"><span>共 ' + haEscape(total) + ' 条</span><span>第 ' + haEscape(page) + ' / ' + haEscape(totalPage) + ' 页</span><button type="button" class="btn btn-default btn-xs" ' + prevDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page - 1) + ')">上一页</button><button type="button" class="btn btn-default btn-xs" ' + nextDisabled + ' onclick="haGoLogPage(\'' + haAttr(pair.pair_id) + '\', ' + (page + 1) + ')">下一页</button></div>' +
     '</div>';

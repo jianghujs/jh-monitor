@@ -139,7 +139,10 @@ class HostReportSender(HostReportAnalyser):
                     last_error=''
                 )
                 self._append_delivery_history(document, 'success', recipients, '')
-                self._es.index(index_name, doc_id, document=document)
+                try:
+                    self._es.index(index_name, doc_id, document=document)
+                except Exception as ex:
+                    self.log_tool.warn('[report-delivery] 发送成功但ES回写失败', index=index_name, doc_id=doc_id, error=str(ex))
                 self.log_tool.detail_ok('[report-delivery] 发送成功', index=index_name, doc_id=doc_id)
                 return True, ''
             error_message = 'notify_message_returned_false'
@@ -154,7 +157,10 @@ class HostReportSender(HostReportAnalyser):
             last_error=error_message
         )
         self._append_delivery_history(document, 'failed', recipients, error_message)
-        self._es.index(index_name, doc_id, document=document)
+        try:
+            self._es.index(index_name, doc_id, document=document)
+        except Exception as ex:
+            self.log_tool.warn('[report-delivery] 发送失败且ES回写失败', index=index_name, doc_id=doc_id, error=str(ex))
         self.log_tool.detail_fail('[report-delivery] 发送失败', index=index_name, doc_id=doc_id, error=error_message)
         return False, error_message
 
@@ -169,7 +175,10 @@ class HostReportSender(HostReportAnalyser):
             last_error=error_message
         )
         self._append_delivery_history(document, 'skipped', delivery.get('recipients', []), error_message)
-        self._es.index(index_name, doc_id, document=document)
+        try:
+            self._es.index(index_name, doc_id, document=document)
+        except Exception as ex:
+            self.log_tool.warn('[report-delivery] 跳过发送但ES回写失败', index=index_name, doc_id=doc_id, error=str(ex))
         self.log_tool.warn('[report-delivery] 跳过发送', index=index_name, doc_id=doc_id, reason=error_message)
 
     def _parse_delivery_time_ts(self, time_text):
@@ -202,7 +211,7 @@ class HostReportSender(HostReportAnalyser):
             return 'PVE硬件健康报告'
         return '服务器报告'
 
-    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None, force_send=False):
+    def run_delivery(self, due_rows=None, report_config=None, report_date=None, enabled_rows=None, force_send=False, overview_document=None, single_documents=None):
         """执行发送阶段：先发总览，再发异常单机报告。"""
         window = self.get_report_window(report_date)
         if due_rows is None or report_config is None or enabled_rows is None:
@@ -228,9 +237,14 @@ class HostReportSender(HostReportAnalyser):
             return {'status': 'blocked', 'reason': 'email_not_configured', 'report_date': window['report_date']}
 
         overview_doc_id = window['report_date']
-        overview_document = self._es.get(OVERVIEW_REPORT_INDEX, overview_doc_id)
-        if isinstance(overview_document, dict):
-            overview_document = overview_document.get('_source', {})
+        if not isinstance(overview_document, dict):
+            try:
+                overview_document = self._es.get(OVERVIEW_REPORT_INDEX, overview_doc_id)
+                if isinstance(overview_document, dict):
+                    overview_document = overview_document.get('_source', overview_document)
+            except Exception as ex:
+                self.log_tool.warn('[report-delivery] ES读取总览报告失败', doc_id=overview_doc_id, error=str(ex))
+                overview_document = {}
         overview_errors = self._validate_report_for_delivery(overview_document, 'overview', window['report_date'])
         self.log_tool.step(
             '[report-delivery] 校验总览报告',
@@ -245,14 +259,23 @@ class HostReportSender(HostReportAnalyser):
             return {'status': 'blocked', 'reason': 'overview_not_ready', 'errors': overview_errors, 'report_date': window['report_date']}
 
         host_ids = self._get_single_delivery_host_ids(due_rows, enabled_rows)
-        single_documents = []
+        if not isinstance(single_documents, list):
+            single_documents = []
+            if len(host_ids) > 0:
+                try:
+                    single_documents = self._es.searchAll(
+                        index=SINGLE_REPORT_INDEX,
+                        body=self._build_single_report_delivery_query(host_ids, window['report_date']),
+                        page_size=PAGE_SIZE,
+                        scroll='1m'
+                    )
+                except Exception as ex:
+                    self.log_tool.warn('[report-delivery] ES读取单机报告失败', report_date=window['report_date'], error=str(ex))
+                    single_documents = []
+        if not isinstance(single_documents, list):
+            single_documents = []
         if len(host_ids) > 0:
-            single_documents = self._es.searchAll(
-                index=SINGLE_REPORT_INDEX,
-                body=self._build_single_report_delivery_query(host_ids, window['report_date']),
-                page_size=PAGE_SIZE,
-                scroll='1m'
-            )
+            single_documents = [doc for doc in single_documents if isinstance(doc, dict) and doc.get('host_id') in host_ids and str(doc.get('report_date', '')) == str(window['report_date'])]
         matched_host_ids = [doc.get('host_id') for doc in single_documents]
         missing_host_ids = [host_id for host_id in host_ids if host_id not in matched_host_ids]
         self.log_tool.detail_ok(

@@ -839,7 +839,9 @@ class config_api:
                 report_config=report_config,
                 report_date=report_date,
                 enabled_rows=host_rows,
-                force_send=True
+                force_send=True,
+                overview_document=analysis_result.get('overview_document'),
+                single_documents=analysis_result.get('single_documents')
             )
         except Exception as ex:
             return jh.returnJson(False, '测试发送服务器报告失败: ' + str(ex))
@@ -850,11 +852,14 @@ class config_api:
             retained_message = '报告数据已生成并保留'
             if analysis_result.get('status') != 'ok':
                 retained_message = '报告生成未完成'
+            safe_analysis_result = dict(analysis_result)
+            safe_analysis_result.pop('overview_document', None)
+            safe_analysis_result.pop('single_documents', None)
             return jh.returnJson(
                 False,
                 '{0}，但发送失败: {1}'.format(retained_message, error_msg),
                 {
-                    'analysis_result': analysis_result,
+                    'analysis_result': safe_analysis_result,
                     'delivery_result': delivery_result,
                     'missing_host_ids': missing_host_ids,
                     'recipients': recipients

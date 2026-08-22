@@ -178,6 +178,7 @@
           {% if item.status == 'error' %}<span style="color: red;">异常</span>
           {% elif item.status == 'warning' %}<span style="color: orange;">告警</span>
           {% elif item.status == 'normal' %}<span style="color: green;">正常</span>
+          {% elif item.status == 'skipped' %}<span style="color: #999;">已跳过</span>
           {% else %}<span style="color: #999;">{{ item.status }}</span>{% endif %}
           {% if item.msg %}<span style="color:#666;"> — {{ item.msg }}</span>{% endif %}
           {% if item.last_run_at_text %}<div style="color:#999;font-size:12px;margin-top:2px;">日志时间: {{ item.last_run_at_text }}</div>{% endif %}
@@ -185,6 +186,54 @@
       </tr>
     {% endfor %}
     </table>
+    {% endif %}
+
+    {% if ha_overview and ha_overview.total and ha_overview.total > 0 %}
+    <h3 class="font-bold my-5">主备管理概览：</h3>
+    <table border class="w-full">
+      <tr>
+        <td>主备关系总数</td>
+        <td>{{ ha_overview.total }}</td>
+      </tr>
+      <tr>
+        <td>正常主备</td>
+        <td><span style="color: green;">{{ ha_overview.normal }}</span></td>
+      </tr>
+      <tr>
+        <td>异常/提醒主备</td>
+        <td>
+          {% if ha_overview.abnormal and ha_overview.abnormal > 0 %}
+          <span style="color: orange;">{{ ha_overview.abnormal }}</span>
+          {% else %}
+          <span style="color: green;">0</span>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+
+    {% if ha_overview.danger_items and (ha_overview.danger_items | length) > 0 %}
+    <h3 class="font-bold my-5">异常主备摘要：</h3>
+    <table border class="w-full">
+      {% for item in ha_overview.danger_items %}
+      <tr>
+        <td><span style="color: red;">{{ item.pair_name }}</span><div style="color:#999;font-size:12px;margin-top:2px;">{{ item.pair_id }}</div></td>
+        <td><span style="color: red;">{{ item.status_text }}</span>{% if item.hosts_text %}<div style="color:#999;font-size:12px;margin-top:2px;">{{ item.hosts_text }}</div>{% endif %}{% if item.last_report_at %}<div style="color:#999;font-size:12px;margin-top:2px;">最近上报: {{ item.last_report_at }}</div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if ha_overview.warning_items and (ha_overview.warning_items | length) > 0 %}
+    <h3 class="font-bold my-5">提醒主备摘要：</h3>
+    <table border class="w-full">
+      {% for item in ha_overview.warning_items %}
+      <tr>
+        <td><span style="color: orange;">{{ item.pair_name }}</span><div style="color:#999;font-size:12px;margin-top:2px;">{{ item.pair_id }}</div></td>
+        <td><span style="color: orange;">{{ item.status_text }}</span>{% if item.hosts_text %}<div style="color:#999;font-size:12px;margin-top:2px;">{{ item.hosts_text }}</div>{% endif %}{% if item.last_report_at %}<div style="color:#999;font-size:12px;margin-top:2px;">最近上报: {{ item.last_report_at }}</div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
     {% endif %}
 
     <h3 class="font-bold my-5">主机单机报告列表：</h3>

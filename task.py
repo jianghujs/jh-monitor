@@ -432,7 +432,14 @@ def hostReportPipelineTask():
                 analysis_result = analyser.run_analysis(enabled_rows, report_date=report_date)
                 print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] ANALYSIS - 日期: {analysis_result.get('report_date')} ready={analysis_result.get('single_ready')}/{analysis_result.get('single_total')} abnormal={analysis_result.get('single_abnormal')} overview_ready={analysis_result.get('overview_ready')}{Style.RESET_ALL}")
 
-                result = sender.run_delivery(due_rows, report_config, report_date=report_date, enabled_rows=enabled_rows)
+                result = sender.run_delivery(
+                    due_rows,
+                    report_config,
+                    report_date=report_date,
+                    enabled_rows=enabled_rows,
+                    overview_document=analysis_result.get('overview_document'),
+                    single_documents=analysis_result.get('single_documents')
+                )
                 status = result.get('status')
                 if status == 'ok':
                     print(f"{Fore.GREEN}★ ========= [hostReportPipelineTask] SUCCESS - 日期: {result.get('report_date')} overview={result.get('overview_sent')} single_success={result.get('single_success')} single_skipped={result.get('single_skipped')}{Style.RESET_ALL}")

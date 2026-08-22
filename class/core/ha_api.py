@@ -37,6 +37,11 @@ class ha_api:
         'callback_status,callback_error,addtime,update_time,finish_time'
     )
 
+    alert_event_fields = (
+        'id,pair_id,event_id,event_type,alert_key,alert_type,alert_level,status,title,message,'
+        'sent_by_host_id,report_host_id,notifier_mode,alerts_json,addtime'
+    )
+
     def _now(self):
         return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
 
@@ -250,6 +255,25 @@ CREATE TABLE IF NOT EXISTS ha_switch_event (
 )
 """,
             """
+CREATE TABLE IF NOT EXISTS ha_alert_event (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pair_id TEXT,
+  event_id TEXT,
+  event_type TEXT,
+  alert_key TEXT,
+  alert_type TEXT,
+  alert_level TEXT,
+  status TEXT,
+  title TEXT,
+  message TEXT,
+  sent_by_host_id TEXT,
+  report_host_id TEXT,
+  notifier_mode TEXT,
+  alerts_json TEXT,
+  addtime TEXT
+)
+""",
+            """
 CREATE TABLE IF NOT EXISTS ha_callback_record (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pair_id TEXT,
@@ -305,6 +329,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'report_host_id': 'TEXT', 'collect_method': 'TEXT', 'seq': 'INTEGER DEFAULT 0', 'phase': 'TEXT',
                 'step': 'TEXT', 'status': 'TEXT', 'log_text': 'TEXT', 'addtime': 'TEXT'
             },
+            'ha_alert_event': {
+                'pair_id': 'TEXT', 'event_id': 'TEXT', 'event_type': 'TEXT', 'alert_key': 'TEXT',
+                'alert_type': 'TEXT', 'alert_level': 'TEXT', 'status': 'TEXT', 'title': 'TEXT',
+                'message': 'TEXT', 'sent_by_host_id': 'TEXT', 'report_host_id': 'TEXT',
+                'notifier_mode': 'TEXT', 'alerts_json': 'TEXT', 'addtime': 'TEXT'
+            },
             'ha_callback_record': {
                 'pair_id': 'TEXT', 'switch_run_id': 'TEXT', 'callback_url': 'TEXT', 'status': 'TEXT',
                 'error_msg': 'TEXT', 'request_body': 'TEXT', 'response_body': 'TEXT', 'addtime': 'TEXT',
@@ -328,6 +358,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_switch_run_id ON ha_switch_run(switch_run_id)',
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_switch_event_event_id ON ha_switch_event(event_id)',
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_switch_event_seq ON ha_switch_event(switch_run_id,origin_host_id,seq)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_alert_event_event_id ON ha_alert_event(event_id)',
+            'CREATE INDEX IF NOT EXISTS idx_ha_alert_event_pair_time ON ha_alert_event(pair_id,addtime)',
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_api_nonce_nonce ON ha_api_nonce(nonce)'
         ]
         for sql in indexes:
@@ -492,6 +524,31 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'log_text': row.get('log_text') or '',
             'addtime': row.get('addtime') or ''
         }
+
+    def _normalizeAlertEvent(self, row):
+        return {
+            'id': row.get('id') or '',
+            'pair_id': row.get('pair_id') or '',
+            'event_id': row.get('event_id') or '',
+            'event_type': row.get('event_type') or '',
+            'alert_key': row.get('alert_key') or '',
+            'alert_type': row.get('alert_type') or '',
+            'alert_level': row.get('alert_level') or '',
+            'status': row.get('status') or '',
+            'title': row.get('title') or '',
+            'message': row.get('message') or '',
+            'sent_by_host_id': row.get('sent_by_host_id') or '',
+            'report_host_id': row.get('report_host_id') or '',
+            'notifier_mode': row.get('notifier_mode') or '',
+            'alerts': self._jsonLoads(row.get('alerts_json'), []),
+            'addtime': row.get('addtime') or ''
+        }
+
+    def _getAlertEvents(self, pair_id, limit=20):
+        if not pair_id:
+            return []
+        rows = jh.M('ha_alert_event').where('pair_id=?', (pair_id,)).field(self.alert_event_fields).order('id desc').limit(str(max(1, min(100, int(limit))))).select()
+        return [self._normalizeAlertEvent(row) for row in rows] if isinstance(rows, list) else []
 
     def _isPlaceholderHost(self, row):
         host_id = row.get('host_id') or ''
@@ -794,6 +851,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         data['switch_run'] = {}
         data['switch_runs'] = []
         data['switch_events'] = []
+        data['alert_events'] = []
+        latest_alert_events = self._getAlertEvents(pair.get('pair_id'), 1)
+        data['latest_alert_event'] = latest_alert_events[0] if latest_alert_events else {}
         if data['switch_run_id']:
             run = self._getRun(data['switch_run_id'])
             data['switch_run'] = self._normalizeRun(run)
@@ -802,6 +862,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 data['switch_events'] = [self._normalizeEvent(x) for x in self._getEvents(data['switch_run_id'])]
         if include_log or include_events:
             data['switch_runs'] = self._getRuns(pair.get('pair_id'), 1, 20)
+            data['alert_events'] = self._getAlertEvents(pair.get('pair_id'), 20)
         data['health'] = self._summaryHealth(hosts)
         data['warnings'] = [] if status == 'normal' else status_text.split('；')
         data['log'] = self._readLogText(data.get('log_path')) if include_log and data.get('log_path') else ''
@@ -899,6 +960,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if isinstance(runs, list):
             run_ids = [row.get('switch_run_id') for row in runs if isinstance(row, dict) and row.get('switch_run_id')]
         jh.M('ha_switch_event').where('pair_id=?', (pair_id,)).delete()
+        jh.M('ha_alert_event').where('pair_id=?', (pair_id,)).delete()
         for switch_run_id in run_ids:
             jh.M('ha_switch_event').where('switch_run_id=?', (switch_run_id,)).delete()
         jh.M('ha_callback_record').where('pair_id=?', (pair_id,)).delete()
@@ -1335,6 +1397,45 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._appendLog(run.get('log_path'), line)
         db_status = self._advanceSwitchRun(run, phase, status, step or log_text)
         return jh.returnJson(True, '事件已上报')
+
+    def publicReportAlertEvent(self):
+        ok, payload, msg = self._publicPayload(True)
+        if not ok:
+            return jh.returnJson(False, msg)
+        pair_id = self._safeText(payload.get('pair_id'), 128)
+        if not self._getPair(pair_id):
+            return jh.returnJson(False, 'unknown pair_id')
+        event_id = self._safeText(payload.get('event_id'), 128)
+        if not event_id:
+            event_id = '{0}:{1}:{2}:{3}'.format(pair_id, self._safeText(payload.get('host_id'), 64), self._safeText(payload.get('event_type'), 64), int(time.time() * 1000))
+        exists = jh.M('ha_alert_event').where('event_id=?', (event_id,)).field('id').find()
+        if isinstance(exists, dict) and exists.get('id'):
+            return jh.returnJson(True, '重复事件已忽略', {'duplicate': True})
+        alerts = payload.get('alerts') if isinstance(payload.get('alerts'), list) else []
+        now = self._now()
+        jh.M('ha_alert_event').add(
+            'pair_id,event_id,event_type,alert_key,alert_type,alert_level,status,title,message,sent_by_host_id,report_host_id,notifier_mode,alerts_json,addtime',
+            (
+                pair_id,
+                event_id,
+                self._safeText(payload.get('event_type'), 64),
+                self._safeText(payload.get('alert_key'), 255),
+                self._safeText(payload.get('alert_type'), 64),
+                self._safeText(payload.get('alert_level'), 32),
+                self._safeText(payload.get('status'), 32),
+                self._safeText(payload.get('title'), 255),
+                self._safeText(payload.get('message'), 4000),
+                self._safeText(payload.get('sent_by_host_id') or payload.get('host_id'), 128),
+                self._safeText(payload.get('report_host_id') or payload.get('host_id'), 128),
+                self._safeText(payload.get('notifier_mode'), 64),
+                json.dumps(alerts, ensure_ascii=False),
+                now
+            )
+        )
+        latest_title = self._safeText(payload.get('title'), 255)
+        if latest_title:
+            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('update_time', (now,))
+        return jh.returnJson(True, '通知事件已上报')
 
     def publicAckSwitchPhase(self):
         ok, payload, msg = self._publicPayload(True)
