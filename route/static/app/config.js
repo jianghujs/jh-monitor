@@ -84,7 +84,8 @@ function getReportConfigPayload(){
 		'cpu': $('#report_cpu').val(),
 		'memory': $('#report_memory').val(),
 		'disk': $('#report_disk').val(),
-		'ssl_cert': $('#report_ssl_cert').val()
+		'ssl_cert': $('#report_ssl_cert').val(),
+		'ha_enabled': $('#report_ha_enabled_switch').getRadioSwitchValue() ? 1 : 0
 	};
 }
 
@@ -101,7 +102,8 @@ function getReportThresholdPayload(){
 		'cpu': $('#report_cpu').val(),
 		'memory': $('#report_memory').val(),
 		'disk': $('#report_disk').val(),
-		'ssl_cert': $('#report_ssl_cert').val()
+		'ssl_cert': $('#report_ssl_cert').val(),
+		'ha_enabled': $('#report_ha_enabled_switch').getRadioSwitchValue() ? 1 : 0
 	};
 }
 
@@ -129,7 +131,8 @@ function getReportConfigFormState(data){
 			cpu: reportConfig.cpu === undefined ? '' : reportConfig.cpu,
 			memory: reportConfig.memory === undefined ? '' : reportConfig.memory,
 			disk: reportConfig.disk === undefined ? '' : reportConfig.disk,
-			ssl_cert: reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert
+			ssl_cert: reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert,
+			ha_enabled: reportConfig.ha_enabled === undefined ? true : !!reportConfig.ha_enabled
 		},
 		report_schedule_config: {
 			enabled: !!reportScheduleConfig.enabled,
@@ -152,6 +155,7 @@ function applyReportConfigFormState(state){
 	$('#report_memory').val(reportConfig.memory === undefined ? '' : reportConfig.memory);
 	$('#report_disk').val(reportConfig.disk === undefined ? '' : reportConfig.disk);
 	$('#report_ssl_cert').val(reportConfig.ssl_cert === undefined ? '' : reportConfig.ssl_cert);
+	$('#report_ha_enabled_switch').createRadioSwitch(reportConfig.ha_enabled === undefined ? true : !!reportConfig.ha_enabled, function(){});
 
 	reportHostOptions = state.report_host_options || [];
 	reportScheduleCron = $.extend({}, reportScheduleCronDefault, reportScheduleConfig.cron || {});
@@ -168,6 +172,7 @@ function getReportSchedulePayload(){
 		'memory': $('#report_memory').val(),
 		'disk': $('#report_disk').val(),
 		'ssl_cert': $('#report_ssl_cert').val(),
+		'ha_enabled': $('#report_ha_enabled_switch').getRadioSwitchValue() ? 1 : 0,
 		'type': reportScheduleCron.type || reportScheduleCronDefault.type,
 		'where1': reportScheduleCron.where1 === undefined ? '' : reportScheduleCron.where1,
 		'hour': reportScheduleCron.hour === undefined ? 0 : reportScheduleCron.hour,

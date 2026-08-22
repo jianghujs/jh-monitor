@@ -74,6 +74,7 @@ DEFAULT_REPORT_THRESHOLDS = {
     'memory': 80,
     'disk': 80,
     'ssl_cert': 14,
+    'ha_enabled': True,
 }
 
 RAW_STATUS_INDEX = 'host-*-system-status-*'
@@ -270,6 +271,14 @@ class HostReportAnalyser(object):
             except Exception:
                 thresholds[key] = DEFAULT_REPORT_THRESHOLDS[key]
         return thresholds
+
+    def is_ha_report_enabled(self):
+        if hasattr(self, 'ha_report_enabled_override'):
+            return bool(self.ha_report_enabled_override)
+        data = jh.readJsonFile(REPORT_CONFIG_PATH, DEFAULT_REPORT_THRESHOLDS, auto_create=True)
+        if not isinstance(data, dict):
+            data = {}
+        return str(data.get('ha_enabled', True)).lower() not in ('0', 'false', 'no', 'off')
 
     def get_schedule_state(self):
         """计算已启用主机、到期主机以及对应的发送配置。"""
@@ -2032,7 +2041,7 @@ class HostReportAnalyser(object):
 
         # 监控任务总览：生成报告时实时查询 ES 最新事件，避免发送旧的 SQLite 状态。
         monitor_task_overview = self._build_monitor_task_overview(self.now_ts)
-        ha_overview = self._build_ha_management_overview()
+        ha_overview = self._build_ha_management_overview() if self.is_ha_report_enabled() else {}
 
         overview_summary_messages = []
         if not self.es_available:

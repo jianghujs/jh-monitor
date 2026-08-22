@@ -65,7 +65,8 @@ class config_api:
             'cpu': 80,
             'memory': 80,
             'disk': 80,
-            'ssl_cert': 14
+            'ssl_cert': 14,
+            'ha_enabled': True
         }
 
     def _getDefaultReportCron(self):
@@ -247,6 +248,7 @@ class config_api:
         data['memory'] = report_config.get('memory', default_report_config.get('memory', ''))
         data['disk'] = report_config.get('disk', default_report_config.get('disk', ''))
         data['ssl_cert'] = report_config.get('ssl_cert', default_report_config.get('ssl_cert', ''))
+        data['ha_enabled'] = self._toBool(report_config.get('ha_enabled', default_report_config.get('ha_enabled', True)))
         return data
 
     def _getReportScheduleConfigData(self):
@@ -398,6 +400,7 @@ class config_api:
             return False, msg
         current_config = self._getRawReportConfig()
         current_config.update(report_config)
+        current_config['ha_enabled'] = self._toBool(request.form.get('ha_enabled', current_config.get('ha_enabled', True)))
         self._writeJsonConfig(self.__report_config_addr, current_config)
         return True, '服务器报告阈值保存成功!'
 
@@ -695,6 +698,10 @@ class config_api:
             'ssl_cert': request.form.get('ssl_cert', '').strip(),
         }
         ok, msg = self._saveReportThresholdConfig(report_form)
+        if ok:
+            report_config = self._getRawReportConfig()
+            report_config['ha_enabled'] = self._toBool(request.form.get('ha_enabled', report_config.get('ha_enabled', True)))
+            self._writeJsonConfig(self.__report_config_addr, report_config)
         return jh.returnJson(ok, msg)
 
     def saveReportScheduleApi(self):
@@ -732,6 +739,7 @@ class config_api:
 
         report_config = self._getRawReportConfig()
         report_config.update(threshold_config)
+        report_config['ha_enabled'] = self._toBool(request.form.get('ha_enabled', report_config.get('ha_enabled', True)))
         self._writeJsonConfig(self.__report_config_addr, report_config)
         self.saveReportDispatchConfigData(
             enabled,
@@ -821,6 +829,7 @@ class config_api:
             logger = lambda message: print('[config.testSendReportMailApi] {0}'.format(message))
             analyser = HostReportAnalyser(now_ts=now_ts, logger=logger)
             analyser.thresholds = dict(threshold_config)
+            analyser.ha_report_enabled_override = self._toBool(request.form.get('ha_enabled', self._getReportConfigData().get('ha_enabled', True)))
             sender = HostReportSender(now_ts=now_ts, logger=logger, es_client=analyser._es)
             sender.thresholds = dict(threshold_config)
             report_date = time.strftime('%Y-%m-%d', time.localtime(now_ts))
