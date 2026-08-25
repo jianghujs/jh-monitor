@@ -585,6 +585,29 @@ class HostReportAnalyser(object):
         if len(host_ids) == 0:
             return {}
 
+        def timed_search(label, index_name, body):
+            start_ts = time.time()
+            self.log('[report-analysis] es search start label={0} index={1} host_total={2} page_size={3}'.format(
+                label,
+                index_name,
+                len(host_ids),
+                PAGE_SIZE
+            ))
+            docs = self._es.searchAll(
+                index=index_name,
+                body=body,
+                page_size=PAGE_SIZE,
+                scroll='1m'
+            )
+            doc_count = len(docs) if isinstance(docs, list) else 'invalid'
+            self.log('[report-analysis] es search done label={0} index={1} docs={2} cost={3:.3f}s'.format(
+                label,
+                index_name,
+                doc_count,
+                time.time() - start_ts
+            ))
+            return docs
+
         grouped = {}
         for row in host_rows:
             grouped[row.get('host_id')] = {
@@ -595,30 +618,10 @@ class HostReportAnalyser(object):
             }
 
         try:
-            status_docs = self._es.searchAll(
-                index=RAW_STATUS_INDEX,
-                body={'query': self._build_status_window_query(host_ids, window)},
-                page_size=PAGE_SIZE,
-                scroll='1m'
-            )
-            xtrabackup_docs = self._es.searchAll(
-                index=RAW_XTRABACKUP_INDEX,
-                body={'query': self._build_simple_window_query(host_ids, window)},
-                page_size=PAGE_SIZE,
-                scroll='1m'
-            )
-            xtrabackup_inc_docs = self._es.searchAll(
-                index=RAW_XTRABACKUP_INC_INDEX,
-                body={'query': self._build_simple_window_query(host_ids, window)},
-                page_size=PAGE_SIZE,
-                scroll='1m'
-            )
-            backup_docs = self._es.searchAll(
-                index=RAW_BACKUP_INDEX,
-                body={'query': self._build_host_only_query(host_ids)},
-                page_size=PAGE_SIZE,
-                scroll='1m'
-            )
+            status_docs = timed_search('system_status', RAW_STATUS_INDEX, {'query': self._build_status_window_query(host_ids, window)})
+            xtrabackup_docs = timed_search('xtrabackup', RAW_XTRABACKUP_INDEX, {'query': self._build_simple_window_query(host_ids, window)})
+            xtrabackup_inc_docs = timed_search('xtrabackup_inc', RAW_XTRABACKUP_INC_INDEX, {'query': self._build_simple_window_query(host_ids, window)})
+            backup_docs = timed_search('backup', RAW_BACKUP_INDEX, {'query': self._build_host_only_query(host_ids)})
         except Exception as e:
             self.es_available = False
             self.es_skip_reason = 'ES连接失败，已跳过主机运行数据：{0}'.format(str(e))
@@ -2216,18 +2219,34 @@ class HostReportAnalyser(object):
 
         self.log('[report-analysis] start report_date={0} host_total={1}'.format(window['report_date'], len(host_rows)))
         report_run_id = self._build_report_run_id(window)
+        load_raw_start_ts = time.time()
+        self.log('[report-analysis] load raw groups start report_date={0} host_total={1}'.format(window['report_date'], len(host_rows)))
         raw_groups = self.load_raw_groups(host_rows, window)
+        self.log('[report-analysis] load raw groups done report_date={0} host_total={1} cost={2:.3f}s'.format(
+            window['report_date'],
+            len(host_rows),
+            time.time() - load_raw_start_ts
+        ))
         single_documents = []
         single_data_stream_name = self._get_single_report_data_stream_name(window['report_date'])
         overview_data_stream_name = self._get_overview_report_data_stream_name(window['report_date'])
-        for row in host_rows:
+        for index, row in enumerate(host_rows):
             host_id = row.get('host_id')
             host_group = raw_groups.get(host_id, {'status': [], 'xtrabackup': [], 'xtrabackup_inc': [], 'backup': []})
+            single_start_ts = time.time()
+            self.log('[report-analysis] single report build start report_date={0} progress={1}/{2} host_id={3} host_name={4}'.format(
+                window['report_date'],
+                index + 1,
+                len(host_rows),
+                host_id,
+                row.get('host_name', '')
+            ))
             doc_id, document = self.build_single_host_report(row, host_group, window)
+            self.log('[report-analysis] single report save start doc_id={0} host_id={1}'.format(doc_id, host_id))
             saved_to_es = self._try_save_report_outputs(SINGLE_REPORT_INDEX, doc_id, single_data_stream_name, document, report_run_id)
             single_documents.append(document)
             self.log(
-                '[report-analysis] single report built doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4} report_run_id={5} data_stream={6} saved_to_es={7}'.format(
+                '[report-analysis] single report built doc_id={0} host_id={1} validation={2} abnormal={3} raw_counts={4} report_run_id={5} data_stream={6} saved_to_es={7} cost={8:.3f}s'.format(
                     doc_id,
                     host_id,
                     value_tool.getNested(document, ['validation', 'status'], ''),
@@ -2235,17 +2254,21 @@ class HostReportAnalyser(object):
                     value_tool.getNested(document, ['extra_info', 'raw_counts'], {}),
                     report_run_id,
                     single_data_stream_name,
-                    saved_to_es
+                    saved_to_es,
+                    time.time() - single_start_ts
                 )
             )
 
+        overview_start_ts = time.time()
+        self.log('[report-analysis] overview build start report_date={0} single_total={1}'.format(window['report_date'], len(single_documents)))
         overview_doc_id, overview_document = self.build_overview_report(host_rows, single_documents, window)
+        self.log('[report-analysis] overview save start doc_id={0}'.format(overview_doc_id))
         overview_saved_to_es = self._try_save_report_outputs(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_data_stream_name, overview_document, report_run_id)
 
         ready_count = len([doc for doc in single_documents if value_tool.getNested(doc, ['validation', 'is_complete'], False)])
         abnormal_count = len([doc for doc in single_documents if doc.get('is_abnormal')])
         self.log(
-            '[report-analysis] overview built doc_id={0} validation={1} host_total={2} ready={3} abnormal={4} report_run_id={5} data_stream={6} saved_to_es={7}'.format(
+            '[report-analysis] overview built doc_id={0} validation={1} host_total={2} ready={3} abnormal={4} report_run_id={5} data_stream={6} saved_to_es={7} cost={8:.3f}s'.format(
                 overview_doc_id,
                 value_tool.getNested(overview_document, ['validation', 'status'], ''),
                 len(host_rows),
@@ -2253,7 +2276,8 @@ class HostReportAnalyser(object):
                 abnormal_count,
                 report_run_id,
                 overview_data_stream_name,
-                overview_saved_to_es
+                overview_saved_to_es,
+                time.time() - overview_start_ts
             )
         )
         return {
