@@ -621,7 +621,7 @@ class HostReportAnalyser(object):
             status_docs = timed_search('system_status', RAW_STATUS_INDEX, {'query': self._build_status_window_query(host_ids, window)})
             xtrabackup_docs = timed_search('xtrabackup', RAW_XTRABACKUP_INDEX, {'query': self._build_simple_window_query(host_ids, window)})
             xtrabackup_inc_docs = timed_search('xtrabackup_inc', RAW_XTRABACKUP_INC_INDEX, {'query': self._build_simple_window_query(host_ids, window)})
-            backup_docs = timed_search('backup', RAW_BACKUP_INDEX, {'query': self._build_host_only_query(host_ids)})
+            backup_docs = timed_search('backup', RAW_BACKUP_INDEX, {'query': self._build_simple_window_query(host_ids, window)})
         except Exception as e:
             self.es_available = False
             self.es_skip_reason = 'ES连接失败，已跳过主机运行数据：{0}'.format(str(e))
