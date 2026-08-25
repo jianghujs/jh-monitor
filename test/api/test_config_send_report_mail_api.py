@@ -8,6 +8,7 @@ from flask import Flask
 from common.env import setup_test_env
 from common.notify import NotifyDryRun
 from common.response import parse_api_response, parse_csv_args, print_json
+from common.timing import MethodTimer, StepLogger
 
 
 setup_test_env(__file__)
@@ -100,6 +101,23 @@ def collect_precheck(api):
     }
 
 
+def build_trace_patches():
+    return [
+        (config_api, '_isEmailNotifyReady', 'config._isEmailNotifyReady'),
+        (config_api, '_buildTestReportHostRows', 'config._buildTestReportHostRows'),
+        (config_api, '_normalizeReportConfig', 'config._normalizeReportConfig'),
+        (config_api, 'testSendReportMailApi', 'config.testSendReportMailApi'),
+        (report_analyser_module.HostReportAnalyser, 'run_analysis', 'analyser.run_analysis'),
+        (report_analyser_module.HostReportAnalyser, 'load_raw_groups', 'analyser.load_raw_groups'),
+        (report_analyser_module.HostReportAnalyser, 'build_single_host_report', 'analyser.build_single_host_report'),
+        (report_analyser_module.HostReportAnalyser, 'build_overview_report', 'analyser.build_overview_report'),
+        (report_analyser_module.HostReportAnalyser, '_try_save_report_outputs', 'analyser._try_save_report_outputs'),
+        (report_sender_module.HostReportSender, 'run_delivery', 'sender.run_delivery'),
+        (report_sender_module.HostReportSender, '_send_report_document', 'sender._send_report_document'),
+        (report_sender_module.HostReportSender, '_mark_report_skipped', 'sender._mark_report_skipped'),
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description='测试 config_api.testSendReportMailApi 接口')
     parser.add_argument('--host-id', action='append', default=[], help='指定 report_host_ids，可重复或逗号分隔；默认使用已保存的报告主机')
@@ -112,10 +130,22 @@ def main():
     parser.add_argument('--send', action='store_true', help='真实发送邮件；默认 dry-run 只拦截发送动作')
     parser.add_argument('--precheck-only', action='store_true', help='只检查邮件通知和报告主机配置，不执行接口')
     parser.add_argument('--full-json', action='store_true', help='输出完整接口返回；默认输出摘要')
+    parser.add_argument('--quiet', action='store_true', help='关闭测试脚本阶段日志')
+    parser.add_argument('--trace-methods', action='store_true', help='打印报告分析和发送关键方法耗时')
     args = parser.parse_args()
 
+    step_logger = StepLogger(enabled=not args.quiet)
+    step_logger.log('start test script', mode='send' if args.send else 'dry-run')
+
     api = config_api()
+    step_logger.log('collect precheck start')
     precheck = collect_precheck(api)
+    step_logger.log(
+        'collect precheck done',
+        email_enabled=str(precheck.get('email_enabled')).lower(),
+        recipients=len(precheck.get('recipients') or []),
+        selected_hosts=precheck.get('selected_host_count'),
+    )
     output = {
         'api': 'config/test_send_report_mail',
         'method': 'POST',
@@ -128,20 +158,32 @@ def main():
         return 0 if precheck['email_enabled'] and precheck['recipients'] and precheck['selected_hosts_ok'] else 2
 
     dry_run = NotifyDryRun(jh, [report_sender_module, report_analyser_module]) if not args.send else None
+    method_timer = MethodTimer(step_logger, build_trace_patches()) if args.trace_methods else None
     try:
         if dry_run is not None:
+            step_logger.log('install notify dry-run hooks')
             dry_run.__enter__()
+        if method_timer is not None:
+            step_logger.log('install method timing hooks')
+            method_timer.__enter__()
         app = Flask(__name__)
         form_data = build_form_data(args, precheck.get('selected_host_ids', []))
+        step_logger.log('form data ready', host_count=len(form_data.get('report_host_ids[]', [])))
         with app.test_request_context('/config/test_send_report_mail', method='POST', data=form_data):
+            step_logger.log('call api start')
             raw_result = api.testSendReportMailApi()
+            step_logger.log('call api done')
         result = parse_api_response(raw_result)
+        step_logger.log('parse result done', status=str(result.get('status')).lower())
         output['form_data'] = form_data
         captured_messages = dry_run.messages if dry_run is not None else []
         output['result'] = result if args.full_json else summarize_send_result(result, captured_messages)
+        step_logger.log('print result')
         print_json(output)
         return 0 if result.get('status') else 1
     finally:
+        if method_timer is not None:
+            method_timer.restore()
         if dry_run is not None:
             dry_run.restore()
 
