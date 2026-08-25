@@ -63,7 +63,7 @@ class system_api:
         return self.updateServer(stype, version)
 
     def updateServerCodeApi(self):
-        jh.execShell("cd /www/server/jh-monitor && pip3 install -r /www/server/jh-monitor/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple")
+        jh.execShell("cd /www/server/jh-monitor && pip3 install -r /www/server/jh-monitor/requirements.txt")
         return jh.returnJson(True, '更新成功, 请手动重启面板!')
 
     def systemTotalApi(self):
