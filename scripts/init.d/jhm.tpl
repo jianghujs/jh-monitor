@@ -220,6 +220,38 @@ jh_update_dev()
     cd /www/server/jh-monitor
 }
 
+jh_upgrade()
+{
+    mkdir -p $jhm_path/logs $jhm_path/tmp
+    log_file=$jhm_path/logs/upgrade.log
+
+    nohup bash -c '
+        jhm_path=/www/server/jh-monitor
+        log_file=$jhm_path/logs/upgrade.log
+
+        mkdir -p $jhm_path/logs $jhm_path/tmp
+        {
+            echo "======================================================"
+            echo "[$(date "+%F %T")] start jh-monitor upgrade"
+            cd $jhm_path || exit 1
+            git pull
+            pull_status=$?
+            if [ $pull_status -ne 0 ]; then
+                echo "[$(date "+%F %T")] git pull failed, status: $pull_status"
+                exit $pull_status
+            fi
+            echo "[$(date "+%F %T")] git pull done, restart jh-monitor"
+            /usr/bin/jhm 1 -y
+            restart_status=$?
+            echo "[$(date "+%F %T")] restart done, status: $restart_status"
+            exit $restart_status
+        } >> $log_file 2>&1
+    ' >/dev/null 2>&1 &
+
+    echo "jh-monitor upgrade started in background"
+    echo "log: $log_file"
+}
+
 jh_install_app()
 {
     bash $jhm_path/scripts/quick/app.sh
@@ -311,6 +343,7 @@ case "$1" in
     'open') jh_open;;
     'update') jh_update;;
     'update_dev') jh_update_dev;;
+    'upgrade') jh_upgrade;;
     'install_app') jh_install_app;;
     'close_admin_path') jh_close_admin_path;;
     'unbind_domain') jh_unbind_domain;;
