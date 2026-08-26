@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.request
+import urllib.error
 
 from flask import request
 
@@ -15,26 +16,42 @@ import jh
 class ha_api:
 
     LOG_ROOT = '/www/server/jh-monitor/logs/ha_switch'
+    SYNC_LOG_ROOT = '/www/server/jh-monitor/logs/ha_sync'
     NONCE_TTL_SECONDS = 600
     REPORT_LOST_SECONDS = 300
     DEFAULT_SECRET = 'jh-monitor-ha-bootstrap-secret'
+    MONITOR_SYNC_VERSION = '1.0'
+    DEFAULT_SYNC_TYPE = 'ha_management'
 
     pair_fields = (
         'id,pair_id,pair_name,desired_master_host_id,actual_master_host_id,status,status_text,'
         'last_report_at,current_switch_run_id,callback_url,callback_enabled,callback_status,'
-        'api_secret,sort_id,addtime,update_time'
+        'api_secret,sort_id,source_monitor_id,sync_update_at,addtime,update_time'
     )
 
     state_fields = (
         'id,pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,'
         'collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,'
-        'current_step,next_step,last_error,log_path,last_report_at,report_batch_id,addtime,update_time'
+        'current_step,next_step,last_error,log_path,last_report_at,report_batch_id,source_monitor_id,'
+        'sync_update_at,addtime,update_time'
+    )
+
+    sync_config_fields = (
+        'id,sync_id,sync_name,sync_type,peer_monitor_url,peer_monitor_id,peer_monitor_name,'
+        'sync_secret,enabled,last_sync_at,last_error,status,addtime,update_time'
+    )
+
+    sync_event_fields = (
+        'id,event_id,sync_type,source_monitor_id,source_monitor_name,event_type,object_key,'
+        'payload_json,seq,addtime'
     )
 
     run_fields = (
         'id,switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,'
         'options_json,status,current_phase,current_step,next_step,last_error,step_summary,log_path,'
-        'callback_status,callback_error,addtime,update_time,finish_time'
+        'callback_status,callback_error,origin_monitor_id,execution_monitor_id,claimed_by_host_id,'
+        'claim_token,claim_expire_at,sync_status,dispatchable,dispatch_reason,source_monitor_id,'
+        'sync_update_at,addtime,update_time,finish_time'
     )
 
     alert_event_fields = (
@@ -81,6 +98,15 @@ class ha_api:
 
     def _runId(self):
         return 'HSR_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(6))
+
+    def _monitorId(self):
+        return 'JHM_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(8))
+
+    def _syncId(self):
+        return 'HMS_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(6))
+
+    def _syncEventId(self):
+        return 'HSE_{0}_{1}'.format(time.strftime('%Y%m%d%H%M%S'), jh.getRandomString(10))
 
     def _defaultSwitchOptions(self):
         return {
@@ -145,15 +171,63 @@ class ha_api:
                     return host_id
         return fallback
 
-    def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text, old_master_host_id=''):
+    def _hostAliases(self, state):
+        aliases = state.get('_alias_host_ids') or []
+        if state.get('host_id') and state.get('host_id') not in aliases:
+            aliases.append(state.get('host_id'))
+        detail = self._jsonLoads(state.get('health_detail'), {})
+        source_host_id = detail.get('_source_host_id') if isinstance(detail, dict) else ''
+        if source_host_id and source_host_id not in aliases:
+            aliases.append(source_host_id)
+        return aliases
+
+    def _currentMonitorCanExecuteTarget(self, pair_id, target_host_id):
+        target_host_id = self._safeText(target_host_id, 128)
+        raw_states = self._getStates(pair_id)
+        states = self._displayStates(raw_states)
+        for state in states:
+            if target_host_id not in self._hostAliases(state):
+                continue
+            if state.get('collect_method') == 'local':
+                return True, '目标主机在当前江湖云监控本机房，可本机执行'
+            if state.get('collect_method') == 'ssh_peer' and state.get('report_host_id'):
+                return True, '当前江湖云监控存在可 SSH 远程触发目标主机的插件'
+        for state in raw_states:
+            if target_host_id in self._hostAliases(state) and state.get('collect_method') == 'ssh_peer' and state.get('report_host_id'):
+                return True, '当前江湖云监控存在可 SSH 远程触发目标主机的插件'
+        return False, '当前江湖云监控没有可执行目标主机的本机插件或 ssh_peer 代理'
+
+    def _selectExecutionMonitor(self, pair_id, target_host_id):
+        local_monitor = self._localMonitor()
+        local_monitor_id = local_monitor.get('monitor_id') or ''
+        can_execute, reason = self._currentMonitorCanExecuteTarget(pair_id, target_host_id)
+        if can_execute:
+            return local_monitor_id, reason
+        states = self._displayStates(self._getStates(pair_id))
+        for state in states:
+            if target_host_id not in self._hostAliases(state):
+                continue
+            source_monitor_id = state.get('source_monitor_id') or ''
+            if source_monitor_id and source_monitor_id != local_monitor_id:
+                return source_monitor_id, reason + '；同步状态显示目标主机来自对端江湖云监控'
+        rows = jh.M('ha_sync_config').where('enabled=? AND sync_type=?', (1, self.DEFAULT_SYNC_TYPE)).field(self.sync_config_fields).select()
+        if isinstance(rows, list):
+            for row in rows:
+                if row.get('peer_monitor_id'):
+                    return row.get('peer_monitor_id'), reason + '；使用已启用同步配置的对端江湖云监控执行'
+        return local_monitor_id, reason
+
+    def _createSwitchRun(self, pair, target_host_id, phase, current_step, next_step, status, options, action_text, old_master_host_id='', execution_monitor_id='', dispatch_reason=''):
         pair_id = pair.get('pair_id')
         switch_run_id = self._runId()
         old_master = old_master_host_id or self._masterHostId(pair_id, pair.get('actual_master_host_id') or '')
         log_path = self._monthLogPath(switch_run_id)
         now = self._now()
+        monitor_id = self._localMonitor().get('monitor_id')
+        execution_monitor_id = execution_monitor_id or monitor_id
         jh.M('ha_switch_run').add(
-            'switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,log_path,callback_status,addtime,update_time',
-            (switch_run_id, pair_id, old_master, target_host_id, target_host_id, json.dumps(options, ensure_ascii=False), status, phase, current_step, next_step, log_path, 'pending', now, now)
+            'switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,log_path,callback_status,origin_monitor_id,execution_monitor_id,sync_status,dispatchable,dispatch_reason,source_monitor_id,addtime,update_time',
+            (switch_run_id, pair_id, old_master, target_host_id, target_host_id, json.dumps(options, ensure_ascii=False), status, phase, current_step, next_step, log_path, 'pending', monitor_id, execution_monitor_id, 'local', 1, dispatch_reason, monitor_id, now, now)
         )
         jh.M('ha_pair').where('pair_id=?', (pair_id,)).save(
             'desired_master_host_id,current_switch_run_id,status,status_text,update_time',
@@ -161,6 +235,11 @@ class ha_api:
         )
         self._appendLog(log_path, '[{0}] [system] [pending] 创建切换任务 {1}，动作 {2}，目标主机 {3}'.format(now, switch_run_id, action_text, target_host_id))
         self._appendLog(log_path, '[{0}] [system] [pending] {1}'.format(now, self._switchOptionsSummary(options)))
+        if execution_monitor_id != monitor_id:
+            self._appendLog(log_path, '[{0}] [system] [pending] 当前江湖云监控不可直接执行，任务将同步到执行方江湖云监控 {1}；原因：{2}'.format(now, execution_monitor_id, dispatch_reason or '对端有可执行插件'))
+        run = self._getRun(switch_run_id)
+        self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_switch_run', switch_run_id, {'run': self._normalizeRun(run)})
+        self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_pair', pair_id, {'pair': self._getPair(pair_id)})
         return {'switch_run_id': switch_run_id, 'log_path': log_path}
 
     def ensureHaSchema(self):
@@ -294,6 +373,82 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
   pair_id TEXT,
   addtime INTEGER
 )
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_monitor_identity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  monitor_id TEXT,
+  monitor_name TEXT,
+  addtime TEXT,
+  update_time TEXT
+)
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_sync_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id TEXT,
+  sync_name TEXT,
+  sync_type TEXT DEFAULT 'ha_management',
+  peer_monitor_url TEXT,
+  peer_monitor_id TEXT,
+  peer_monitor_name TEXT,
+  sync_secret TEXT,
+  enabled INTEGER DEFAULT 0,
+  last_sync_at TEXT,
+  last_error TEXT,
+  status TEXT,
+  addtime TEXT,
+  update_time TEXT
+)
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_sync_event (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT,
+  sync_type TEXT,
+  source_monitor_id TEXT,
+  source_monitor_name TEXT,
+  event_type TEXT,
+  object_key TEXT,
+  payload_json TEXT,
+  seq INTEGER DEFAULT 0,
+  addtime TEXT
+)
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_sync_cursor (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id TEXT,
+  sync_type TEXT,
+  peer_monitor_id TEXT,
+  last_seq INTEGER DEFAULT 0,
+  last_event_id TEXT,
+  last_sync_at TEXT,
+  last_error TEXT,
+  addtime TEXT,
+  update_time TEXT
+)
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_sync_applied (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT,
+  sync_id TEXT,
+  sync_type TEXT,
+  source_monitor_id TEXT,
+  object_key TEXT,
+  status TEXT,
+  error_msg TEXT,
+  addtime TEXT
+)
+""",
+            """
+CREATE TABLE IF NOT EXISTS ha_sync_nonce (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nonce TEXT,
+  sync_id TEXT,
+  addtime INTEGER
+)
 """
         ]
         for sql in statements:
@@ -306,7 +461,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'actual_master_host_id': 'TEXT', 'status': "TEXT DEFAULT 'unknown'", 'status_text': 'TEXT',
                 'last_report_at': 'TEXT', 'current_switch_run_id': 'TEXT', 'callback_url': 'TEXT',
                 'callback_enabled': 'INTEGER DEFAULT 0', 'callback_status': 'TEXT', 'api_secret': 'TEXT',
-                'sort_id': 'INTEGER DEFAULT 0', 'addtime': 'TEXT', 'update_time': 'TEXT'
+                'sort_id': 'INTEGER DEFAULT 0', 'source_monitor_id': 'TEXT', 'sync_update_at': 'TEXT',
+                'addtime': 'TEXT', 'update_time': 'TEXT'
             },
             'ha_host_state': {
                 'pair_id': 'TEXT', 'host_id': 'TEXT', 'host_name': 'TEXT', 'host_ip': 'TEXT',
@@ -314,7 +470,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'collect_status': "TEXT DEFAULT 'unknown'", 'collect_method': 'TEXT', 'report_host_id': 'TEXT',
                 'site_scope': 'TEXT', 'health_detail': 'TEXT', 'switch_run_id': 'TEXT', 'switch_phase': 'TEXT', 'switch_status': 'TEXT',
                 'current_step': 'TEXT', 'next_step': 'TEXT', 'last_error': 'TEXT', 'log_path': 'TEXT',
-                'last_report_at': 'TEXT', 'report_batch_id': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
+                'last_report_at': 'TEXT', 'report_batch_id': 'TEXT', 'source_monitor_id': 'TEXT',
+                'sync_update_at': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
             },
             'ha_switch_run': {
                 'switch_run_id': 'TEXT', 'pair_id': 'TEXT', 'old_master_host_id': 'TEXT',
@@ -322,7 +479,10 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'status': "TEXT DEFAULT 'pending'", 'current_phase': 'TEXT', 'current_step': 'TEXT',
                 'next_step': 'TEXT', 'last_error': 'TEXT', 'step_summary': 'TEXT', 'log_path': 'TEXT',
                 'callback_status': 'TEXT', 'callback_error': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT',
-                'finish_time': 'TEXT'
+                'finish_time': 'TEXT', 'origin_monitor_id': 'TEXT', 'execution_monitor_id': 'TEXT',
+                'claimed_by_host_id': 'TEXT', 'claim_token': 'TEXT', 'claim_expire_at': 'INTEGER DEFAULT 0',
+                'sync_status': 'TEXT', 'dispatchable': 'INTEGER DEFAULT 1', 'dispatch_reason': 'TEXT',
+                'source_monitor_id': 'TEXT', 'sync_update_at': 'TEXT'
             },
             'ha_switch_event': {
                 'switch_run_id': 'TEXT', 'pair_id': 'TEXT', 'event_id': 'TEXT', 'origin_host_id': 'TEXT',
@@ -340,7 +500,27 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                 'error_msg': 'TEXT', 'request_body': 'TEXT', 'response_body': 'TEXT', 'addtime': 'TEXT',
                 'update_time': 'TEXT'
             },
-            'ha_api_nonce': {'nonce': 'TEXT', 'pair_id': 'TEXT', 'addtime': 'INTEGER'}
+            'ha_api_nonce': {'nonce': 'TEXT', 'pair_id': 'TEXT', 'addtime': 'INTEGER'},
+            'ha_monitor_identity': {'monitor_id': 'TEXT', 'monitor_name': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'},
+            'ha_sync_config': {
+                'sync_id': 'TEXT', 'sync_name': 'TEXT', 'sync_type': "TEXT DEFAULT 'ha_management'",
+                'peer_monitor_url': 'TEXT', 'peer_monitor_id': 'TEXT', 'peer_monitor_name': 'TEXT',
+                'sync_secret': 'TEXT', 'enabled': 'INTEGER DEFAULT 0', 'last_sync_at': 'TEXT',
+                'last_error': 'TEXT', 'status': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
+            },
+            'ha_sync_event': {
+                'event_id': 'TEXT', 'sync_type': 'TEXT', 'source_monitor_id': 'TEXT', 'source_monitor_name': 'TEXT',
+                'event_type': 'TEXT', 'object_key': 'TEXT', 'payload_json': 'TEXT', 'seq': 'INTEGER DEFAULT 0', 'addtime': 'TEXT'
+            },
+            'ha_sync_cursor': {
+                'sync_id': 'TEXT', 'sync_type': 'TEXT', 'peer_monitor_id': 'TEXT', 'last_seq': 'INTEGER DEFAULT 0',
+                'last_event_id': 'TEXT', 'last_sync_at': 'TEXT', 'last_error': 'TEXT', 'addtime': 'TEXT', 'update_time': 'TEXT'
+            },
+            'ha_sync_applied': {
+                'event_id': 'TEXT', 'sync_id': 'TEXT', 'sync_type': 'TEXT', 'source_monitor_id': 'TEXT',
+                'object_key': 'TEXT', 'status': 'TEXT', 'error_msg': 'TEXT', 'addtime': 'TEXT'
+            },
+            'ha_sync_nonce': {'nonce': 'TEXT', 'sync_id': 'TEXT', 'addtime': 'INTEGER'}
         }
         for table, columns in table_columns.items():
             info = db.originExecute('PRAGMA table_info({0})'.format(table))
@@ -360,7 +540,14 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_switch_event_seq ON ha_switch_event(switch_run_id,origin_host_id,seq)',
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_alert_event_event_id ON ha_alert_event(event_id)',
             'CREATE INDEX IF NOT EXISTS idx_ha_alert_event_pair_time ON ha_alert_event(pair_id,addtime)',
-            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_api_nonce_nonce ON ha_api_nonce(nonce)'
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_api_nonce_nonce ON ha_api_nonce(nonce)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_monitor_identity_id ON ha_monitor_identity(monitor_id)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_sync_config_sync_id ON ha_sync_config(sync_id)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_sync_event_event_id ON ha_sync_event(event_id)',
+            'CREATE INDEX IF NOT EXISTS idx_ha_sync_event_type_seq ON ha_sync_event(sync_type,seq)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_sync_cursor_key ON ha_sync_cursor(sync_id,sync_type)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_sync_applied_event ON ha_sync_applied(event_id)',
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_ha_sync_nonce_nonce ON ha_sync_nonce(nonce)'
         ]
         for sql in indexes:
             try:
@@ -368,6 +555,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             except Exception:
                 pass
         self._ensurePairSortOrder()
+        self._ensureMonitorIdentity()
         return True
 
     def _ensurePairSortOrder(self):
@@ -399,6 +587,649 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             return (int(row[0]) if row and row[0] else 0) + 1
         except Exception:
             return 1
+
+    def _ensureMonitorIdentity(self):
+        row = jh.M('ha_monitor_identity').field('id,monitor_id,monitor_name').order('id asc').limit('1').find()
+        now = self._now()
+        if isinstance(row, dict) and row.get('monitor_id'):
+            monitor_name = row.get('monitor_name') or jh.getConfig('title') or '江湖云监控'
+            if monitor_name != row.get('monitor_name'):
+                jh.M('ha_monitor_identity').where('id=?', (row.get('id'),)).save('monitor_name,update_time', (monitor_name, now))
+            return {'monitor_id': row.get('monitor_id'), 'monitor_name': monitor_name}
+        monitor_id = self._monitorId()
+        monitor_name = jh.getConfig('title') or '江湖云监控'
+        jh.M('ha_monitor_identity').add('monitor_id,monitor_name,addtime,update_time', (monitor_id, monitor_name, now, now))
+        return {'monitor_id': monitor_id, 'monitor_name': monitor_name}
+
+    def _localMonitor(self):
+        self.ensureHaSchema()
+        return self._ensureMonitorIdentity()
+
+    def _appendSyncLog(self, line):
+        if not os.path.exists(self.SYNC_LOG_ROOT):
+            os.makedirs(self.SYNC_LOG_ROOT, mode=0o755, exist_ok=True)
+        log_path = os.path.join(self.SYNC_LOG_ROOT, time.strftime('%Y-%m') + '.log')
+        with open(log_path, 'a', encoding='utf-8') as fp:
+            fp.write('[{0}] {1}\n'.format(self._now(), line.rstrip('\n')))
+
+    def _getSyncConfig(self, sync_id):
+        row = jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).field(self.sync_config_fields).find()
+        return row if isinstance(row, dict) else {}
+
+    def _normalizeSyncConfig(self, row):
+        return {
+            'id': row.get('id') or '',
+            'sync_id': row.get('sync_id') or '',
+            'sync_name': row.get('sync_name') or '',
+            'sync_type': row.get('sync_type') or self.DEFAULT_SYNC_TYPE,
+            'peer_monitor_url': row.get('peer_monitor_url') or '',
+            'peer_monitor_id': row.get('peer_monitor_id') or '',
+            'peer_monitor_name': row.get('peer_monitor_name') or '',
+            'enabled': self._safeInt(row.get('enabled'), 0) == 1,
+            'last_sync_at': row.get('last_sync_at') or '',
+            'last_error': row.get('last_error') or '',
+            'status': row.get('status') or '',
+            'addtime': row.get('addtime') or '',
+            'update_time': row.get('update_time') or ''
+        }
+
+    def _normalizeSyncType(self, value):
+        value = self._safeText(value or self.DEFAULT_SYNC_TYPE, 64)
+        if value != self.DEFAULT_SYNC_TYPE:
+            return ''
+        return value
+
+    def _normalizePeerUrl(self, value):
+        value = self._safeText(value, 512).rstrip('/')
+        if value and not value.startswith('http://') and not value.startswith('https://'):
+            value = 'http://' + value
+        return value
+
+    def _bodyHash(self, payload):
+        body = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+        return hashlib.sha256(body.encode('utf-8')).hexdigest()
+
+    def _syncSignatureHeaders(self, payload, secret):
+        timestamp = str(int(time.time()))
+        nonce = '{0}_{1}'.format(timestamp, jh.getRandomString(16))
+        body_hash = self._bodyHash(payload)
+        sign_text = '\n'.join([timestamp, nonce, body_hash])
+        signature = hmac.new(str(secret).encode('utf-8'), sign_text.encode('utf-8'), hashlib.sha256).hexdigest()
+        return {
+            'Content-Type': 'application/json',
+            'X-JHM-Timestamp': timestamp,
+            'X-JHM-Nonce': nonce,
+            'X-JHM-Body-Hash': body_hash,
+            'X-JHM-Signature': signature
+        }
+
+    def _postSyncJson(self, sync_config, path, payload, timeout=10):
+        url = self._normalizePeerUrl(sync_config.get('peer_monitor_url')) + path
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        headers = self._syncSignatureHeaders(payload, sync_config.get('sync_secret') or '')
+        req = urllib.request.Request(url, data=body, headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content = resp.read().decode('utf-8', errors='replace')
+        return self._jsonLoads(content, {})
+
+    def _verifyMonitorSyncRequest(self, payload):
+        sync_id = self._safeText(payload.get('sync_id'), 128)
+        timestamp = self._safeText(request.headers.get('X-JHM-Timestamp') or payload.get('timestamp'), 32)
+        nonce = self._safeText(request.headers.get('X-JHM-Nonce') or payload.get('nonce'), 128)
+        signature = self._safeText(request.headers.get('X-JHM-Signature') or payload.get('signature'), 128)
+        body_hash = self._safeText(request.headers.get('X-JHM-Body-Hash') or payload.get('body_hash'), 128)
+        if not timestamp or not nonce or not signature:
+            return False, '签名参数不完整', {}
+        try:
+            ts = int(timestamp)
+        except Exception:
+            return False, 'timestamp无效', {}
+        if abs(int(time.time()) - ts) > self.NONCE_TTL_SECONDS:
+            return False, 'timestamp已过期', {}
+        expected_body_hash = self._bodyHash(payload)
+        if body_hash and body_hash != expected_body_hash:
+            return False, 'body_hash不匹配', {}
+        sign_text = '\n'.join([timestamp, nonce, body_hash or expected_body_hash])
+        candidates = []
+        if sync_id:
+            sync_config = self._getSyncConfig(sync_id)
+            if sync_config:
+                candidates.append(sync_config)
+        if not candidates:
+            sync_type = self._normalizeSyncType(payload.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+            rows = jh.M('ha_sync_config').where('enabled=? AND sync_type=?', (1, sync_type)).field(self.sync_config_fields).select()
+            candidates = rows if isinstance(rows, list) else []
+        sync_config = {}
+        for item in candidates:
+            if self._safeInt(item.get('enabled'), 0) != 1:
+                continue
+            expected = hmac.new(str(item.get('sync_secret') or '').encode('utf-8'), sign_text.encode('utf-8'), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(signature, expected):
+                sync_config = item
+                break
+        if not sync_config:
+            return False, '同步配置不存在或签名错误', {}
+        exists = jh.M('ha_sync_nonce').where('nonce=?', (nonce,)).field('id').find()
+        if isinstance(exists, dict) and exists.get('id'):
+            return False, 'nonce已使用', sync_config
+        now = int(time.time())
+        jh.M('ha_sync_nonce').add('nonce,sync_id,addtime', (nonce, sync_config.get('sync_id') or sync_id, now))
+        try:
+            jh.M('ha_sync_nonce').where('addtime<?', (now - self.NONCE_TTL_SECONDS,)).delete()
+        except Exception:
+            pass
+        return True, 'ok', sync_config
+
+    def _writeSyncEvent(self, sync_type, event_type, object_key, payload):
+        sync_type = self._normalizeSyncType(sync_type)
+        if not sync_type:
+            return ''
+        monitor = self._localMonitor()
+        event_id = self._syncEventId()
+        seq_row = jh.M('ha_sync_event').originExecute('SELECT MAX(seq) FROM ha_sync_event WHERE sync_type=?', (sync_type,)).fetchone()
+        seq = (int(seq_row[0]) if seq_row and seq_row[0] else 0) + 1
+        now = self._now()
+        full_payload = dict(payload or {})
+        full_payload['_sync_meta'] = {
+            'event_id': event_id,
+            'sync_type': sync_type,
+            'event_type': event_type,
+            'source_monitor_id': monitor.get('monitor_id'),
+            'source_monitor_name': monitor.get('monitor_name'),
+            'seq': seq,
+            'addtime': now
+        }
+        jh.M('ha_sync_event').add(
+            'event_id,sync_type,source_monitor_id,source_monitor_name,event_type,object_key,payload_json,seq,addtime',
+            (event_id, sync_type, monitor.get('monitor_id'), monitor.get('monitor_name'), event_type, object_key, json.dumps(full_payload, ensure_ascii=False), seq, now)
+        )
+        return event_id
+
+    def getMonitorIdentityApi(self):
+        return jh.returnJson(True, 'ok', self._localMonitor())
+
+    def getSyncConfigListApi(self):
+        self.ensureHaSchema()
+        rows = jh.M('ha_sync_config').field(self.sync_config_fields).order('id desc').select()
+        if not isinstance(rows, list):
+            rows = []
+        return jh.returnJson(True, 'ok', {
+            'monitor': self._localMonitor(),
+            'list': [self._normalizeSyncConfig(row) for row in rows]
+        })
+
+    def saveSyncConfigApi(self):
+        self.ensureHaSchema()
+        sync_id = self._safeText(request.form.get('sync_id'), 128)
+        sync_name = self._safeText(request.form.get('sync_name'), 128)
+        sync_type = self._normalizeSyncType(request.form.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+        peer_monitor_url = self._normalizePeerUrl(request.form.get('peer_monitor_url'))
+        peer_monitor_id = self._safeText(request.form.get('peer_monitor_id'), 128)
+        peer_monitor_name = self._safeText(request.form.get('peer_monitor_name'), 128)
+        sync_secret = self._safeText(request.form.get('sync_secret'), 255)
+        enabled = 1 if self._boolValue(request.form.get('enabled', '0')) else 0
+        if not sync_name:
+            return jh.returnJson(False, '同步名称不能为空')
+        if not sync_type:
+            return jh.returnJson(False, '同步类型暂只支持 ha_management')
+        if not peer_monitor_url:
+            return jh.returnJson(False, '对端江湖云监控地址不能为空')
+        now = self._now()
+        if sync_id:
+            exists = self._getSyncConfig(sync_id)
+            if not exists:
+                return jh.returnJson(False, '同步配置不存在')
+            if not sync_secret:
+                sync_secret = exists.get('sync_secret') or ''
+        if not sync_secret:
+            return jh.returnJson(False, '同步密钥不能为空')
+        if sync_id:
+            jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).save(
+                'sync_name,sync_type,peer_monitor_url,peer_monitor_id,peer_monitor_name,sync_secret,enabled,update_time',
+                (sync_name, sync_type, peer_monitor_url, peer_monitor_id, peer_monitor_name, sync_secret, enabled, now)
+            )
+        else:
+            sync_id = self._syncId()
+            jh.M('ha_sync_config').add(
+                'sync_id,sync_name,sync_type,peer_monitor_url,peer_monitor_id,peer_monitor_name,sync_secret,enabled,status,addtime,update_time',
+                (sync_id, sync_name, sync_type, peer_monitor_url, peer_monitor_id, peer_monitor_name, sync_secret, enabled, 'pending', now, now)
+            )
+        return jh.returnJson(True, '同步配置已保存', self._normalizeSyncConfig(self._getSyncConfig(sync_id)))
+
+    def deleteSyncConfigApi(self):
+        self.ensureHaSchema()
+        sync_id = self._safeText(request.form.get('sync_id'), 128)
+        if not sync_id:
+            return jh.returnJson(False, 'sync_id不能为空')
+        jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).delete()
+        jh.M('ha_sync_cursor').where('sync_id=?', (sync_id,)).delete()
+        return jh.returnJson(True, '同步配置已删除')
+
+    def setSyncEnabledApi(self):
+        self.ensureHaSchema()
+        sync_id = self._safeText(request.form.get('sync_id'), 128)
+        enabled = 1 if self._boolValue(request.form.get('enabled', '0')) else 0
+        if not self._getSyncConfig(sync_id):
+            return jh.returnJson(False, '同步配置不存在')
+        jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).save('enabled,update_time', (enabled, self._now()))
+        return jh.returnJson(True, '同步配置已更新')
+
+    def testSyncConfigApi(self):
+        self.ensureHaSchema()
+        sync_id = self._safeText(request.form.get('sync_id'), 128)
+        sync_config = self._getSyncConfig(sync_id)
+        if not sync_config:
+            form_secret = self._safeText(request.form.get('sync_secret'), 255)
+            sync_config = {
+                'sync_id': sync_id or 'handshake_test',
+                'sync_secret': form_secret,
+                'peer_monitor_url': self._normalizePeerUrl(request.form.get('peer_monitor_url')),
+                'sync_type': self._normalizeSyncType(request.form.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+            }
+        ok, msg, data = self._handshakeSyncConfig(sync_config)
+        return jh.returnJson(ok, msg, data)
+
+    def runSyncNowApi(self):
+        self.ensureHaSchema()
+        sync_id = self._safeText(request.form.get('sync_id'), 128)
+        result = self.runMonitorSync(sync_id=sync_id)
+        return jh.returnJson(result.get('status') in ('ok', 'partial'), result.get('msg') or '同步完成', result)
+
+    def _handshakeSyncConfig(self, sync_config):
+        if not sync_config.get('peer_monitor_url') or not sync_config.get('sync_secret'):
+            return False, '请先填写对端地址和同步密钥', {}
+        monitor = self._localMonitor()
+        payload = {
+            'sync_id': sync_config.get('sync_id'),
+            'sync_type': sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE,
+            'monitor_id': monitor.get('monitor_id'),
+            'monitor_name': monitor.get('monitor_name'),
+            'sync_version': self.MONITOR_SYNC_VERSION
+        }
+        try:
+            result = self._postSyncJson(sync_config, '/pub/ha_monitor_sync_handshake', payload)
+            if not result.get('status'):
+                return False, result.get('msg') or '握手失败', result
+            data = result.get('data') or {}
+            if sync_config.get('sync_id') and sync_config.get('sync_id') != 'handshake_test':
+                now = self._now()
+                jh.M('ha_sync_config').where('sync_id=?', (sync_config.get('sync_id'),)).save(
+                    'peer_monitor_id,peer_monitor_name,last_error,status,update_time',
+                    (data.get('monitor_id') or '', data.get('monitor_name') or '', '', 'handshake_ok', now)
+                )
+            return True, '握手成功', data
+        except Exception as e:
+            msg = str(e)
+            if sync_config.get('sync_id') and sync_config.get('sync_id') != 'handshake_test':
+                jh.M('ha_sync_config').where('sync_id=?', (sync_config.get('sync_id'),)).save('last_error,status,update_time', (msg, 'handshake_failed', self._now()))
+            return False, '握手失败: ' + msg, {}
+
+    def publicMonitorSyncHandshake(self):
+        self.ensureHaSchema()
+        payload = self._bodyJson()
+        ok, msg, sync_config = self._verifyMonitorSyncRequest(payload)
+        if not ok:
+            return jh.returnJson(False, msg)
+        peer_monitor_id = self._safeText(payload.get('monitor_id'), 128)
+        peer_monitor_name = self._safeText(payload.get('monitor_name'), 128)
+        if peer_monitor_id or peer_monitor_name:
+            jh.M('ha_sync_config').where('sync_id=?', (sync_config.get('sync_id'),)).save(
+                'peer_monitor_id,peer_monitor_name,status,last_error,update_time',
+                (peer_monitor_id, peer_monitor_name, 'handshake_ok', '', self._now())
+            )
+        monitor = self._localMonitor()
+        return jh.returnJson(True, 'ok', {
+            'monitor_id': monitor.get('monitor_id'),
+            'monitor_name': monitor.get('monitor_name'),
+            'sync_version': self.MONITOR_SYNC_VERSION,
+            'sync_type': payload.get('sync_type') or self.DEFAULT_SYNC_TYPE
+        })
+
+    def publicMonitorSyncPull(self):
+        self.ensureHaSchema()
+        payload = self._bodyJson()
+        ok, msg, sync_config = self._verifyMonitorSyncRequest(payload)
+        if not ok:
+            return jh.returnJson(False, msg)
+        sync_type = self._normalizeSyncType(payload.get('sync_type') or sync_config.get('sync_type'))
+        if not sync_type:
+            return jh.returnJson(False, '同步类型暂只支持 ha_management')
+        after_seq = max(0, self._safeInt(payload.get('after_seq'), 0))
+        limit = max(1, min(200, self._safeInt(payload.get('limit'), 100)))
+        local_monitor = self._localMonitor()
+        rows = jh.M('ha_sync_event').where('sync_type=? AND seq>? AND source_monitor_id!=?', (sync_type, after_seq, payload.get('monitor_id') or '')).field(self.sync_event_fields).order('seq asc,id asc').limit(str(limit)).select()
+        if not isinstance(rows, list):
+            rows = []
+        events = []
+        max_seq = after_seq
+        for row in rows:
+            max_seq = max(max_seq, self._safeInt(row.get('seq'), 0))
+            events.append({
+                'event_id': row.get('event_id') or '',
+                'sync_type': row.get('sync_type') or '',
+                'source_monitor_id': row.get('source_monitor_id') or '',
+                'source_monitor_name': row.get('source_monitor_name') or '',
+                'event_type': row.get('event_type') or '',
+                'object_key': row.get('object_key') or '',
+                'payload': self._jsonLoads(row.get('payload_json'), {}),
+                'seq': self._safeInt(row.get('seq'), 0),
+                'addtime': row.get('addtime') or ''
+            })
+        return jh.returnJson(True, 'ok', {
+            'monitor_id': local_monitor.get('monitor_id'),
+            'monitor_name': local_monitor.get('monitor_name'),
+            'sync_type': sync_type,
+            'after_seq': after_seq,
+            'max_seq': max_seq,
+            'has_more': len(events) >= limit,
+            'events': events
+        })
+
+    def publicMonitorSyncAck(self):
+        self.ensureHaSchema()
+        payload = self._bodyJson()
+        ok, msg, sync_config = self._verifyMonitorSyncRequest(payload)
+        if not ok:
+            return jh.returnJson(False, msg)
+        return jh.returnJson(True, 'ok', {
+            'monitor_id': self._localMonitor().get('monitor_id'),
+            'acked_seq': self._safeInt(payload.get('acked_seq'), 0),
+            'sync_type': payload.get('sync_type') or sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
+        })
+
+    def _cursorForConfig(self, sync_config):
+        sync_id = sync_config.get('sync_id')
+        sync_type = sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
+        row = jh.M('ha_sync_cursor').where('sync_id=? AND sync_type=?', (sync_id, sync_type)).field('id,sync_id,sync_type,peer_monitor_id,last_seq,last_event_id,last_sync_at,last_error,addtime,update_time').find()
+        if isinstance(row, dict) and row.get('id'):
+            return row
+        now = self._now()
+        jh.M('ha_sync_cursor').add('sync_id,sync_type,peer_monitor_id,last_seq,last_event_id,addtime,update_time', (sync_id, sync_type, sync_config.get('peer_monitor_id') or '', 0, '', now, now))
+        return jh.M('ha_sync_cursor').where('sync_id=? AND sync_type=?', (sync_id, sync_type)).field('id,sync_id,sync_type,peer_monitor_id,last_seq,last_event_id,last_sync_at,last_error,addtime,update_time').find()
+
+    def runMonitorSync(self, sync_id=''):
+        self.ensureHaSchema()
+        if sync_id:
+            rows = [self._getSyncConfig(sync_id)]
+        else:
+            rows = jh.M('ha_sync_config').where('enabled=?', (1,)).field(self.sync_config_fields).select()
+        if not isinstance(rows, list):
+            rows = []
+        rows = [row for row in rows if isinstance(row, dict) and row.get('sync_id')]
+        results = []
+        ok_count = 0
+        for sync_config in rows:
+            if self._safeInt(sync_config.get('enabled'), 0) != 1:
+                continue
+            item = self._runOneMonitorSync(sync_config)
+            results.append(item)
+            if item.get('status') == 'ok':
+                ok_count += 1
+        status = 'ok' if ok_count == len(results) else ('partial' if ok_count > 0 else 'failed')
+        if not results:
+            status = 'ok'
+        return {'status': status, 'msg': '同步完成', 'items': results}
+
+    def _runOneMonitorSync(self, sync_config):
+        sync_id = sync_config.get('sync_id')
+        sync_type = sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
+        cursor = self._cursorForConfig(sync_config)
+        after_seq = self._safeInt(cursor.get('last_seq'), 0)
+        monitor = self._localMonitor()
+        payload = {
+            'sync_id': sync_id,
+            'sync_type': sync_type,
+            'monitor_id': monitor.get('monitor_id'),
+            'monitor_name': monitor.get('monitor_name'),
+            'after_seq': after_seq,
+            'limit': 100
+        }
+        try:
+            result = self._postSyncJson(sync_config, '/pub/ha_monitor_sync_pull', payload, timeout=15)
+            if not result.get('status'):
+                raise Exception(result.get('msg') or 'pull failed')
+            data = result.get('data') or {}
+            events = data.get('events') if isinstance(data.get('events'), list) else []
+            max_seq = after_seq
+            for event in events:
+                self._applySyncEvent(sync_config, event)
+                max_seq = max(max_seq, self._safeInt(event.get('seq'), 0))
+            now = self._now()
+            jh.M('ha_sync_cursor').where('sync_id=? AND sync_type=?', (sync_id, sync_type)).save(
+                'peer_monitor_id,last_seq,last_event_id,last_sync_at,last_error,update_time',
+                (data.get('monitor_id') or sync_config.get('peer_monitor_id') or '', max_seq, events[-1].get('event_id') if events else cursor.get('last_event_id') or '', now, '', now)
+            )
+            jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).save(
+                'peer_monitor_id,peer_monitor_name,last_sync_at,last_error,status,update_time',
+                (data.get('monitor_id') or sync_config.get('peer_monitor_id') or '', data.get('monitor_name') or sync_config.get('peer_monitor_name') or '', now, '', 'ok', now)
+            )
+            if events:
+                try:
+                    self._postSyncJson(sync_config, '/pub/ha_monitor_sync_ack', {
+                        'sync_id': sync_id,
+                        'sync_type': sync_type,
+                        'monitor_id': monitor.get('monitor_id'),
+                        'monitor_name': monitor.get('monitor_name'),
+                        'acked_seq': max_seq
+                    }, timeout=8)
+                except Exception:
+                    pass
+            self._appendSyncLog('sync ok sync_id={0} type={1} events={2} seq={3}->{4}'.format(sync_id, sync_type, len(events), after_seq, max_seq))
+            return {'sync_id': sync_id, 'status': 'ok', 'count': len(events), 'last_seq': max_seq}
+        except Exception as e:
+            msg = str(e)
+            now = self._now()
+            jh.M('ha_sync_cursor').where('sync_id=? AND sync_type=?', (sync_id, sync_type)).save('last_error,update_time', (msg, now))
+            jh.M('ha_sync_config').where('sync_id=?', (sync_id,)).save('last_error,status,update_time', (msg, 'failed', now))
+            self._appendSyncLog('sync failed sync_id={0} type={1} after_seq={2} error={3}'.format(sync_id, sync_type, after_seq, msg))
+            return {'sync_id': sync_id, 'status': 'failed', 'error': msg, 'last_seq': after_seq}
+
+    def _applySyncEvent(self, sync_config, event):
+        event_id = self._safeText(event.get('event_id'), 128)
+        if not event_id:
+            raise Exception('同步事件缺少 event_id')
+        exists = jh.M('ha_sync_applied').where('event_id=?', (event_id,)).field('id').find()
+        if isinstance(exists, dict) and exists.get('id'):
+            return False
+        payload = event.get('payload') if isinstance(event.get('payload'), dict) else {}
+        event_type = self._safeText(event.get('event_type'), 64)
+        if event_type == 'ha_pair':
+            self._applySyncPair(payload, event)
+        elif event_type == 'ha_host_state':
+            self._applySyncHostState(payload, event)
+        elif event_type == 'ha_switch_run':
+            self._applySyncSwitchRun(payload, event)
+        elif event_type == 'ha_switch_event':
+            self._applySyncSwitchEvent(payload, event)
+        elif event_type == 'ha_alert_event':
+            self._applySyncAlertEvent(payload, event)
+        else:
+            raise Exception('不支持的同步事件类型: ' + event_type)
+        jh.M('ha_sync_applied').add('event_id,sync_id,sync_type,source_monitor_id,object_key,status,error_msg,addtime', (event_id, sync_config.get('sync_id'), event.get('sync_type') or self.DEFAULT_SYNC_TYPE, event.get('source_monitor_id') or '', event.get('object_key') or '', 'success', '', self._now()))
+        return True
+
+    def _sourceMeta(self, event):
+        return event.get('source_monitor_id') or '', self._now()
+
+    def _applySyncPair(self, payload, event):
+        pair = payload.get('pair') if isinstance(payload.get('pair'), dict) else payload
+        pair_id = self._safeText(pair.get('pair_id'), 128)
+        if not pair_id:
+            return
+        source_monitor_id, sync_update_at = self._sourceMeta(event)
+        now = self._now()
+        fields = {
+            'pair_name': self._safeText(pair.get('pair_name'), 128),
+            'desired_master_host_id': self._safeText(pair.get('desired_master_host_id'), 128),
+            'actual_master_host_id': self._safeText(pair.get('actual_master_host_id'), 128),
+            'status': self._safeText(pair.get('status') or 'unknown', 32),
+            'status_text': self._safeText(pair.get('status_text'), 512),
+            'last_report_at': self._safeText(pair.get('last_report_at'), 32),
+            'current_switch_run_id': self._safeText(pair.get('current_switch_run_id'), 128),
+            'callback_url': self._safeText(pair.get('callback_url'), 512),
+            'callback_enabled': self._safeInt(pair.get('callback_enabled'), 0),
+            'callback_status': self._safeText(pair.get('callback_status'), 64),
+            'api_secret': self._safeText(pair.get('api_secret'), 128),
+            'source_monitor_id': source_monitor_id,
+            'sync_update_at': sync_update_at,
+            'update_time': now
+        }
+        exists = self._getPair(pair_id)
+        if exists:
+            if self._reportTimestamp(fields) < self._reportTimestamp(exists):
+                return
+            keys = ','.join(fields.keys())
+            jh.M('ha_pair').where('pair_id=?', (pair_id,)).save(keys, tuple(fields.values()))
+        else:
+            sort_id = self._nextPairSortId()
+            jh.M('ha_pair').add(
+                'pair_id,pair_name,desired_master_host_id,actual_master_host_id,status,status_text,last_report_at,current_switch_run_id,callback_url,callback_enabled,callback_status,api_secret,sort_id,source_monitor_id,sync_update_at,addtime,update_time',
+                (pair_id, fields['pair_name'], fields['desired_master_host_id'], fields['actual_master_host_id'], fields['status'], fields['status_text'], fields['last_report_at'], fields['current_switch_run_id'], fields['callback_url'], fields['callback_enabled'], fields['callback_status'], fields['api_secret'] or self.DEFAULT_SECRET, sort_id, source_monitor_id, sync_update_at, now, now)
+            )
+
+    def _applySyncHostState(self, payload, event):
+        state = payload.get('state') if isinstance(payload.get('state'), dict) else payload
+        pair_id = self._safeText(state.get('pair_id'), 128)
+        host_id = self._safeText(state.get('host_id'), 128)
+        if not pair_id or not host_id:
+            return
+        exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field(self.state_fields).find()
+        if isinstance(exists, dict) and exists.get('id'):
+            new_ts = self._reportTimestamp(state)
+            old_ts = self._reportTimestamp(exists)
+            if new_ts < old_ts:
+                return
+            if new_ts == old_ts and exists.get('collect_method') == 'local' and state.get('collect_method') != 'local':
+                return
+        source_monitor_id, sync_update_at = self._sourceMeta(event)
+        now = self._now()
+        values = (
+            self._safeText(state.get('host_name') or state.get('name') or host_id, 128),
+            self._safeText(state.get('host_ip') or state.get('ip'), 64),
+            self._safeText(state.get('role') or 'unknown', 32),
+            self._safeText(state.get('online_status') or state.get('online') or 'unknown', 32),
+            self._safeText(state.get('health_status') or 'unknown', 32),
+            self._safeText(state.get('collect_status') or 'unknown', 32),
+            self._safeText(state.get('collect_method') or '', 32),
+            self._safeText(state.get('report_host_id') or '', 128),
+            self._safeText(state.get('site_scope') or '', 32),
+            state.get('health_detail') if isinstance(state.get('health_detail'), str) else json.dumps(state.get('health_detail') or {}, ensure_ascii=False),
+            self._safeText(state.get('switch_run_id') or '', 128),
+            self._safeText(state.get('switch_phase') or '', 64),
+            self._safeText(state.get('switch_status') or '', 64),
+            self._safeText(state.get('current_step') or '', 255),
+            self._safeText(state.get('next_step') or '', 255),
+            self._safeText(state.get('last_error') or '', 512),
+            self._safeText(state.get('log_path') or '', 512),
+            self._safeText(state.get('last_report_at') or now, 32),
+            self._safeText(state.get('report_batch_id') or '', 128),
+            source_monitor_id,
+            sync_update_at,
+            now
+        )
+        if isinstance(exists, dict) and exists.get('id'):
+            jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
+                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,source_monitor_id,sync_update_at,update_time', values
+            )
+        else:
+            jh.M('ha_host_state').add(
+                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,source_monitor_id,sync_update_at,addtime,update_time',
+                (pair_id, host_id) + values[:-1] + (now, values[-1])
+            )
+
+    def _applySyncSwitchRun(self, payload, event):
+        run = payload.get('run') if isinstance(payload.get('run'), dict) else payload
+        switch_run_id = self._safeText(run.get('switch_run_id'), 128)
+        if not switch_run_id:
+            return
+        pair_id = self._safeText(run.get('pair_id'), 128)
+        exists = self._getRun(switch_run_id)
+        source_monitor_id, sync_update_at = self._sourceMeta(event)
+        now = self._now()
+        origin_monitor_id = self._safeText(run.get('origin_monitor_id') or source_monitor_id, 128)
+        execution_monitor_id = self._safeText(run.get('execution_monitor_id') or origin_monitor_id, 128)
+        active = jh.M('ha_switch_run').where('pair_id=? AND switch_run_id!=? AND status IN (?,?,?,?,?,?,?)', (pair_id, switch_run_id, 'pending', 'pending_prepare', 'pending_finalize', 'pending_online', 'running', 'waiting_retry', 'prepare_success')).field('switch_run_id,status').find() if pair_id else {}
+        dispatchable = self._safeInt(run.get('dispatchable'), 1)
+        dispatch_reason = self._safeText(run.get('dispatch_reason') or '', 512)
+        status = self._safeText(run.get('status') or 'pending', 64)
+        if not exists and isinstance(active, dict) and active.get('switch_run_id'):
+            dispatchable = 0
+            status = 'conflict'
+            dispatch_reason = '同步任务与本地未完成切换任务冲突: {0}'.format(active.get('switch_run_id'))
+        values = (
+            pair_id,
+            self._safeText(run.get('old_master_host_id'), 128),
+            self._safeText(run.get('new_master_host_id'), 128),
+            self._safeText(run.get('desired_master_host_id'), 128),
+            run.get('options_json') if isinstance(run.get('options_json'), str) else json.dumps(run.get('options') or {}, ensure_ascii=False),
+            status,
+            self._safeText(run.get('current_phase'), 64),
+            self._safeText(run.get('current_step'), 255),
+            self._safeText(run.get('next_step'), 255),
+            self._safeText(run.get('last_error'), 1000),
+            run.get('step_summary') if isinstance(run.get('step_summary'), str) else json.dumps(run.get('step_summary') or [], ensure_ascii=False),
+            self._safeText(run.get('log_path') or self._monthLogPath(switch_run_id), 512),
+            self._safeText(run.get('callback_status'), 64),
+            self._safeText(run.get('callback_error'), 1000),
+            origin_monitor_id,
+            execution_monitor_id,
+            self._safeText(run.get('claimed_by_host_id'), 128),
+            self._safeText(run.get('claim_token'), 128),
+            self._safeInt(run.get('claim_expire_at'), 0),
+            self._safeText(run.get('sync_status') or 'synced', 64),
+            dispatchable,
+            dispatch_reason,
+            source_monitor_id,
+            sync_update_at,
+            self._safeText(run.get('finish_time'), 32),
+            now
+        )
+        if exists:
+            jh.M('ha_switch_run').where('switch_run_id=?', (switch_run_id,)).save(
+                'pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,last_error,step_summary,log_path,callback_status,callback_error,origin_monitor_id,execution_monitor_id,claimed_by_host_id,claim_token,claim_expire_at,sync_status,dispatchable,dispatch_reason,source_monitor_id,sync_update_at,finish_time,update_time', values
+            )
+        else:
+            jh.M('ha_switch_run').add(
+                'switch_run_id,pair_id,old_master_host_id,new_master_host_id,desired_master_host_id,options_json,status,current_phase,current_step,next_step,last_error,step_summary,log_path,callback_status,callback_error,origin_monitor_id,execution_monitor_id,claimed_by_host_id,claim_token,claim_expire_at,sync_status,dispatchable,dispatch_reason,source_monitor_id,sync_update_at,finish_time,addtime,update_time',
+                (switch_run_id,) + values + (now,)
+            )
+
+    def _applySyncSwitchEvent(self, payload, event):
+        row = payload.get('event') if isinstance(payload.get('event'), dict) else payload
+        event_id = self._safeText(row.get('event_id') or event.get('event_id'), 128)
+        switch_run_id = self._safeText(row.get('switch_run_id'), 128)
+        origin_host_id = self._safeText(row.get('origin_host_id') or row.get('host_id'), 128)
+        seq = self._safeInt(row.get('seq'), 0)
+        if event_id:
+            exists = jh.M('ha_switch_event').where('event_id=?', (event_id,)).field('id').find()
+        else:
+            exists = jh.M('ha_switch_event').where('switch_run_id=? AND origin_host_id=? AND seq=?', (switch_run_id, origin_host_id, seq)).field('id').find()
+            event_id = '{0}:{1}:{2}'.format(switch_run_id, origin_host_id, seq)
+        if isinstance(exists, dict) and exists.get('id'):
+            return
+        now = self._safeText(row.get('addtime'), 32) or self._now()
+        jh.M('ha_switch_event').add(
+            'switch_run_id,pair_id,event_id,origin_host_id,report_host_id,collect_method,seq,phase,step,status,log_text,addtime',
+            (switch_run_id, self._safeText(row.get('pair_id'), 128), event_id, origin_host_id, self._safeText(row.get('report_host_id'), 128), self._safeText(row.get('collect_method'), 32), seq, self._safeText(row.get('phase'), 64), self._safeText(row.get('step'), 255), self._safeText(row.get('status'), 64), self._safeText(row.get('log_text') or row.get('message'), 4000), now)
+        )
+        run = self._getRun(switch_run_id)
+        if run:
+            line = '[{0}] [{1}] [{2}] [{3}] {4}'.format(now, origin_host_id or 'sync', row.get('phase') or 'event', row.get('status') or 'info', row.get('log_text') or row.get('step') or '')
+            self._appendLog(run.get('log_path') or self._monthLogPath(switch_run_id), line)
+
+    def _applySyncAlertEvent(self, payload, event):
+        row = payload.get('alert') if isinstance(payload.get('alert'), dict) else payload
+        event_id = self._safeText(row.get('event_id') or event.get('event_id'), 128)
+        if not event_id:
+            return
+        exists = jh.M('ha_alert_event').where('event_id=?', (event_id,)).field('id').find()
+        if isinstance(exists, dict) and exists.get('id'):
+            return
+        alerts = row.get('alerts') if isinstance(row.get('alerts'), list) else self._jsonLoads(row.get('alerts_json'), [])
+        jh.M('ha_alert_event').add(
+            'pair_id,event_id,event_type,alert_key,alert_type,alert_level,status,title,message,sent_by_host_id,report_host_id,notifier_mode,alerts_json,addtime',
+            (self._safeText(row.get('pair_id'), 128), event_id, self._safeText(row.get('event_type'), 64), self._safeText(row.get('alert_key'), 255), self._safeText(row.get('alert_type'), 64), self._safeText(row.get('alert_level'), 32), self._safeText(row.get('status'), 32), self._safeText(row.get('title'), 255), self._safeText(row.get('message'), 4000), self._safeText(row.get('sent_by_host_id') or row.get('host_id'), 128), self._safeText(row.get('report_host_id') or row.get('host_id'), 128), self._safeText(row.get('notifier_mode'), 64), json.dumps(alerts, ensure_ascii=False), self._safeText(row.get('addtime'), 32) or self._now())
+        )
 
     def _getPair(self, pair_id):
         self.ensureHaSchema()
@@ -489,6 +1320,16 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'log_path': run.get('log_path') or '',
             'callback_status': run.get('callback_status') or '',
             'callback_error': run.get('callback_error') or '',
+            'origin_monitor_id': run.get('origin_monitor_id') or '',
+            'execution_monitor_id': run.get('execution_monitor_id') or '',
+            'claimed_by_host_id': run.get('claimed_by_host_id') or '',
+            'claim_token': run.get('claim_token') or '',
+            'claim_expire_at': self._safeInt(run.get('claim_expire_at'), 0),
+            'sync_status': run.get('sync_status') or '',
+            'dispatchable': self._safeInt(run.get('dispatchable'), 1),
+            'dispatch_reason': run.get('dispatch_reason') or '',
+            'source_monitor_id': run.get('source_monitor_id') or '',
+            'sync_update_at': run.get('sync_update_at') or '',
             'addtime': run.get('addtime') or '',
             'update_time': run.get('update_time') or '',
             'finish_time': run.get('finish_time') or ''
@@ -717,7 +1558,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             'next_step': row.get('next_step') or '',
             'last_error': row.get('last_error') or '',
             'log_path': row.get('log_path') or '',
-            'last_report_at': row.get('last_report_at') or ''
+            'last_report_at': row.get('last_report_at') or '',
+            'source_monitor_id': row.get('source_monitor_id') or '',
+            'sync_update_at': row.get('sync_update_at') or ''
         }
 
     def _stateFailover(self, row):
@@ -854,6 +1697,8 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         data['alert_events'] = []
         latest_alert_events = self._getAlertEvents(pair.get('pair_id'), 1)
         data['latest_alert_event'] = latest_alert_events[0] if latest_alert_events else {}
+        data['source_monitor_id'] = pair.get('source_monitor_id') or ''
+        data['sync_update_at'] = pair.get('sync_update_at') or ''
         if data['switch_run_id']:
             run = self._getRun(data['switch_run_id'])
             data['switch_run'] = self._normalizeRun(run)
@@ -1000,20 +1845,20 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('current_step,update_time', (step, now))
             return run.get('status') or 'running'
         if phase_status in ('failed', 'error'):
-            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,update_time', ('waiting_retry', phase, step, step, now))
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,claimed_by_host_id,claim_token,claim_expire_at,update_time', ('waiting_retry', phase, step, step, '', '', 0, now))
             return 'waiting_retry'
         if phase_status not in ('done', 'success'):
             jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,update_time', ('running', phase, step, now))
             return 'running'
         if phase == 'prepare_online':
-            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time,finish_time', ('prepare_success', phase, step or '预上线完成', '等待操作员执行正式上线', now, now))
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,claimed_by_host_id,claim_token,claim_expire_at,update_time,finish_time', ('prepare_success', phase, step or '预上线完成', '等待操作员执行正式上线', '', '', 0, now, now))
             jh.M('ha_pair').where('pair_id=?', (run.get('pair_id'),)).save('status,status_text,last_report_at,update_time', ('normal', '预上线完成，等待正式上线', now, now))
             return 'prepare_success'
         if phase == 'offline':
-            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,update_time', ('pending_online', 'online', '等待目标主机领取上线阶段', '目标主机正式上线', now))
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,next_step,claimed_by_host_id,claim_token,claim_expire_at,update_time', ('pending_online', 'online', '等待目标主机领取上线阶段', '目标主机正式上线', '', '', 0, now))
             return 'pending_online'
         if phase == 'online':
-            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,update_time,finish_time', ('success', phase, step or '正式上线完成', '', now, now))
+            jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save('status,current_phase,current_step,last_error,claimed_by_host_id,claim_token,claim_expire_at,update_time,finish_time', ('success', phase, step or '正式上线完成', '', '', '', 0, now, now))
             jh.M('ha_pair').where('pair_id=?', (run.get('pair_id'),)).save('actual_master_host_id,desired_master_host_id,current_switch_run_id,status,status_text,last_report_at,update_time', (run.get('new_master_host_id'), run.get('new_master_host_id'), '', 'normal', '状态正常', now, now))
             self._executeCallbacks(run.get('pair_id'), run.get('switch_run_id'))
             return 'success'
@@ -1032,8 +1877,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if action not in ('prepare', 'finalize'):
             return jh.returnJson(False, '切换动作无效')
         options = self._switchOptionsFromRequest()
+        execution_monitor_id, execution_reason = self._selectExecutionMonitor(pair_id, target_host_id)
         if action == 'prepare':
-            data = self._createSwitchRun(pair, target_host_id, 'prepare_online', '等待目标主机领取预上线阶段', '预上线完成后执行正式上线', 'pending_prepare', options, '预上线')
+            data = self._createSwitchRun(pair, target_host_id, 'prepare_online', '等待目标主机领取预上线阶段', '预上线完成后执行正式上线', 'pending_prepare', options, '预上线', execution_monitor_id=execution_monitor_id, dispatch_reason=execution_reason)
             return jh.returnJson(True, '预上线任务已创建', data)
         old_master_host_id = ''
         finalize_target_host_id = target_host_id
@@ -1054,12 +1900,14 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if old_master_host_id:
             if not should_promote_mysql:
                 options['promote_mysql'] = False
-            data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id)
+            execution_monitor_id, execution_reason = self._selectExecutionMonitor(pair_id, finalize_target_host_id)
+            data = self._createSwitchRun(pair, finalize_target_host_id, 'offline', '等待旧主机领取下线阶段', '目标主机上线阶段', 'pending_finalize', options, '正式上线', old_master_host_id, execution_monitor_id, execution_reason)
             if not should_promote_mysql:
                 self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 未检测到当前旧主机，按选择目标执行：目标主机正式上线，另一台主机下线，跳过数据库主从提升'.format(self._now()))
         else:
             options['promote_mysql'] = False
-            data = self._createSwitchRun(pair, finalize_target_host_id, 'online', '未检测到旧主机，等待目标主机直接领取正式上线阶段', '目标主机正式上线', 'pending_online', options, '正式上线', '')
+            execution_monitor_id, execution_reason = self._selectExecutionMonitor(pair_id, finalize_target_host_id)
+            data = self._createSwitchRun(pair, finalize_target_host_id, 'online', '未检测到旧主机，等待目标主机直接领取正式上线阶段', '目标主机正式上线', 'pending_online', options, '正式上线', '', execution_monitor_id, execution_reason)
             self._appendLog(data.get('log_path'), '[{0}] [system] [pending] 当前主备关系未检测到另一台主机，跳过下线阶段，直接执行目标主机正式上线，并跳过数据库主从提升'.format(self._now()))
         return jh.returnJson(True, '正式上线任务已创建', data)
 
@@ -1196,6 +2044,7 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         report_batch_id = self._safeText(host.get('report_batch_id') or '', 128)
         original_host_id = host_id
         health_detail = host.get('health_detail') or {}
+        source_monitor_id = self._safeText(host.get('source_monitor_id') or self._localMonitor().get('monitor_id'), 128)
         if collect_method == 'ssh_peer' and isinstance(health_detail, dict) and original_host_id:
             health_detail.setdefault('_source_host_id', original_host_id)
         exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field('id,collect_method').find()
@@ -1223,17 +2072,21 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             self._safeText(host.get('log_path') or '', 512),
             last_report_at,
             report_batch_id,
+            source_monitor_id,
+            self._safeText(host.get('sync_update_at') or '', 32),
             now
         )
         if isinstance(exists, dict) and exists.get('id'):
-            jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
-                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,update_time', values
+            result = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).save(
+                'host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,source_monitor_id,sync_update_at,update_time', values
             )
         else:
-            jh.M('ha_host_state').add(
-                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,addtime,update_time',
+            result = jh.M('ha_host_state').add(
+                'pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,collect_method,report_host_id,site_scope,health_detail,switch_run_id,switch_phase,switch_status,current_step,next_step,last_error,log_path,last_report_at,report_batch_id,source_monitor_id,sync_update_at,addtime,update_time',
                 (pair_id, host_id) + values + (now,)
             )
+        if isinstance(result, str) and result.startswith('error:'):
+            self._appendSyncLog('upsert host state failed pair_id={0} host_id={1} error={2}'.format(pair_id, host_id, result))
         if report_batch_id:
             jh.M('ha_host_state').originExecute(
                 'UPDATE ha_host_state SET report_batch_id=?, update_time=? WHERE pair_id=? AND host_id=?',
@@ -1282,6 +2135,20 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         if pair.get('current_switch_run_id'):
             run = self._getRun(pair.get('current_switch_run_id'))
             if run:
+                local_monitor_id = self._localMonitor().get('monitor_id')
+                execution_monitor_id = run.get('execution_monitor_id') or local_monitor_id
+                if execution_monitor_id and execution_monitor_id != local_monitor_id:
+                    run['execute_phase'] = ''
+                    run['execute_method'] = ''
+                    run['execute_target_host_id'] = ''
+                    run['dispatch_reason'] = '当前江湖云监控不是该任务执行方，任务执行方为 {0}'.format(execution_monitor_id)
+                    return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
+                if self._safeInt(run.get('dispatchable'), 1) != 1:
+                    run['execute_phase'] = ''
+                    run['execute_method'] = ''
+                    run['execute_target_host_id'] = ''
+                    run['dispatch_reason'] = run.get('dispatch_reason') or '当前切换任务不可下发执行'
+                    return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
                 if run.get('current_phase') == 'offline' and not run.get('old_master_host_id'):
                     repaired_old_master = self._fallbackOldMasterHostId(pair.get('pair_id'), run.get('new_master_host_id') or run.get('desired_master_host_id') or '', '', True)
                     if repaired_old_master:
@@ -1327,6 +2194,21 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
                     run['dispatch_reason'] = '任务由主机 {0} 执行，当前轮询主机 {1} 不执行'.format(executor_host_id, host_id)
                 else:
                     run['dispatch_reason'] = '任务已下发给当前主机执行'
+                    claim_expire_at = self._safeInt(run.get('claim_expire_at'), 0)
+                    claimed_by_host_id = run.get('claimed_by_host_id') or ''
+                    if claimed_by_host_id and claimed_by_host_id != host_id and claim_expire_at > int(time.time()):
+                        run['execute_phase'] = ''
+                        run['dispatch_reason'] = '任务阶段已由主机 {0} 领取，当前主机不重复执行'.format(claimed_by_host_id)
+                    else:
+                        claim_token = '{0}_{1}'.format(run.get('switch_run_id'), jh.getRandomString(12))
+                        claim_expire_at = int(time.time()) + 120
+                        run['claimed_by_host_id'] = host_id
+                        run['claim_token'] = claim_token
+                        run['claim_expire_at'] = claim_expire_at
+                        jh.M('ha_switch_run').where('switch_run_id=?', (run.get('switch_run_id'),)).save(
+                            'claimed_by_host_id,claim_token,claim_expire_at,dispatch_reason,update_time',
+                            (host_id, claim_token, claim_expire_at, run['dispatch_reason'], self._now())
+                        )
         return jh.returnJson(True, 'ok', {'desired_master_host_id': pair.get('desired_master_host_id'), 'switch_run': run})
 
     def publicReportState(self):
@@ -1361,6 +2243,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('desired_master_host_id,actual_master_host_id,status,status_text,last_report_at,update_time', (desired, actual, status, status_text, now, now))
         else:
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('actual_master_host_id,status,status_text,last_report_at,update_time', (actual, status, status_text, now, now))
+        self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_pair', pair_id, {'pair': self._getPair(pair_id)})
+        for state in self._getStates(pair_id):
+            self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_host_state', '{0}:{1}'.format(pair_id, state.get('host_id') or ''), {'state': state})
         return jh.returnJson(True, '状态已上报')
 
     def publicReportSwitchEvent(self):
@@ -1396,6 +2281,12 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
             line = '[{0}] [{1}] [{2}] [{3}] {4}'.format(now, origin_host_id or 'unknown', phase or 'event', status or 'info', log_text or step)
             self._appendLog(run.get('log_path'), line)
         db_status = self._advanceSwitchRun(run, phase, status, step or log_text)
+        saved_event = jh.M('ha_switch_event').where('event_id=?', (event_id,)).field('id,switch_run_id,pair_id,event_id,origin_host_id,report_host_id,collect_method,seq,phase,step,status,log_text,addtime').find()
+        if isinstance(saved_event, dict) and saved_event.get('id'):
+            self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_switch_event', event_id, {'event': saved_event})
+        updated_run = self._getRun(switch_run_id)
+        if updated_run:
+            self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_switch_run', switch_run_id, {'run': self._normalizeRun(updated_run)})
         return jh.returnJson(True, '事件已上报')
 
     def publicReportAlertEvent(self):
@@ -1435,6 +2326,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         latest_title = self._safeText(payload.get('title'), 255)
         if latest_title:
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('update_time', (now,))
+        saved_alert = jh.M('ha_alert_event').where('event_id=?', (event_id,)).field(self.alert_event_fields).find()
+        if isinstance(saved_alert, dict) and saved_alert.get('id'):
+            self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_alert_event', event_id, {'alert': self._normalizeAlertEvent(saved_alert)})
         return jh.returnJson(True, '通知事件已上报')
 
     def publicAckSwitchPhase(self):
@@ -1451,6 +2345,9 @@ CREATE TABLE IF NOT EXISTS ha_api_nonce (
         now = self._now()
         status = self._advanceSwitchRun(run, phase, phase_status, step or payload.get('last_error') or '')
         self._appendLog(run.get('log_path'), '[{0}] [{1}] [{2}] {3}'.format(now, phase or 'phase', phase_status or status, step or '阶段确认'))
+        updated_run = self._getRun(switch_run_id)
+        if updated_run:
+            self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_switch_run', switch_run_id, {'run': self._normalizeRun(updated_run)})
         return jh.returnJson(True, '阶段已确认')
 
     def _executeCallbacks(self, pair_id, switch_run_id):

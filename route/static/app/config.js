@@ -307,6 +307,147 @@ function loadReportConfig(){
 	}, 'json');
 }
 
+function haSyncEscape(value){
+	return String(value === undefined || value === null ? '' : value).replace(/[&<>'"]/g, function(ch){
+		return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch];
+	});
+}
+
+function haSyncStatusText(item){
+	if (!item.enabled) return '<span class="ha-sync-status-off">已停用</span>';
+	if (item.status === 'ok' || item.status === 'handshake_ok') return '<span class="ha-sync-status-ok">正常</span>';
+	if (item.status === 'failed' || item.status === 'handshake_failed') return '<span class="ha-sync-status-bad">异常</span>';
+	return '<span class="ha-sync-status-off">待同步</span>';
+}
+
+function loadHaSyncConfigList(){
+	if (!$('#ha_sync_config_body').length) return;
+	$.post('/ha/get_sync_config_list', {}, function(rdata){
+		if (!rdata.status) {
+			$('#ha_sync_config_body').html('<tr><td colspan="7" class="text-center c7">' + haSyncEscape(rdata.msg || '加载失败') + '</td></tr>');
+			return;
+		}
+		var data = rdata.data || {};
+		var monitor = data.monitor || {};
+		$('#ha_sync_monitor_id').val(monitor.monitor_id || '');
+		$('#ha_sync_monitor_name').text((monitor.monitor_name || '江湖云监控') + '，用于识别当前江湖云监控实例。');
+		var list = data.list || [];
+		if (!list.length) {
+			$('#ha_sync_config_body').html('<tr><td colspan="7" class="text-center c7">暂无同步配置</td></tr>');
+			return;
+		}
+		var html = list.map(function(item){
+			var errorHtml = item.last_error ? '<div class="ha-sync-error" title="' + haSyncEscape(item.last_error) + '">' + haSyncEscape(item.last_error) + '</div>' : '';
+			return '<tr>' +
+				'<td>' + haSyncEscape(item.sync_name || '--') + '</td>' +
+				'<td>同步主备相关数据</td>' +
+				'<td><div>' + haSyncEscape(item.peer_monitor_url || '--') + '</div>' + errorHtml + '</td>' +
+				'<td><div>' + haSyncEscape(item.peer_monitor_name || '--') + '</div><div class="c7">' + haSyncEscape(item.peer_monitor_id || '') + '</div></td>' +
+				'<td>' + haSyncStatusText(item) + '</td>' +
+				'<td>' + haSyncEscape(item.last_sync_at || '--') + '</td>' +
+				'<td class="text-right">' +
+					'<button type="button" class="btn btn-default btn-xs" onclick="openHaSyncConfigLayer(\'' + haSyncEscape(item.sync_id) + '\')">编辑</button> ' +
+					'<button type="button" class="btn btn-default btn-xs" onclick="testHaSyncConfig(\'' + haSyncEscape(item.sync_id) + '\')">测试</button> ' +
+					'<button type="button" class="btn btn-default btn-xs" onclick="runHaSyncNow(\'' + haSyncEscape(item.sync_id) + '\')">同步</button> ' +
+					'<button type="button" class="btn btn-' + (item.enabled ? 'warning' : 'success') + ' btn-xs" onclick="setHaSyncEnabled(\'' + haSyncEscape(item.sync_id) + '\',' + (item.enabled ? 0 : 1) + ')">' + (item.enabled ? '停用' : '启用') + '</button> ' +
+					'<button type="button" class="btn btn-danger btn-xs" onclick="deleteHaSyncConfig(\'' + haSyncEscape(item.sync_id) + '\')">删除</button>' +
+				'</td>' +
+			'</tr>';
+		}).join('');
+		$('#ha_sync_config_body').html(html);
+	}, 'json');
+}
+
+function getHaSyncConfigById(syncId, callback){
+	$.post('/ha/get_sync_config_list', {}, function(rdata){
+		var list = rdata.status && rdata.data ? (rdata.data.list || []) : [];
+		var found = null;
+		for (var i = 0; i < list.length; i++) {
+			if (list[i].sync_id === syncId) found = list[i];
+		}
+		callback(found);
+	}, 'json');
+}
+
+function openHaSyncConfigLayer(syncId){
+	getHaSyncConfigById(syncId || '', function(item){
+		item = item || {sync_id:'', sync_name:'', sync_type:'ha_management', peer_monitor_url:'', peer_monitor_id:'', peer_monitor_name:'', enabled:true};
+		var html = '<div class="bt-form bt-form pd20">' +
+			'<div class="line"><span class="tname">同步名称</span><div class="info-r"><input name="sync_name" class="bt-input-text" type="text" style="width:360px" value="' + haSyncEscape(item.sync_name || '') + '"></div></div>' +
+			'<div class="line"><span class="tname">同步类型</span><div class="info-r"><select name="sync_type" class="bt-input-text" style="width:360px"><option value="ha_management">同步主备相关数据</option></select></div></div>' +
+			'<div class="line"><span class="tname">对端地址</span><div class="info-r"><input name="peer_monitor_url" class="bt-input-text" type="text" style="width:360px" value="' + haSyncEscape(item.peer_monitor_url || '') + '" placeholder="例如：http://192.168.1.10:10844"></div></div>' +
+			'<div class="line"><span class="tname">同步密钥</span><div class="info-r"><input name="sync_secret" class="bt-input-text" type="password" style="width:360px" value="" placeholder="编辑时不填写则需重新输入保存"></div></div>' +
+			'<div class="line"><span class="tname">启用</span><div class="info-r"><input name="enabled" type="checkbox" ' + (item.enabled ? 'checked' : '') + '></div></div>' +
+			'</div>';
+		layer.open({
+			type: 1,
+			title: syncId ? '编辑云监控同步' : '添加云监控同步',
+			area: '560px',
+			closeBtn: 1,
+			btn: ['保存', '取消'],
+			content: html,
+			yes: function(index){
+				var box = $('#layui-layer' + index);
+				var payload = {
+					sync_id: syncId || '',
+					sync_name: box.find('[name="sync_name"]').val(),
+					sync_type: box.find('[name="sync_type"]').val(),
+					peer_monitor_url: box.find('[name="peer_monitor_url"]').val(),
+					peer_monitor_id: item.peer_monitor_id || '',
+					peer_monitor_name: item.peer_monitor_name || '',
+					sync_secret: box.find('[name="sync_secret"]').val(),
+					enabled: box.find('[name="enabled"]').prop('checked') ? 1 : 0
+				};
+				if (!payload.sync_secret && !syncId) return layer.msg('同步密钥不能为空', {icon:2});
+				$.post('/ha/save_sync_config', payload, function(rdata){
+					showMsg(rdata.msg, function(){
+						if (rdata.status) {
+							layer.close(index);
+							loadHaSyncConfigList();
+						}
+					}, {icon:rdata.status?1:2}, 2000);
+				}, 'json');
+			}
+		});
+	});
+}
+
+function testHaSyncConfig(syncId){
+	var loadT = layer.msg('正在测试同步握手...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/ha/test_sync_config', {sync_id: syncId}, function(rdata){
+		layer.close(loadT);
+		showMsg(rdata.msg, function(){ loadHaSyncConfigList(); }, {icon:rdata.status?1:2}, 2500);
+	}, 'json');
+}
+
+function runHaSyncNow(syncId){
+	var loadT = layer.msg('正在执行同步...', {icon:16,time:0,shade:[0.3, '#000']});
+	$.post('/ha/run_sync_now', {sync_id: syncId}, function(rdata){
+		layer.close(loadT);
+		showMsg(rdata.msg, function(){ loadHaSyncConfigList(); }, {icon:rdata.status?1:2}, 2500);
+	}, 'json');
+}
+
+function setHaSyncEnabled(syncId, enabled){
+	$.post('/ha/set_sync_enabled', {sync_id: syncId, enabled: enabled ? 1 : 0}, function(rdata){
+		showMsg(rdata.msg, function(){ loadHaSyncConfigList(); }, {icon:rdata.status?1:2}, 1500);
+	}, 'json');
+}
+
+function deleteHaSyncConfig(syncId){
+	layer.confirm('确定删除这个云监控同步配置吗？', {title:'删除同步配置', icon:13}, function(index){
+		$.post('/ha/delete_sync_config', {sync_id: syncId}, function(rdata){
+			showMsg(rdata.msg, function(){
+				layer.close(index);
+				loadHaSyncConfigList();
+			}, {icon:rdata.status?1:2}, 1500);
+		}, 'json');
+	});
+}
+
+$('.btn_add_ha_sync').click(function(){ openHaSyncConfigLayer(''); });
+$('.btn_refresh_ha_sync').click(function(){ loadHaSyncConfigList(); });
+
 $('.btn_test_report_es').click(function(){
 	var payload = getReportEsPayload();
 	var loadT = layer.msg('正在测试ES连接...', {icon:16,time:0,shade:[0.3, '#000']});
@@ -409,6 +550,7 @@ $('.btn_test_send_report_mail').click(function(){
 
 $(function(){
 	loadReportConfig();
+	loadHaSyncConfigList();
 });
 
 $('input[name="bind_ssl"]').click(function(){

@@ -39,6 +39,7 @@ sys.path.append(os.getcwd() + "/class/es/service")
 from report_analyser import HostReportAnalyser
 from report_sender import HostReportSender
 import host_status_service as host_status_service_utils
+from ha_api import ha_api
 
 # print sys.path
 
@@ -454,6 +455,26 @@ def hostReportPipelineTask():
 
 
 # --------------------------------------Host Report Notify End   --------------------------------------------- #
+
+
+# --------------------------------------HA Monitor Sync Start   --------------------------------------------- #
+def haMonitorSyncTask():
+    try:
+        api = ha_api()
+        while True:
+            try:
+                result = api.runMonitorSync()
+                if result.get('items'):
+                    print(f"{Fore.CYAN}★ ========= [haMonitorSyncTask] {result}{Style.RESET_ALL}")
+            except Exception as ex:
+                traceback.print_exc()
+                print(f"{Fore.RED}★ ========= [haMonitorSyncTask] ERROR：{str(ex)} {Style.RESET_ALL}")
+            time.sleep(15)
+    except Exception:
+        traceback.print_exc()
+
+
+# --------------------------------------HA Monitor Sync End   --------------------------------------------- #
   
 
 # --------------------------------------Panel Restart Start   --------------------------------------------- #
@@ -534,6 +555,11 @@ if __name__ == "__main__":
     hrp = threading.Thread(target=hostReportPipelineTask)
     hrp = setDaemon(hrp)
     hrp.start()
+
+    # 江湖云监控主备数据同步
+    hms = threading.Thread(target=haMonitorSyncTask)
+    hms = setDaemon(hms)
+    hms.start()
 
     # Panel Restart Start
     rps = threading.Thread(target=restartPanelService)

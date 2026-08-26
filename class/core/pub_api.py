@@ -57,6 +57,15 @@ class pub_api:
 
     def haAckSwitchPhaseApi(self):
         return self._haApi().publicAckSwitchPhase()
+
+    def haMonitorSyncHandshakeApi(self):
+        return self._haApi().publicMonitorSyncHandshake()
+
+    def haMonitorSyncPullApi(self):
+        return self._haApi().publicMonitorSyncPull()
+
+    def haMonitorSyncAckApi(self):
+        return self._haApi().publicMonitorSyncAck()
     
     def getPubKeyApi(self):
         if os.path.exists('/root/.ssh/id_rsa.pub'):

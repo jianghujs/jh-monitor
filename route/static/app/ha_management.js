@@ -536,15 +536,17 @@ function haCollectLabel(host) {
 
 function haHostLine(pair, host, index) {
   var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag" title="当前机房主机">本机房</span>' : '';
+  var syncMark = host.source_monitor_id && host.source_monitor_id !== pair.source_monitor_id ? '<span class="ha-current-site-tag" title="同步来源：' + haAttr(host.source_monitor_id) + '">同步</span>' : '';
   var nameCls = haHostLooksHealthy(host) ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
   var meta = [];
   if (host.collect_method) meta.push(host.collect_method);
   if (host.collect_status) meta.push(host.collect_status);
   if (host.last_report_at) meta.push(host.last_report_at);
+  if (host.source_monitor_id) meta.push('source=' + host.source_monitor_id);
   return '<div class="ha-host-line">' +
     haHostStatusDot(pair, host) +
     haRoleMark(host.role) +
-    '<span class="' + nameCls + '" title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + currentMark +
+    '<span class="' + nameCls + '" title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + currentMark + syncMark +
     '<span class="ha-host-ip" title="' + haAttr(meta.join(' / ')) + '">' + haEscape(host.ip) + '</span>' +
     '</div>';
 }
@@ -1459,13 +1461,14 @@ function haDetailHostsHtml(pair) {
   return '<div class="ha-detail-section">' +
     '<div class="monitor-task-section-title">主机列表</div>' +
     '<div class="ha-detail-host-grid mb12">' + cards + '</div>' +
-    '<table class="table table-hover ha-detail-data-table" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th><th>采集状态</th><th>最近上报</th></tr></thead><tbody>' +
+    '<table class="table table-hover ha-detail-data-table" style="margin-bottom:10px"><thead><tr><th>主机</th><th>IP</th><th>实际角色</th><th>在线状态</th><th>采集状态</th><th>数据来源</th><th>最近上报</th></tr></thead><tbody>' +
       pair.hosts.map(function(host) {
         return '<tr><td><div class="ha-main">' + haEscape(host.name) + '</div><div class="ha-sub">' + haEscape(host.host_id || '') + '</div></td>' +
           '<td>' + haEscape(host.ip) + '</td>' +
           '<td>' + haRoleMark(host.role) + haEscape(host.role) + '</td>' +
           '<td>' + haOnlineLabel(host) + '</td>' +
           '<td>' + haCollectLabel(host) + '</td>' +
+          '<td><div>' + haEscape(host.source_monitor_id ? '江湖云监控同步' : '本机上报') + '</div><div class="ha-sub">' + haEscape(host.source_monitor_id || '--') + '</div><div class="ha-sub">' + haEscape(host.sync_update_at || '') + '</div></td>' +
           '<td>' + haEscape(host.last_report_at || '--') + '</td></tr>';
       }).join('') +
     '</tbody></table>' +
@@ -1484,8 +1487,12 @@ function haDetailLogHtml(pair) {
     var action = haSwitchRunActionText(run);
     var status = haNormalizeSwitchStatus(run.status || '');
     var route = haSwitchRunHostRoute(pair, run);
+    var owner = [];
+    if (run.origin_monitor_id) owner.push('创建方: ' + run.origin_monitor_id);
+    if (run.execution_monitor_id) owner.push('执行方: ' + run.execution_monitor_id);
+    if (run.dispatch_reason) owner.push(run.dispatch_reason);
     return '<tr>' +
-      '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-route" title="' + haAttr(route.title) + '"><span>' + haEscape(route.from) + '</span><b>→</b><span>' + haEscape(route.to) + '</span></div><div class="ha-log-run-id" title="' + haAttr(run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div></td>' +
+      '<td><div class="ha-log-run-type">' + haEscape(action) + '</div><div class="ha-log-run-route" title="' + haAttr(route.title) + '"><span>' + haEscape(route.from) + '</span><b>→</b><span>' + haEscape(route.to) + '</span></div><div class="ha-log-run-id" title="' + haAttr(owner.join('；') || run.switch_run_id || '') + '">' + haEscape(run.switch_run_id || '') + '</div>' + (owner.length ? '<div class="ha-sub">' + haEscape(owner.join('；')) + '</div>' : '') + '</td>' +
       '<td><span class="ha-log-status ' + haSwitchStatusClass(status) + '">' + haEscape(haSwitchRunStatusText(run.status || '')) + '</span></td>' +
       '<td><div class="ha-log-step" title="' + haAttr(run.current_step || run.current_phase || '--') + '">' + haEscape(run.current_step || run.current_phase || '--') + '</div></td>' +
       '<td><div class="ha-log-time">' + haEscape(run.addtime || '--') + '</div></td>' +
