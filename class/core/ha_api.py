@@ -622,6 +622,7 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             'sync_id': row.get('sync_id') or '',
             'sync_name': row.get('sync_name') or '',
             'sync_type': row.get('sync_type') or self.DEFAULT_SYNC_TYPE,
+            'sync_types': self._syncConfigTypes(row),
             'peer_monitor_url': row.get('peer_monitor_url') or '',
             'peer_monitor_id': row.get('peer_monitor_id') or '',
             'peer_monitor_name': row.get('peer_monitor_name') or '',
@@ -638,6 +639,27 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         if value != self.DEFAULT_SYNC_TYPE:
             return ''
         return value
+
+    def _normalizeSyncTypes(self, values):
+        if values is None:
+            values = []
+        if isinstance(values, str):
+            values = values.replace(';', ',').split(',')
+        elif not isinstance(values, list):
+            values = [values]
+        result = []
+        for value in values:
+            sync_type = self._normalizeSyncType(value)
+            if sync_type and sync_type not in result:
+                result.append(sync_type)
+        return result
+
+    def _syncConfigTypes(self, sync_config):
+        sync_types = self._normalizeSyncTypes(sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+        return sync_types or [self.DEFAULT_SYNC_TYPE]
+
+    def _syncConfigSupports(self, sync_config, sync_type):
+        return self._normalizeSyncType(sync_type) in self._syncConfigTypes(sync_config)
 
     def _normalizePeerUrl(self, value):
         value = self._safeText(value, 512).rstrip('/')
@@ -697,11 +719,13 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
                 candidates.append(sync_config)
         if not candidates:
             sync_type = self._normalizeSyncType(payload.get('sync_type') or self.DEFAULT_SYNC_TYPE)
-            rows = jh.M('ha_sync_config').where('enabled=? AND sync_type=?', (1, sync_type)).field(self.sync_config_fields).select()
-            candidates = rows if isinstance(rows, list) else []
+            rows = jh.M('ha_sync_config').where('enabled=?', (1,)).field(self.sync_config_fields).select()
+            candidates = [row for row in rows if isinstance(row, dict) and self._syncConfigSupports(row, sync_type)] if isinstance(rows, list) else []
         sync_config = {}
         for item in candidates:
             if self._safeInt(item.get('enabled'), 0) != 1:
+                continue
+            if payload.get('sync_type') and not self._syncConfigSupports(item, payload.get('sync_type')):
                 continue
             expected = hmac.new(str(item.get('sync_secret') or '').encode('utf-8'), sign_text.encode('utf-8'), hashlib.sha256).hexdigest()
             if hmac.compare_digest(signature, expected):
@@ -762,7 +786,8 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         self.ensureHaSchema()
         sync_id = self._safeText(request.form.get('sync_id'), 128)
         sync_name = self._safeText(request.form.get('sync_name'), 128)
-        sync_type = self._normalizeSyncType(request.form.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+        sync_types = self._normalizeSyncTypes(request.form.getlist('sync_types[]') or request.form.getlist('sync_type[]') or request.form.get('sync_types') or request.form.get('sync_type'))
+        sync_type = ','.join(sync_types)
         peer_monitor_url = self._normalizePeerUrl(request.form.get('peer_monitor_url'))
         peer_monitor_id = self._safeText(request.form.get('peer_monitor_id'), 128)
         peer_monitor_name = self._safeText(request.form.get('peer_monitor_name'), 128)
@@ -770,8 +795,8 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         enabled = 1 if self._boolValue(request.form.get('enabled', '0')) else 0
         if not sync_name:
             return jh.returnJson(False, '同步名称不能为空')
-        if not sync_type:
-            return jh.returnJson(False, '同步类型暂只支持 ha_management')
+        if not sync_types:
+            return jh.returnJson(False, '请至少选择一个同步类型')
         if not peer_monitor_url:
             return jh.returnJson(False, '对端江湖云监控地址不能为空')
         now = self._now()
@@ -824,7 +849,7 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
                 'sync_id': sync_id or 'handshake_test',
                 'sync_secret': form_secret,
                 'peer_monitor_url': self._normalizePeerUrl(request.form.get('peer_monitor_url')),
-                'sync_type': self._normalizeSyncType(request.form.get('sync_type') or self.DEFAULT_SYNC_TYPE)
+                'sync_type': ','.join(self._normalizeSyncTypes(request.form.getlist('sync_types[]') or request.form.getlist('sync_type[]') or request.form.get('sync_types') or request.form.get('sync_type')) or [self.DEFAULT_SYNC_TYPE])
             }
         ok, msg, data = self._handshakeSyncConfig(sync_config)
         return jh.returnJson(ok, msg, data)
@@ -937,9 +962,9 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             'sync_type': payload.get('sync_type') or sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
         })
 
-    def _cursorForConfig(self, sync_config):
+    def _cursorForConfig(self, sync_config, sync_type=''):
         sync_id = sync_config.get('sync_id')
-        sync_type = sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
+        sync_type = self._normalizeSyncType(sync_type or self.DEFAULT_SYNC_TYPE) or self.DEFAULT_SYNC_TYPE
         row = jh.M('ha_sync_cursor').where('sync_id=? AND sync_type=?', (sync_id, sync_type)).field('id,sync_id,sync_type,peer_monitor_id,last_seq,last_event_id,last_sync_at,last_error,addtime,update_time').find()
         if isinstance(row, dict) and row.get('id'):
             return row
@@ -961,19 +986,20 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         for sync_config in rows:
             if self._safeInt(sync_config.get('enabled'), 0) != 1:
                 continue
-            item = self._runOneMonitorSync(sync_config)
-            results.append(item)
-            if item.get('status') == 'ok':
-                ok_count += 1
+            for sync_type in self._syncConfigTypes(sync_config):
+                item = self._runOneMonitorSync(sync_config, sync_type)
+                results.append(item)
+                if item.get('status') == 'ok':
+                    ok_count += 1
         status = 'ok' if ok_count == len(results) else ('partial' if ok_count > 0 else 'failed')
         if not results:
             status = 'ok'
         return {'status': status, 'msg': '同步完成', 'items': results}
 
-    def _runOneMonitorSync(self, sync_config):
+    def _runOneMonitorSync(self, sync_config, sync_type=''):
         sync_id = sync_config.get('sync_id')
-        sync_type = sync_config.get('sync_type') or self.DEFAULT_SYNC_TYPE
-        cursor = self._cursorForConfig(sync_config)
+        sync_type = self._normalizeSyncType(sync_type or self.DEFAULT_SYNC_TYPE) or self.DEFAULT_SYNC_TYPE
+        cursor = self._cursorForConfig(sync_config, sync_type)
         after_seq = self._safeInt(cursor.get('last_seq'), 0)
         monitor = self._localMonitor()
         payload = {

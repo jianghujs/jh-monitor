@@ -320,6 +320,45 @@ function haSyncStatusText(item){
 	return '<span class="ha-sync-status-off">待同步</span>';
 }
 
+function haSyncTypesFromItem(item){
+	var types = item && $.isArray(item.sync_types) ? item.sync_types : [];
+	if (!types.length && item && item.sync_type) types = String(item.sync_type).split(',');
+	var result = [];
+	for (var i = 0; i < types.length; i++) {
+		var value = $.trim(types[i] || '');
+		if (value === 'ha_management' && result.indexOf(value) === -1) result.push(value);
+	}
+	return result.length ? result : ['ha_management'];
+}
+
+function haSyncTypeText(types){
+	types = $.isArray(types) ? types : String(types || '').split(',');
+	var names = [];
+	for (var i = 0; i < types.length; i++) {
+		if ($.trim(types[i]) === 'ha_management') names.push('同步主备相关数据');
+	}
+	return names.length ? names.join('、') : '--';
+}
+
+function generateHaSyncSecret(){
+	var prefix = 'hms_';
+	var chars = '0123456789abcdef';
+	var length = 64;
+	var result = '';
+	if (window.crypto && window.crypto.getRandomValues) {
+		var bytes = new Uint8Array(length / 2);
+		window.crypto.getRandomValues(bytes);
+		for (var i = 0; i < bytes.length; i++) {
+			result += ('0' + bytes[i].toString(16)).slice(-2);
+		}
+		return prefix + result;
+	}
+	for (var j = 0; j < length; j++) {
+		result += chars.charAt(Math.floor(Math.random() * chars.length));
+	}
+	return prefix + result;
+}
+
 function loadHaSyncConfigList(){
 	if (!$('#ha_sync_config_body').length) return;
 	$.post('/ha/get_sync_config_list', {}, function(rdata){
@@ -338,9 +377,10 @@ function loadHaSyncConfigList(){
 		}
 		var html = list.map(function(item){
 			var errorHtml = item.last_error ? '<div class="ha-sync-error" title="' + haSyncEscape(item.last_error) + '">' + haSyncEscape(item.last_error) + '</div>' : '';
+			var syncTypes = haSyncTypesFromItem(item);
 			return '<tr>' +
 				'<td>' + haSyncEscape(item.sync_name || '--') + '</td>' +
-				'<td>同步主备相关数据</td>' +
+				'<td>' + haSyncEscape(haSyncTypeText(syncTypes)) + '</td>' +
 				'<td><div>' + haSyncEscape(item.peer_monitor_url || '--') + '</div>' + errorHtml + '</td>' +
 				'<td><div>' + haSyncEscape(item.peer_monitor_name || '--') + '</div><div class="c7">' + haSyncEscape(item.peer_monitor_id || '') + '</div></td>' +
 				'<td>' + haSyncStatusText(item) + '</td>' +
@@ -372,11 +412,12 @@ function getHaSyncConfigById(syncId, callback){
 function openHaSyncConfigLayer(syncId){
 	getHaSyncConfigById(syncId || '', function(item){
 		item = item || {sync_id:'', sync_name:'', sync_type:'ha_management', peer_monitor_url:'', peer_monitor_id:'', peer_monitor_name:'', enabled:true};
+		var syncTypes = haSyncTypesFromItem(item);
 		var html = '<div class="bt-form bt-form pd20">' +
 			'<div class="line"><span class="tname">同步名称</span><div class="info-r"><input name="sync_name" class="bt-input-text" type="text" style="width:360px" value="' + haSyncEscape(item.sync_name || '') + '"></div></div>' +
-			'<div class="line"><span class="tname">同步类型</span><div class="info-r"><select name="sync_type" class="bt-input-text" style="width:360px"><option value="ha_management">同步主备相关数据</option></select></div></div>' +
+			'<div class="line"><span class="tname">同步类型</span><div class="info-r"><label class="ha-sync-type-check"><input name="sync_types[]" type="checkbox" value="ha_management" ' + (syncTypes.indexOf('ha_management') !== -1 ? 'checked' : '') + '> 同步主备相关数据</label></div></div>' +
 			'<div class="line"><span class="tname">对端地址</span><div class="info-r"><input name="peer_monitor_url" class="bt-input-text" type="text" style="width:360px" value="' + haSyncEscape(item.peer_monitor_url || '') + '" placeholder="例如：http://192.168.1.10:10844"></div></div>' +
-			'<div class="line"><span class="tname">同步密钥</span><div class="info-r"><input name="sync_secret" class="bt-input-text" type="password" style="width:360px" value="" placeholder="编辑时不填写则需重新输入保存"></div></div>' +
+			'<div class="line"><span class="tname">同步密钥</span><div class="info-r"><input name="sync_secret" class="bt-input-text" type="password" style="width:282px" value="" placeholder="' + (syncId ? '不填写则保留原密钥' : '点击生成或手动填写') + '"><button type="button" class="btn btn-default btn-sm ml5 btn_generate_ha_sync_secret">生成</button><div class="c7 mt5">两套江湖云监控同一条同步配置需要填写相同密钥。</div></div></div>' +
 			'<div class="line"><span class="tname">启用</span><div class="info-r"><input name="enabled" type="checkbox" ' + (item.enabled ? 'checked' : '') + '></div></div>' +
 			'</div>';
 		layer.open({
@@ -386,18 +427,27 @@ function openHaSyncConfigLayer(syncId){
 			closeBtn: 1,
 			btn: ['保存', '取消'],
 			content: html,
+			success: function(layero){
+				layero.find('.btn_generate_ha_sync_secret').on('click', function(){
+					layero.find('[name="sync_secret"]').attr('type', 'text').val(generateHaSyncSecret()).focus().select();
+					layer.msg('已生成同步密钥，请在对端江湖云监控填写同一个密钥', {icon:1, time:2000});
+				});
+			},
 			yes: function(index){
 				var box = $('#layui-layer' + index);
+				var selectedTypes = [];
+				box.find('[name="sync_types[]"]:checked').each(function(){ selectedTypes.push($(this).val()); });
 				var payload = {
 					sync_id: syncId || '',
 					sync_name: box.find('[name="sync_name"]').val(),
-					sync_type: box.find('[name="sync_type"]').val(),
+					sync_types: selectedTypes,
 					peer_monitor_url: box.find('[name="peer_monitor_url"]').val(),
 					peer_monitor_id: item.peer_monitor_id || '',
 					peer_monitor_name: item.peer_monitor_name || '',
 					sync_secret: box.find('[name="sync_secret"]').val(),
 					enabled: box.find('[name="enabled"]').prop('checked') ? 1 : 0
 				};
+				if (!selectedTypes.length) return layer.msg('请至少选择一个同步类型', {icon:2});
 				if (!payload.sync_secret && !syncId) return layer.msg('同步密钥不能为空', {icon:2});
 				$.post('/ha/save_sync_config', payload, function(rdata){
 					showMsg(rdata.msg, function(){
