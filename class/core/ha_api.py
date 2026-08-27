@@ -769,6 +769,12 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         )
         return event_id
 
+    def _shouldExportSyncEvent(self, row, payload):
+        if row.get('event_type') != 'ha_host_state':
+            return True
+        state = payload.get('state') if isinstance(payload, dict) and isinstance(payload.get('state'), dict) else payload
+        return isinstance(state, dict) and state.get('collect_method') == 'local'
+
     def getMonitorIdentityApi(self):
         return jh.returnJson(True, 'ok', self._localMonitor())
 
@@ -929,6 +935,9 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         max_seq = after_seq
         for row in rows:
             max_seq = max(max_seq, self._safeInt(row.get('seq'), 0))
+            payload_json = self._jsonLoads(row.get('payload_json'), {})
+            if not self._shouldExportSyncEvent(row, payload_json):
+                continue
             events.append({
                 'event_id': row.get('event_id') or '',
                 'sync_type': row.get('sync_type') or '',
@@ -936,7 +945,7 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
                 'source_monitor_name': row.get('source_monitor_name') or '',
                 'event_type': row.get('event_type') or '',
                 'object_key': row.get('object_key') or '',
-                'payload': self._jsonLoads(row.get('payload_json'), {}),
+                'payload': payload_json,
                 'seq': self._safeInt(row.get('seq'), 0),
                 'addtime': row.get('addtime') or ''
             })
@@ -2055,6 +2064,14 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         else:
             sort_id = self._nextPairSortId()
             jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,api_secret,status,status_text,sort_id,addtime,update_time', (pair_id, pair_name, master_id, api_secret, 'unknown', '等待插件上报', sort_id, now, now))
+        if isinstance(local, dict) and local.get('host_id'):
+            local.setdefault('collect_method', 'local')
+            local.setdefault('report_host_id', local.get('host_id'))
+            local.setdefault('site_scope', 'local')
+        if isinstance(peer, dict) and peer.get('host_id'):
+            peer.setdefault('collect_method', 'ssh_peer')
+            peer.setdefault('report_host_id', local.get('host_id') if isinstance(local, dict) else '')
+            peer.setdefault('site_scope', 'remote')
         for host in (local, peer):
             if isinstance(host, dict) and host.get('host_id'):
                 self._upsertState(pair_id, host, host.get('role') or ('master' if host.get('host_id') == master_id else 'standby'), now)
@@ -2271,6 +2288,8 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('actual_master_host_id,status,status_text,last_report_at,update_time', (actual, status, status_text, now, now))
         self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_pair', pair_id, {'pair': self._getPair(pair_id)})
         for state in self._getStates(pair_id):
+            if state.get('collect_method') != 'local':
+                continue
             self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_host_state', '{0}:{1}'.format(pair_id, state.get('host_id') or ''), {'state': state})
         return jh.returnJson(True, '状态已上报')
 

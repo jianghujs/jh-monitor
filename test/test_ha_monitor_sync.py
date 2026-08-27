@@ -179,6 +179,48 @@ def _test_idempotent_event_and_cursor(api, prefix):
     assert cursor['last_seq'] == 3 and '不支持的同步事件类型' in cursor['last_error'], cursor
 
 
+def _test_export_only_local_host_state(api, prefix):
+    sync_id = prefix + '_LOCAL_ONLY'
+    secret = 'secret-' + sync_id
+    _add_sync_config(sync_id, secret)
+    pair_id = prefix + '_PAIR_LOCAL_ONLY'
+    pair_secret = 'pair-secret-local-only-' + prefix
+    _register_pair(api, pair_id, pair_secret)
+    payload = {
+        'pair_id': pair_id,
+        'hosts': [
+            {'host_id': 'H_A', 'host_name': 'Local A', 'host_ip': '10.88.6.1', 'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'local'},
+            {'host_id': 'H_B', 'host_name': 'Peer B', 'host_ip': '10.88.6.2', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_A'}
+        ]
+    }
+    with app.test_request_context('/pub/ha_report_state', method='POST', json=payload, headers=_pair_headers(pair_secret, payload, prefix + '_report_local_only')):
+        res = json.loads(api.publicReportState())
+        assert res['status'], res
+    rows = jh.M('ha_sync_event').where('sync_type=? AND event_type=? AND object_key LIKE ?', ('ha_management', 'ha_host_state', pair_id + ':%')).field(api.sync_event_fields).select()
+    payloads = [api._jsonLoads(row.get('payload_json'), {}) for row in rows]
+    exported_methods = sorted([(item.get('state') or {}).get('collect_method') for item in payloads if isinstance(item, dict)])
+    assert exported_methods == ['local'], exported_methods
+
+    peer_event_id = prefix + '_EVT_EXPORT_PEER'
+    local_event_id = prefix + '_EVT_EXPORT_LOCAL'
+    now = api._now()
+    jh.M('ha_sync_event').add(
+        'event_id,sync_type,source_monitor_id,source_monitor_name,event_type,object_key,payload_json,seq,addtime',
+        (peer_event_id, 'ha_management', 'MONITOR_LOCAL_ONLY', 'Local Only', 'ha_host_state', peer_event_id, json.dumps({'state': {'pair_id': pair_id, 'host_id': 'H_PEER_SKIP', 'collect_method': 'ssh_peer'}}, ensure_ascii=False), 9001, now)
+    )
+    jh.M('ha_sync_event').add(
+        'event_id,sync_type,source_monitor_id,source_monitor_name,event_type,object_key,payload_json,seq,addtime',
+        (local_event_id, 'ha_management', 'MONITOR_LOCAL_ONLY', 'Local Only', 'ha_host_state', local_event_id, json.dumps({'state': {'pair_id': pair_id, 'host_id': 'H_LOCAL_EXPORT', 'collect_method': 'local'}}, ensure_ascii=False), 9002, now)
+    )
+    pull_payload = {'sync_id': sync_id, 'sync_type': 'ha_management', 'monitor_id': 'MONITOR_PEER_PULL', 'after_seq': 9000, 'limit': 10}
+    with app.test_request_context('/pub/ha_monitor_sync_pull', method='POST', json=pull_payload, headers=_sync_headers(secret, pull_payload, prefix + '_pull_local_only')):
+        res = json.loads(api.publicMonitorSyncPull())
+        assert res['status'], res
+        event_ids = [event['event_id'] for event in res['data']['events']]
+        assert local_event_id in event_ids and peer_event_id not in event_ids, res
+        assert res['data']['max_seq'] >= 9002, res
+
+
 def _test_host_state_merge(api, prefix):
     sync_id = prefix + '_MERGE'
     secret = 'secret-' + sync_id
@@ -274,6 +316,7 @@ def main():
     _cleanup(prefix)
     _test_signature_and_nonce(api, prefix)
     _test_idempotent_event_and_cursor(api, prefix)
+    _test_export_only_local_host_state(api, prefix)
     _test_host_state_merge(api, prefix)
     _test_cross_monitor_dispatch(api, prefix)
     _test_report_reads_synced_ha_tables(api, prefix)

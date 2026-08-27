@@ -536,7 +536,6 @@ function haCollectLabel(host) {
 
 function haHostLine(pair, host, index) {
   var currentMark = haIsCurrentDatacenterHost(pair, host, index) ? '<span class="ha-current-site-tag" title="当前机房主机">本机房</span>' : '';
-  var syncMark = host.source_monitor_id && host.source_monitor_id !== pair.source_monitor_id ? '<span class="ha-current-site-tag" title="同步来源：' + haAttr(host.source_monitor_id) + '">同步</span>' : '';
   var nameCls = haHostLooksHealthy(host) ? 'ha-host-name' : 'ha-host-name ha-host-name-offline';
   var meta = [];
   if (host.collect_method) meta.push(host.collect_method);
@@ -546,7 +545,7 @@ function haHostLine(pair, host, index) {
   return '<div class="ha-host-line">' +
     haHostStatusDot(pair, host) +
     haRoleMark(host.role) +
-    '<span class="' + nameCls + '" title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + currentMark + syncMark +
+    '<span class="' + nameCls + '" title="' + haAttr(host.name) + '">' + haEscape(host.name) + '</span>' + currentMark +
     '<span class="ha-host-ip" title="' + haAttr(meta.join(' / ')) + '">' + haEscape(host.ip) + '</span>' +
     '</div>';
 }
