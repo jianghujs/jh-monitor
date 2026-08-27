@@ -179,12 +179,12 @@ def _test_idempotent_event_and_cursor(api, prefix):
     assert cursor['last_seq'] == 3 and '不支持的同步事件类型' in cursor['last_error'], cursor
 
 
-def _test_export_only_local_host_state(api, prefix):
-    sync_id = prefix + '_LOCAL_ONLY'
+def _test_export_full_host_state(api, prefix):
+    sync_id = prefix + '_FULL_STATE'
     secret = 'secret-' + sync_id
     _add_sync_config(sync_id, secret)
-    pair_id = prefix + '_PAIR_LOCAL_ONLY'
-    pair_secret = 'pair-secret-local-only-' + prefix
+    pair_id = prefix + '_PAIR_FULL_STATE'
+    pair_secret = 'pair-secret-full-state-' + prefix
     _register_pair(api, pair_id, pair_secret)
     payload = {
         'pair_id': pair_id,
@@ -193,13 +193,13 @@ def _test_export_only_local_host_state(api, prefix):
             {'host_id': 'H_B', 'host_name': 'Peer B', 'host_ip': '10.88.6.2', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'report_host_id': 'H_A'}
         ]
     }
-    with app.test_request_context('/pub/ha_report_state', method='POST', json=payload, headers=_pair_headers(pair_secret, payload, prefix + '_report_local_only')):
+    with app.test_request_context('/pub/ha_report_state', method='POST', json=payload, headers=_pair_headers(pair_secret, payload, prefix + '_report_full_state')):
         res = json.loads(api.publicReportState())
         assert res['status'], res
     rows = jh.M('ha_sync_event').where('sync_type=? AND event_type=? AND object_key LIKE ?', ('ha_management', 'ha_host_state', pair_id + ':%')).field(api.sync_event_fields).select()
     payloads = [api._jsonLoads(row.get('payload_json'), {}) for row in rows]
     exported_methods = sorted([(item.get('state') or {}).get('collect_method') for item in payloads if isinstance(item, dict)])
-    assert exported_methods == ['local'], exported_methods
+    assert exported_methods == ['local', 'ssh_peer'], exported_methods
 
     peer_event_id = prefix + '_EVT_EXPORT_PEER'
     local_event_id = prefix + '_EVT_EXPORT_LOCAL'
@@ -217,8 +217,45 @@ def _test_export_only_local_host_state(api, prefix):
         res = json.loads(api.publicMonitorSyncPull())
         assert res['status'], res
         event_ids = [event['event_id'] for event in res['data']['events']]
-        assert local_event_id in event_ids and peer_event_id not in event_ids, res
+        assert local_event_id in event_ids and peer_event_id in event_ids, res
         assert res['data']['max_seq'] >= 9002, res
+
+
+def _test_merge_local_view_with_peer_monitor_local_state(api, prefix):
+    sync_id = prefix + '_MERGED_VIEW'
+    _add_sync_config(sync_id, 'secret-' + sync_id)
+    sync_config = api._getSyncConfig(sync_id)
+    local_monitor_id = api._localMonitor().get('monitor_id')
+    peer_monitor_id = prefix + '_REMOTE_MONITOR'
+    pair_id = prefix + '_PAIR_MERGED_VIEW'
+    pair_secret = 'pair-secret-merged-view-' + prefix
+    now = api._now()
+    jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,actual_master_host_id,api_secret,status,status_text,addtime,update_time', (pair_id, 'MergedView', 'H_REMOTE_B', 'H_REMOTE_B', pair_secret, 'normal', '状态正常', now, now))
+    api._upsertState(pair_id, {
+        'host_id': 'H_LOCAL_A', 'host_name': 'Local-A', 'host_ip': '10.88.7.1', 'role': 'standby',
+        'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success',
+        'collect_method': 'local', 'report_host_id': 'H_LOCAL_A', 'site_scope': 'local',
+        'source_monitor_id': local_monitor_id, 'report_batch_id': prefix + '_BATCH_LOCAL', 'last_report_at': now
+    }, 'standby', now)
+    api._upsertState(pair_id, {
+        'host_id': 'H_REMOTE_B', 'host_name': 'Remote-B via A', 'host_ip': '10.88.7.2', 'role': 'master',
+        'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success',
+        'collect_method': 'ssh_peer', 'report_host_id': 'H_LOCAL_A', 'site_scope': 'remote',
+        'source_monitor_id': local_monitor_id, 'report_batch_id': prefix + '_BATCH_LOCAL', 'last_report_at': now
+    }, 'master', now)
+    api._applySyncEvent(sync_config, _event(prefix + '_EVT_REMOTE_LOCAL', 'ha_host_state', {'state': {
+        'pair_id': pair_id, 'host_id': 'H_REMOTE_B', 'host_name': 'Remote-B', 'host_ip': '10.88.7.2',
+        'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success',
+        'collect_method': 'local', 'report_host_id': 'H_REMOTE_B', 'site_scope': 'local',
+        'report_batch_id': prefix + '_BATCH_REMOTE', 'last_report_at': now
+    }}, 31, source_monitor_id=peer_monitor_id))
+    pair = api._normalizePair(api._getPair(pair_id))
+    assert len(pair['hosts']) == 2, pair
+    local_host = [host for host in pair['hosts'] if host['host_id'] == 'H_LOCAL_A'][0]
+    remote_host = [host for host in pair['hosts'] if host['host_id'] == 'H_REMOTE_B'][0]
+    assert local_host['site_scope'] == 'local', pair
+    assert remote_host['collect_method'] == 'local', pair
+    assert remote_host['site_scope'] == 'remote', pair
 
 
 def _test_host_state_merge(api, prefix):
@@ -316,7 +353,8 @@ def main():
     _cleanup(prefix)
     _test_signature_and_nonce(api, prefix)
     _test_idempotent_event_and_cursor(api, prefix)
-    _test_export_only_local_host_state(api, prefix)
+    _test_export_full_host_state(api, prefix)
+    _test_merge_local_view_with_peer_monitor_local_state(api, prefix)
     _test_host_state_merge(api, prefix)
     _test_cross_monitor_dispatch(api, prefix)
     _test_report_reads_synced_ha_tables(api, prefix)

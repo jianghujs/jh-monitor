@@ -1467,7 +1467,7 @@ function haDetailHostsHtml(pair) {
           '<td>' + haRoleMark(host.role) + haEscape(host.role) + '</td>' +
           '<td>' + haOnlineLabel(host) + '</td>' +
           '<td>' + haCollectLabel(host) + '</td>' +
-          '<td><div>' + haEscape(host.source_monitor_id ? '江湖云监控同步' : '本机上报') + '</div><div class="ha-sub">' + haEscape(host.source_monitor_id || '--') + '</div><div class="ha-sub">' + haEscape(host.sync_update_at || '') + '</div></td>' +
+          '<td><div>' + haEscape(host.data_source_text || '本地上报') + '</div><div class="ha-sub">' + haEscape(host.source_monitor_id || '--') + '</div><div class="ha-sub">' + haEscape(host.sync_update_at || '') + '</div></td>' +
           '<td>' + haEscape(host.last_report_at || '--') + '</td></tr>';
       }).join('') +
     '</tbody></table>' +

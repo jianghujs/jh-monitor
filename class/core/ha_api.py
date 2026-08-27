@@ -769,12 +769,6 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         )
         return event_id
 
-    def _shouldExportSyncEvent(self, row, payload):
-        if row.get('event_type') != 'ha_host_state':
-            return True
-        state = payload.get('state') if isinstance(payload, dict) and isinstance(payload.get('state'), dict) else payload
-        return isinstance(state, dict) and state.get('collect_method') == 'local'
-
     def getMonitorIdentityApi(self):
         return jh.returnJson(True, 'ok', self._localMonitor())
 
@@ -936,8 +930,6 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         for row in rows:
             max_seq = max(max_seq, self._safeInt(row.get('seq'), 0))
             payload_json = self._jsonLoads(row.get('payload_json'), {})
-            if not self._shouldExportSyncEvent(row, payload_json):
-                continue
             events.append({
                 'event_id': row.get('event_id') or '',
                 'sync_type': row.get('sync_type') or '',
@@ -1474,18 +1466,29 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         return selected
 
     def _displayStates(self, states):
-        batch_ids = [row.get('report_batch_id') for row in states if row.get('report_batch_id')]
-        if batch_ids:
-            latest_batch_id = None
-            latest_ts = -1
-            for batch_id in batch_ids:
-                batch_rows = [row for row in states if row.get('report_batch_id') == batch_id]
-                batch_ts = max([self._reportTimestamp(row) for row in batch_rows]) if batch_rows else 0
-                if batch_ts > latest_ts:
-                    latest_batch_id = batch_id
-                    latest_ts = batch_ts
-            if latest_batch_id:
-                states = [row for row in states if row.get('report_batch_id') == latest_batch_id]
+        local_monitor_id = self._localMonitor().get('monitor_id') or ''
+        latest_batch_by_source = {}
+        for row in states:
+            batch_id = row.get('report_batch_id') or ''
+            if not batch_id:
+                continue
+            source_key = row.get('source_monitor_id') or local_monitor_id or 'local'
+            batch_ts = self._reportTimestamp(row)
+            current = latest_batch_by_source.get(source_key) or {'batch_id': '', 'ts': -1}
+            if batch_ts > current.get('ts', -1):
+                latest_batch_by_source[source_key] = {'batch_id': batch_id, 'ts': batch_ts}
+        if latest_batch_by_source:
+            filtered = []
+            for row in states:
+                batch_id = row.get('report_batch_id') or ''
+                if not batch_id:
+                    filtered.append(row)
+                    continue
+                source_key = row.get('source_monitor_id') or local_monitor_id or 'local'
+                latest = latest_batch_by_source.get(source_key) or {}
+                if batch_id == latest.get('batch_id'):
+                    filtered.append(row)
+            states = filtered
         local_host_key_by_ip = {}
         local_host_ids_by_ip = {}
         local_host_ids = set()
@@ -1516,6 +1519,8 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         for rows in grouped.values():
             selected = self._selectDisplayState(rows)
             item = dict(selected)
+            if item.get('source_monitor_id') and item.get('source_monitor_id') != local_monitor_id:
+                item['site_scope'] = 'remote'
             if item.get('collect_method') == 'ssh_peer' and item.get('host_id') not in local_host_ids:
                 item['site_scope'] = 'remote'
             alias_ids = []
@@ -1559,6 +1564,9 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         role = row.get('role') or 'unknown'
         script_checks = self._normalizeScriptChecks(detail)
         display_name = self._displayHostName(row, pair)
+        local_monitor_id = self._localMonitor().get('monitor_id') or ''
+        source_monitor_id = row.get('source_monitor_id') or ''
+        data_source = 'sync' if source_monitor_id and source_monitor_id != local_monitor_id else 'local'
         return {
             'host_id': row.get('host_id') or '',
             'host_alias_ids': row.get('_alias_host_ids') or [row.get('host_id') or ''],
@@ -1594,8 +1602,10 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             'last_error': row.get('last_error') or '',
             'log_path': row.get('log_path') or '',
             'last_report_at': row.get('last_report_at') or '',
-            'source_monitor_id': row.get('source_monitor_id') or '',
-            'sync_update_at': row.get('sync_update_at') or ''
+            'source_monitor_id': source_monitor_id,
+            'sync_update_at': row.get('sync_update_at') or '',
+            'data_source': data_source,
+            'data_source_text': '江湖云监控同步' if data_source == 'sync' else '本地上报'
         }
 
     def _stateFailover(self, row):
@@ -2288,8 +2298,6 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             jh.M('ha_pair').where('pair_id=?', (pair_id,)).save('actual_master_host_id,status,status_text,last_report_at,update_time', (actual, status, status_text, now, now))
         self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_pair', pair_id, {'pair': self._getPair(pair_id)})
         for state in self._getStates(pair_id):
-            if state.get('collect_method') != 'local':
-                continue
             self._writeSyncEvent(self.DEFAULT_SYNC_TYPE, 'ha_host_state', '{0}:{1}'.format(pair_id, state.get('host_id') or ''), {'state': state})
         return jh.returnJson(True, '状态已上报')
 
