@@ -1120,23 +1120,9 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         host_id = self._safeText(state.get('host_id'), 128)
         if not pair_id or not host_id:
             return
-        original_host_id = host_id
         source_monitor_id, sync_update_at = self._sourceMeta(event)
         local_monitor_id = self._localMonitor().get('monitor_id') or ''
         exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field(self.state_fields).find()
-        if isinstance(exists, dict) and exists.get('id') and source_monitor_id and source_monitor_id != local_monitor_id:
-            exists_source_monitor_id = exists.get('source_monitor_id') or local_monitor_id
-            if exists_source_monitor_id != source_monitor_id:
-                detail = state.get('health_detail') or {}
-                if isinstance(detail, str):
-                    detail = self._jsonLoads(detail, {})
-                if not isinstance(detail, dict):
-                    detail = {}
-                detail.setdefault('_source_host_id', original_host_id)
-                state['health_detail'] = detail
-                alias_source = '{0}:{1}:{2}:{3}'.format(source_monitor_id, state.get('report_host_id') or '', state.get('host_ip') or state.get('ip') or '', original_host_id)
-                host_id = 'H_ALIAS_' + hashlib.sha1(alias_source.encode('utf-8')).hexdigest()[:8].upper()
-                exists = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, host_id)).field(self.state_fields).find()
         if isinstance(exists, dict) and exists.get('id'):
             new_ts = self._reportTimestamp(state)
             old_ts = self._reportTimestamp(exists)
@@ -1145,6 +1131,15 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             if new_ts == old_ts and exists.get('collect_method') == 'local' and state.get('collect_method') != 'local':
                 return
         now = self._now()
+        site_scope = self._safeText(state.get('site_scope') or '', 32)
+        if isinstance(exists, dict) and exists.get('id'):
+            exists_source_monitor_id = exists.get('source_monitor_id') or local_monitor_id
+            if exists.get('site_scope') == 'local' or (exists_source_monitor_id == local_monitor_id and exists.get('collect_method') == 'local'):
+                site_scope = 'local'
+            elif source_monitor_id and source_monitor_id != local_monitor_id:
+                site_scope = 'remote'
+        elif source_monitor_id and source_monitor_id != local_monitor_id:
+            site_scope = 'remote'
         values = (
             self._safeText(state.get('host_name') or state.get('name') or host_id, 128),
             self._safeText(state.get('host_ip') or state.get('ip'), 64),
@@ -1154,7 +1149,7 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
             self._safeText(state.get('collect_status') or 'unknown', 32),
             self._safeText(state.get('collect_method') or '', 32),
             self._safeText(state.get('report_host_id') or '', 128),
-            self._safeText(state.get('site_scope') or '', 32),
+            site_scope,
             state.get('health_detail') if isinstance(state.get('health_detail'), str) else json.dumps(state.get('health_detail') or {}, ensure_ascii=False),
             self._safeText(state.get('switch_run_id') or '', 128),
             self._safeText(state.get('switch_phase') or '', 64),
@@ -1534,18 +1529,12 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         for rows in grouped.values():
             selected = self._selectDisplayState(rows)
             item = dict(selected)
-            has_local_report = False
-            for row in rows:
-                row_source_monitor_id = row.get('source_monitor_id') or local_monitor_id
-                if row_source_monitor_id == local_monitor_id and row.get('collect_method') == 'local':
-                    has_local_report = True
-                    break
-            if has_local_report:
-                item['site_scope'] = 'local'
-                item['_has_local_report'] = True
-            elif item.get('source_monitor_id') and item.get('source_monitor_id') != local_monitor_id:
+            item_source_monitor_id = item.get('source_monitor_id') or local_monitor_id
+            if item.get('collect_method') == 'ssh_peer' and item_source_monitor_id == local_monitor_id:
                 item['site_scope'] = 'remote'
-            if item.get('collect_method') == 'ssh_peer' and item.get('host_id') not in local_host_ids:
+            if item.get('source_monitor_id') and item.get('source_monitor_id') != local_monitor_id and item.get('site_scope') != 'local':
+                item['site_scope'] = 'remote'
+            if item.get('collect_method') == 'ssh_peer' and item.get('host_id') not in local_host_ids and item.get('site_scope') != 'local':
                 item['site_scope'] = 'remote'
             alias_ids = []
             alias_names = []
@@ -1590,7 +1579,7 @@ CREATE TABLE IF NOT EXISTS ha_sync_nonce (
         display_name = self._displayHostName(row, pair)
         local_monitor_id = self._localMonitor().get('monitor_id') or ''
         source_monitor_id = row.get('source_monitor_id') or ''
-        data_source = 'local' if row.get('_has_local_report') else ('sync' if source_monitor_id and source_monitor_id != local_monitor_id else 'local')
+        data_source = 'sync' if source_monitor_id and source_monitor_id != local_monitor_id else 'local'
         return {
             'host_id': row.get('host_id') or '',
             'host_alias_ids': row.get('_alias_host_ids') or [row.get('host_id') or ''],

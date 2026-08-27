@@ -259,14 +259,15 @@ def _test_merge_local_view_with_peer_monitor_local_state(api, prefix):
 
 
 def _test_synced_peer_state_does_not_override_local_site_scope(api, prefix):
-    sync_id = prefix + '_PEER_ALIAS'
+    sync_id = prefix + '_PEER_SCOPE'
     _add_sync_config(sync_id, 'secret-' + sync_id)
     sync_config = api._getSyncConfig(sync_id)
     local_monitor_id = api._localMonitor().get('monitor_id')
-    peer_monitor_id = prefix + '_REMOTE_MONITOR_ALIAS'
-    pair_id = prefix + '_PAIR_PEER_ALIAS'
-    pair_secret = 'pair-secret-peer-alias-' + prefix
+    peer_monitor_id = prefix + '_REMOTE_MONITOR_SCOPE'
+    pair_id = prefix + '_PAIR_PEER_SCOPE'
+    pair_secret = 'pair-secret-peer-scope-' + prefix
     now = api._now()
+    newer = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + 60))
     jh.M('ha_pair').add('pair_id,pair_name,desired_master_host_id,actual_master_host_id,api_secret,status,status_text,addtime,update_time', (pair_id, 'PeerAlias', 'H_LOCAL_A', 'H_LOCAL_A', pair_secret, 'normal', '状态正常', now, now))
     api._upsertState(pair_id, {
         'host_id': 'H_LOCAL_A', 'host_name': 'Local-A', 'host_ip': '10.88.8.1', 'role': 'master',
@@ -278,18 +279,18 @@ def _test_synced_peer_state_does_not_override_local_site_scope(api, prefix):
         'pair_id': pair_id, 'host_id': 'H_LOCAL_A', 'host_name': 'Local-A from peer', 'host_ip': '10.88.8.1',
         'role': 'master', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success',
         'collect_method': 'ssh_peer', 'report_host_id': 'H_REMOTE_B', 'site_scope': 'remote',
-        'report_batch_id': prefix + '_BATCH_REMOTE_ALIAS', 'last_report_at': now
+        'report_batch_id': prefix + '_BATCH_REMOTE_ALIAS', 'last_report_at': newer
     }}, 41, source_monitor_id=peer_monitor_id))
     local_row = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, 'H_LOCAL_A')).field(api.state_fields).find()
-    alias_rows = jh.M('ha_host_state').where('pair_id=? AND host_id LIKE ?', (pair_id, 'H_ALIAS_%')).field(api.state_fields).select()
-    assert local_row['collect_method'] == 'local' and local_row['source_monitor_id'] == local_monitor_id, local_row
-    assert isinstance(alias_rows, list) and len(alias_rows) == 1 and alias_rows[0]['source_monitor_id'] == peer_monitor_id, alias_rows
+    alias_count = jh.M('ha_host_state').where('pair_id=? AND host_id LIKE ?', (pair_id, 'H_ALIAS_%')).count()
+    assert local_row['collect_method'] == 'ssh_peer' and local_row['source_monitor_id'] == peer_monitor_id, local_row
+    assert local_row['site_scope'] == 'local', local_row
+    assert alias_count == 0, alias_count
     pair = api._normalizePair(api._getPair(pair_id))
     assert len(pair['hosts']) == 1, pair
     host = pair['hosts'][0]
     assert host['site_scope'] == 'local', host
-    assert host['data_source'] == 'local', host
-    assert 'local' in host['host_alias_collect_methods'] and 'ssh_peer' in host['host_alias_collect_methods'], host
+    assert host['data_source'] == 'sync', host
 
 
 def _test_host_state_merge(api, prefix):
@@ -309,13 +310,11 @@ def _test_host_state_merge(api, prefix):
     newer_peer = _event(prefix + '_EVT_NEWER', 'ha_host_state', {'state': {'pair_id': pair_id, 'host_id': 'H_A', 'host_name': 'Peer A Newer', 'host_ip': '10.88.1.1', 'role': 'standby', 'online_status': 'online', 'health_status': 'normal', 'collect_status': 'success', 'collect_method': 'ssh_peer', 'last_report_at': newer}}, 12)
     api._applySyncEvent(sync_config, newer_peer)
     state = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, 'H_A')).field(api.state_fields).find()
-    assert state['host_name'] == 'Local A' and state['role'] == 'master', state
-    alias_rows = jh.M('ha_host_state').where('pair_id=? AND host_id LIKE ?', (pair_id, 'H_ALIAS_%')).field(api.state_fields).select()
-    assert isinstance(alias_rows, list) and len(alias_rows) == 1 and alias_rows[0]['host_name'] == 'Peer A Newer', alias_rows
+    assert state['host_name'] == 'Peer A Newer' and state['role'] == 'standby' and state['site_scope'] == 'local', state
     stale_peer = _event(prefix + '_EVT_STALE', 'ha_host_state', {'state': {'pair_id': pair_id, 'host_id': 'H_A', 'host_name': 'Stale A', 'host_ip': '10.88.1.1', 'role': 'master', 'online_status': 'unknown', 'health_status': 'unknown', 'collect_status': 'failed', 'collect_method': 'ssh_peer', 'last_report_at': older}}, 13)
     api._applySyncEvent(sync_config, stale_peer)
     state = jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, 'H_A')).field(api.state_fields).find()
-    assert state['host_name'] == 'Local A' and state['collect_status'] == 'success', state
+    assert state['host_name'] == 'Peer A Newer' and state['collect_status'] == 'success' and state['site_scope'] == 'local', state
 
 
 def _test_cross_monitor_dispatch(api, prefix):
