@@ -41,6 +41,16 @@ def main():
             detail = json.loads(api.localDetailApi())
         assert detail['status'] and detail['data']['pair_id'] == pair_id and detail['data']['pair_name'] == '本地主备界面', detail
         assert detail['data']['tasks'] == [] and detail['data']['host']['role'] == 'master', detail
+        updated_pair_id = pair_id + '_EDIT'
+        with app.test_request_context('/ha/api/local/pair/update', method='POST', json={
+            'original_pair_id': pair_id, 'pair_id': updated_pair_id, 'pair_name': '本地主备界面已修改'
+        }):
+            updated = json.loads(api.pairUpdateApi())
+        assert updated['status'] and updated['data']['pair_id'] == updated_pair_id, updated
+        pair_id = updated_pair_id
+        with app.test_request_context('/ha/api/local/detail', method='GET', query_string={'pair_id': pair_id}):
+            detail = json.loads(api.localDetailApi())
+        assert detail['status'] and detail['data']['pair_name'] == '本地主备界面已修改', detail
         with app.test_request_context('/ha/api/local/pair/delete', method='POST', json={'pair_id': pair_id}):
             deleted = json.loads(api.pairDeleteApi())
         assert deleted['status']

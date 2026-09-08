@@ -34,7 +34,7 @@ function haLocalLoadPairs() {
         '<td><div class="ha-local-main">' + haLocalEscape(host.host_name || '--') + '</div><div class="ha-local-host-sub"><span class="ha-local-subtext">' + haLocalEscape(host.host_ip || host.host_id || '等待注册') + '</span>' + haLocalOnlineTag(host.online_status) + '</div></td>' +
         '<td>' + haLocalRoleTag(host.role) + '</td>' +
         '<td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><div class="ha-local-subtext" title="' + haLocalEscape(pair.status_text) + '">' + haLocalEscape(pair.status_text || '--') + '</div></td>' +
-        '<td>' + haLocalEscape(pair.last_report_at || '--') + '</td><td class="text-right ha-local-actions"><a class="btlink" href="javascript:;" onclick="haLocalOpenDetail(\'' + haLocalEscape(pair.pair_id) + '\')">详情</a><a class="btlink" href="javascript:;" onclick="haLocalDeletePair(\'' + haLocalEscape(pair.pair_id) + '\')">删除</a></td></tr>';
+        '<td>' + haLocalEscape(pair.last_report_at || '--') + '</td><td class="text-right ha-local-actions"><a class="btlink" href="javascript:;" onclick="haLocalOpenDetail(\'' + haLocalEscape(pair.pair_id) + '\')">详情</a><a class="btlink" href="javascript:;" onclick="haLocalOpenEdit(\'' + haLocalEscape(pair.pair_id) + '\')">编辑</a><a class="btlink" href="javascript:;" onclick="haLocalDeletePair(\'' + haLocalEscape(pair.pair_id) + '\')">删除</a></td></tr>';
     }).join('');
     $('#haLocalPairBody').html(rows);
     $('#haLocalEmpty').toggle(!haLocalPairs.length); $('#haLocalTableWrap').toggle(!!haLocalPairs.length);
@@ -297,6 +297,34 @@ function haLocalOpenCreate() {
 function haLocalShowPairId(data) {
   var html = '<div class="pd20"><div class="ha-local-pair-id">' + haLocalEscape(data.pair_id) + '</div><div class="c9 mt10">请将此 ID 填入本地版插件的云监控配置。</div></div>';
   layer.open({type: 1, title: '主备关系 ID', area: '560px', content: html, btn: ['已填写']});
+}
+
+function haLocalOpenEdit(pairId) {
+  var pair = haLocalPairs.filter(function(item) { return item.pair_id === pairId; })[0];
+  if (!pair) {
+    layer.msg('主备关系不存在或列表已刷新', {icon: 2});
+    return;
+  }
+  var html = '<div class="bt-form ha-local-dialog pd20"><div class="line"><span class="tname">关系名称</span><div class="info-r"><input id="haLocalEditPairName" class="bt-input-text" value="' + haLocalEscape(pair.pair_name || '') + '" style="width:300px"></div></div><div class="line"><span class="tname">主备关系 ID</span><div class="info-r"><input id="haLocalEditPairId" class="bt-input-text" value="' + haLocalEscape(pair.pair_id) + '" style="width:300px"></div></div><div class="line"><span class="tname"></span><div class="info-r c9">修改 ID 后，需要将本地版插件的云监控配置同步为新 ID。</div></div></div>';
+  layer.open({type: 1, title: '编辑主备关系', area: '540px', content: html, btn: ['保存', '取消'], yes: function(index) {
+    var newPairId = $('#haLocalEditPairId').val();
+    var save = function() {
+      haLocalApi('pair/update', {original_pair_id: pairId, pair_id: newPairId, pair_name: $('#haLocalEditPairName').val()}, function(data) {
+        if (!data) return;
+        layer.close(index);
+        layer.msg(data.pair_id !== pairId ? '主备关系已更新，请同步修改本地版插件配置' : '主备关系已更新', {icon: 1});
+        haLocalLoadPairs();
+      });
+    };
+    if ($.trim(newPairId) !== pairId) {
+      layer.confirm('修改主备关系 ID 后，已配置的本地版插件需要同步填写新 ID，确认修改？', {title: '确认修改主备关系 ID', icon: 0}, function(confirmIndex) {
+        layer.close(confirmIndex);
+        save();
+      });
+      return;
+    }
+    save();
+  }});
 }
 
 function haLocalCopyPairId(pairId) {

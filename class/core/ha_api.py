@@ -556,6 +556,41 @@ class ha_api:
         self._removeTaskFiles(task_ids)
         return jh.returnJson(True, '主备关系已删除', {'pair_id': pair_id})
 
+    def pairUpdateApi(self):
+        self.ensureHaSchema()
+        payload = self._bodyJson()
+        original_pair_id = self._safeText(payload.get('original_pair_id'), 128)
+        pair_id = self._safeText(payload.get('pair_id'), 128)
+        pair_name = self._safeText(payload.get('pair_name'), 128)
+        if not self._validId(original_pair_id):
+            return jh.returnJson(False, '原主备关系 ID 不能为空或格式无效')
+        if not self._validId(pair_id):
+            return jh.returnJson(False, '主备关系 ID 仅支持字母、数字、下划线和连字符，长度不超过128位')
+        if not pair_name:
+            return jh.returnJson(False, '主备关系名称不能为空')
+
+        now = self._now()
+        with sqlite3.connect(self.DB_PATH) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            current = conn.execute(
+                'SELECT id FROM ha_pair WHERE pair_id=? AND local_type=?', (original_pair_id, self.PAIR_TYPE)
+            ).fetchone()
+            if not current:
+                return jh.returnJson(False, '主备关系不存在')
+            if pair_id != original_pair_id:
+                duplicate = conn.execute('SELECT id FROM ha_pair WHERE pair_id=?', (pair_id,)).fetchone()
+                if duplicate:
+                    return jh.returnJson(False, '主备关系 ID 已存在')
+                conn.execute('UPDATE ha_host_state SET pair_id=? WHERE pair_id=?', (pair_id, original_pair_id))
+                conn.execute('UPDATE ha_switch_task SET pair_id=? WHERE pair_id=?', (pair_id, original_pair_id))
+            conn.execute(
+                'UPDATE ha_pair SET pair_id=?,pair_name=?,update_time=? WHERE pair_id=? AND local_type=?',
+                (pair_id, pair_name, now, original_pair_id, self.PAIR_TYPE)
+            )
+        return jh.returnJson(True, '主备关系已更新', {
+            'pair_id': pair_id, 'pair_name': pair_name, 'original_pair_id': original_pair_id,
+        })
+
     def pairSortApi(self):
         self.ensureHaSchema()
         payload = self._bodyJson()

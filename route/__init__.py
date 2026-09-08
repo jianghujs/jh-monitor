@@ -231,6 +231,13 @@ def ha_local_pair_delete():
     return _local_ha_api().pairDeleteApi()
 
 
+@app.route('/ha/api/local/pair/update', methods=['POST'])
+def ha_local_pair_update():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().pairUpdateApi()
+
+
 @app.route('/ha/api/local/pair/sort', methods=['POST'])
 def ha_local_pair_sort():
     if not isLogined():

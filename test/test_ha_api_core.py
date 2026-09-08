@@ -18,6 +18,7 @@ def call(api, method, path, payload=None, query=None):
         handler = {
             'create': api.pairCreateApi,
             'delete': api.pairDeleteApi,
+            'update': api.pairUpdateApi,
             'sort': api.pairSortApi,
             'register': api.localRegisterApi,
             'report': api.localReportApi,
@@ -92,6 +93,18 @@ def main():
         assert running['status'] and running['data']['accepted_log_count'] == 2, running
         assert api._getPair(pair_id)['status'] == 'switching'
 
+        updated_pair_id = pair_id + '_RENAMED'
+        updated = call(api, 'POST', 'update', {
+            'original_pair_id': pair_id, 'pair_id': updated_pair_id, 'pair_name': '本地主备接口已修改'
+        })
+        assert updated['status'] and updated['data']['pair_id'] == updated_pair_id, updated
+        assert not api._getPair(pair_id)
+        assert api._getPair(updated_pair_id)['pair_name'] == '本地主备接口已修改'
+        assert api._getHost(updated_pair_id, 'H_LOCAL_TEST')
+        assert api._getTask(task_id)['pair_id'] == updated_pair_id
+        pair_id = updated_pair_id
+        task_report['pair_id'] = pair_id
+
         duplicated = call(api, 'POST', 'report', task_report)
         assert duplicated['status'] and duplicated['data']['accepted_log_count'] == 0, duplicated
         log = call(api, 'GET', 'log', query={'switch_task_id': task_id, 'offset': '0'})
@@ -107,6 +120,9 @@ def main():
         other_pair_id = other['data']['pair_id']
         assert other_pair_id != pair_id
         assert call(api, 'POST', 'register', host_payload(other_pair_id, 'H_OTHER'))['status']
+        assert not call(api, 'POST', 'update', {
+            'original_pair_id': pair_id, 'pair_id': other_pair_id, 'pair_name': '重复 ID'
+        })['status']
         cross = host_payload(other_pair_id, 'H_OTHER')
         cross['switch_task'] = dict(task_report['switch_task'])
         assert not call(api, 'POST', 'report', cross)['status']
