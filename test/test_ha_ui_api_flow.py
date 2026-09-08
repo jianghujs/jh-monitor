@@ -44,6 +44,7 @@ def main():
         pair = [item for item in listed['data']['list'] if item['pair_id'] == pair_id][0]
         assert pair['pair_name'] == '本地主备界面' and pair['pair_id'] != pair['pair_name'], pair
         assert pair['host']['host_name'] == 'UI Local Standby' and pair['status'] == 'danger', pair
+        assert 'UI Local Standby 已离线' in pair['status_text'], pair
         assert [host['host_id'] for host in pair['hosts']] == ['H_UI_LOCAL_STANDBY', 'H_UI_LOCAL'], pair
         with app.test_request_context('/ha/api/local/detail', method='GET', query_string={'pair_id': pair_id}):
             detail = json.loads(api.localDetailApi())

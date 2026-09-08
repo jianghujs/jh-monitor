@@ -156,6 +156,36 @@ def main():
             assert call(api, 'POST', 'report', body)['status']
             assert api._getPair(pair_id)['status'] == expected, (changes, api._getPair(pair_id))
 
+        switching_with_transient_issue = host_payload(pair_id)
+        switching_with_transient_issue.update({'online_status': 'offline', 'health_status': 'danger'})
+        switching_with_transient_issue['switch_task'] = dict(task_report['switch_task'])
+        switching_with_transient_issue['switch_task'].update({'status': 'running', 'current_step': '切换角色'})
+        assert call(api, 'POST', 'report', switching_with_transient_issue)['status']
+        pair = api._getPair(pair_id)
+        assert pair['status'] == 'switching' and '切换角色' in pair['status_text'], pair
+        completed_after_switch = host_payload(pair_id)
+        completed_after_switch['switch_task'] = dict(task_report['switch_task'])
+        completed_after_switch['switch_task']['status'] = 'success'
+        assert call(api, 'POST', 'report', completed_after_switch)['status']
+
+        second_host = host_payload(pair_id, 'H_LOCAL_SECOND')
+        second_host.update({'host_name': 'Second Local', 'host_ip': '127.0.0.2', 'role': 'master'})
+        assert call(api, 'POST', 'register', second_host)['status']
+        pair = api._getPair(pair_id)
+        assert pair['status'] == 'normal' and '2 台机器状态正常' in pair['status_text'], pair
+        second_host.update({'health_status': 'warning', 'health_detail': {'summary': '磁盘空间不足'}})
+        assert call(api, 'POST', 'report', second_host)['status']
+        pair = api._getPair(pair_id)
+        assert pair['status'] == 'warning' and 'Second Local：磁盘空间不足' in pair['status_text'], pair
+        second_host.update({'online_status': 'offline', 'health_status': 'normal', 'health_detail': {'summary': '正常'}})
+        assert call(api, 'POST', 'report', second_host)['status']
+        pair = api._getPair(pair_id)
+        assert pair['status'] == 'danger' and 'Second Local 已离线' in pair['status_text'], pair
+        second_host.update({'online_status': 'online', 'role': 'standby'})
+        assert call(api, 'POST', 'report', second_host)['status']
+        pair = api._getPair(pair_id)
+        assert pair['status'] == 'normal' and all(name in pair['status_text'] for name in ('Local Test', 'Second Local')), pair
+
         deleted = call(api, 'POST', 'delete', {'pair_id': pair_id})
         assert deleted['status'] and deleted['data']['pair_id'] == pair_id, deleted
         assert not api._getPair(pair_id)

@@ -27,12 +27,8 @@ function haLocalHostsHtml(pair) {
   var hosts = haLocalPairHosts(pair);
   if (!hosts.length) return '<span class="ha-local-subtext">等待注册</span>';
   return hosts.map(function(host) {
-    return '<span class="ha-local-host-compact" title="' + haLocalEscape((host.host_name || host.host_id || '--') + ' / ' + (host.host_ip || host.host_id || '--')) + '"><span class="ha-local-host-name">' + haLocalEscape(host.host_name || host.host_id || '--') + '</span>' + haLocalOnlineTag(host.online_status) + '</span>';
+    return '<span class="ha-local-host-compact" title="' + haLocalEscape((host.host_name || host.host_id || '--') + ' / ' + (host.host_ip || host.host_id || '--')) + '">' + haLocalRoleTag(host.role) + '<span class="ha-local-host-name">' + haLocalEscape(host.host_name || host.host_id || '--') + '</span>' + haLocalOnlineTag(host.online_status) + '</span>';
   }).join('');
-}
-function haLocalHostRolesHtml(pair) {
-  var hosts = haLocalPairHosts(pair);
-  return hosts.length ? hosts.map(function(host) { return '<span class="ha-local-host-role-summary">' + haLocalRoleTag(host.role) + '</span>'; }).join('') : '--';
 }
 
 function haLocalLoadPairs() {
@@ -42,9 +38,8 @@ function haLocalLoadPairs() {
     haLocalPairs = (data && data.list) || [];
     var rows = haLocalPairs.map(function(pair) {
       return '<tr data-ha-pair-row-id="' + haLocalEscape(pair.pair_id) + '"><td class="text-center"><span class="ha-local-sort-handle" aria-hidden="true"><i></i><i></i><i></i></span></td><td><div class="ha-local-main">' + haLocalEscape(pair.pair_name || '--') + '</div><div class="ha-local-subtext ha-local-pair-id-line"><span class="ha-local-pair-id-text" title="' + haLocalEscape(pair.pair_id) + '">' + haLocalEscape(pair.pair_id) + '</span><button type="button" class="ha-local-copy-btn" title="复制主备关系 ID" onclick="haLocalCopyPairId(\'' + haLocalEscape(pair.pair_id) + '\')"><i class="glyphicon glyphicon-duplicate"></i></button></div></td>' +
-        '<td><div class="ha-local-host-summary"><span class="ha-local-host-count">' + haLocalPairHosts(pair).length + ' 台</span>' + haLocalHostsHtml(pair) + '</div></td>' +
-        '<td>' + haLocalHostRolesHtml(pair) + '</td>' +
-        '<td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><div class="ha-local-subtext" title="' + haLocalEscape(pair.status_text) + '">' + haLocalEscape(pair.status_text || '--') + '</div></td>' +
+        '<td><div class="ha-local-host-summary">' + haLocalHostsHtml(pair) + '</div></td>' +
+        '<td><span class="ha-local-status ha-local-status-tooltip ' + haLocalStatusClass(pair.status) + '" title="' + haLocalEscape(pair.status_text || haLocalStatusText(pair.status)) + '">' + haLocalStatusText(pair.status) + '</span></td>' +
         '<td>' + haLocalEscape(pair.last_report_at || '--') + '</td><td class="text-right ha-local-actions"><a class="btlink" href="javascript:;" onclick="haLocalOpenDetail(\'' + haLocalEscape(pair.pair_id) + '\')">详情</a><a class="btlink" href="javascript:;" onclick="haLocalOpenEdit(\'' + haLocalEscape(pair.pair_id) + '\')">编辑</a><a class="btlink" href="javascript:;" onclick="haLocalDeletePair(\'' + haLocalEscape(pair.pair_id) + '\')">删除</a></td></tr>';
     }).join('');
     $('#haLocalPairBody').html(rows);

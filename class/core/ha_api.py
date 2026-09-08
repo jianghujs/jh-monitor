@@ -365,25 +365,45 @@ class ha_api:
         hosts = self._getHosts(pair_id)
         if not hosts:
             return 'unknown', '等待当前机器上报'
-        host = hosts[0]
-        task = self._getTask(host.get('switch_task_id')) if host.get('switch_task_id') else {}
-        name = host.get('host_name') or host.get('host_id') or '当前机器'
-        if task and task.get('status') in ('pending', 'running'):
-            return 'switching', '{0}：{1}'.format(name, task.get('current_step') or task.get('status_text') or '正在切换')
-        if task and task.get('status') == 'failed':
-            return 'danger', task.get('status_text') or '{0} 最近切换失败'.format(name)
-        if host.get('online_status') == 'offline':
-            return 'danger', '{0} 已离线'.format(name)
-        if host.get('health_status') == 'danger':
-            return 'danger', self._healthText(host, '{0} 自检异常'.format(name))
-        if host.get('health_status') == 'warning':
-            return 'warning', self._healthText(host, '{0} 自检提醒'.format(name))
-        role = host.get('role')
-        if role == 'master':
-            return 'normal', '{0} 当前为主机，状态正常'.format(name)
-        if role == 'standby':
-            return 'normal', '{0} 当前为备机，状态正常'.format(name)
-        return 'unknown', '等待当前机器上报'
+        danger_messages = []
+        switching_messages = []
+        warning_messages = []
+        master_names = []
+        standby_names = []
+        for host in hosts:
+            name = host.get('host_name') or host.get('host_id') or '当前机器'
+            task = self._getTask(host.get('switch_task_id')) if host.get('switch_task_id') else {}
+            if task and task.get('status') == 'failed':
+                danger_messages.append('{0}：{1}'.format(name, task.get('status_text') or '最近切换失败'))
+            if host.get('online_status') == 'offline':
+                danger_messages.append('{0} 已离线'.format(name))
+            if host.get('health_status') == 'danger':
+                danger_messages.append('{0}：{1}'.format(name, self._healthText(host, '自检异常')))
+            if task and task.get('status') in ('pending', 'running'):
+                switching_messages.append('{0}：{1}'.format(name, task.get('current_step') or task.get('status_text') or '正在切换'))
+            if host.get('health_status') == 'warning':
+                warning_messages.append('{0}：{1}'.format(name, self._healthText(host, '自检提醒')))
+            if host.get('role') == 'master':
+                master_names.append(name)
+            elif host.get('role') == 'standby':
+                standby_names.append(name)
+
+        if switching_messages:
+            return 'switching', '；'.join(switching_messages)
+        if danger_messages:
+            return 'danger', '；'.join(danger_messages)
+        if warning_messages:
+            return 'warning', '；'.join(warning_messages)
+        if len(hosts) == 1:
+            name = master_names[0] if master_names else standby_names[0] if standby_names else '当前机器'
+            role_text = '主机' if master_names else '备机' if standby_names else ''
+            return 'normal', '{0} 当前为{1}，状态正常'.format(name, role_text)
+        role_messages = []
+        if master_names:
+            role_messages.append('主机 {0}'.format('、'.join(master_names)))
+        if standby_names:
+            role_messages.append('备机 {0}'.format('、'.join(standby_names)))
+        return 'normal', '{0} 台机器状态正常：{1}'.format(len(hosts), '；'.join(role_messages) or '角色待上报')
 
     def _healthText(self, host, fallback):
         detail = self._jsonLoads(host.get('health_detail'), {})
