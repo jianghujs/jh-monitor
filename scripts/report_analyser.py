@@ -1727,7 +1727,7 @@ class HostReportAnalyser(object):
         try:
             api = ha_api()
             api.ensureHaSchema()
-            rows = jh.M('ha_pair').field(api.pair_fields).order('sort_id asc,id desc').select()
+            rows = jh.M('ha_pair').where('local_type=?', (api.PAIR_TYPE,)).field(api.PAIR_FIELDS).order('update_time desc,id desc').select()
         except Exception:
             return overview
         if not isinstance(rows, list):
@@ -1741,19 +1741,20 @@ class HostReportAnalyser(object):
                 pair = dict(row)
                 pair['status'] = row.get('status') or 'unknown'
                 pair['status_text'] = row.get('status_text') or '状态读取失败'
-                pair['hosts'] = []
+                pair['host'] = None
             status = str(pair.get('status') or 'unknown')
             status_text = str(pair.get('status_text') or self._ha_status_text(status))
-            hosts = []
-            for host in pair.get('hosts') or []:
-                hosts.append('{0}({1}) {2}'.format(host.get('name') or host.get('host_id') or '未知主机', host.get('ip') or '--', host.get('role') or '--'))
+            host = pair.get('host') or {}
+            hosts_text = '暂无主机上报'
+            if host:
+                hosts_text = '{0}({1}) {2}'.format(host.get('host_name') or host.get('host_id') or '未知主机', host.get('host_ip') or '--', host.get('role') or '--')
             item = {
                 'pair_id': pair.get('pair_id') or row.get('pair_id') or '',
                 'pair_name': pair.get('pair_name') or row.get('pair_name') or pair.get('pair_id') or row.get('pair_id') or '未知主备',
                 'status': status,
                 'status_label': self._ha_status_text(status),
                 'status_text': status_text,
-                'hosts_text': '；'.join(hosts) if hosts else '暂无主机上报',
+                'hosts_text': hosts_text,
                 'last_report_at': pair.get('last_report_at') or row.get('last_report_at') or ''
             }
             overview['items'].append(item)

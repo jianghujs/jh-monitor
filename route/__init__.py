@@ -212,6 +212,56 @@ def publicObject(toObject, func, action=None, get=None):
         return jh.getJson(data)
 
 
+def _local_ha_api():
+    from ha_api import ha_api
+    return ha_api()
+
+
+@app.route('/ha/api/local/pair/create', methods=['POST'])
+def ha_local_pair_create():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().pairCreateApi()
+
+
+@app.route('/ha/api/local/pair/delete', methods=['POST'])
+def ha_local_pair_delete():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().pairDeleteApi()
+
+
+@app.route('/ha/api/local/register', methods=['POST'])
+def ha_local_register():
+    return _local_ha_api().localRegisterApi()
+
+
+@app.route('/ha/api/local/report', methods=['POST'])
+def ha_local_report():
+    return _local_ha_api().localReportApi()
+
+
+@app.route('/ha/api/local/switch-log', methods=['GET'])
+def ha_local_switch_log():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().switchLogApi()
+
+
+@app.route('/ha/api/local/list', methods=['GET', 'POST'])
+def ha_local_list():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().localListApi()
+
+
+@app.route('/ha/api/local/detail', methods=['GET', 'POST'])
+def ha_local_detail():
+    if not isLogined():
+        return jh.returnJson(False, '请先登录')
+    return _local_ha_api().localDetailApi()
+
+
 # @app.route("/debug")
 # def debug():
 #     print(sys.version_info)
