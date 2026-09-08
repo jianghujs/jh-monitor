@@ -18,11 +18,12 @@ def main():
     assert api.ensureHaSchema()
     pair_id = ''
     try:
-        with app.test_request_context('/ha/api/local/pair/create', method='POST', json={'pair_name': '本地主备界面'}):
+        custom_pair_id = 'HA_UI_LOCAL_' + str(int(time.time()))
+        with app.test_request_context('/ha/api/local/pair/create', method='POST', json={'pair_name': '本地主备界面', 'pair_id': custom_pair_id}):
             created = json.loads(api.pairCreateApi())
         assert created['status']
         pair_id = created['data']['pair_id']
-        assert api._validId(pair_id) and pair_id != '本地主备界面', created
+        assert pair_id == custom_pair_id, created
         assert 'api_secret' not in created['data']
         payload = {
             'pair_id': pair_id, 'host_id': 'H_UI_LOCAL', 'host_name': 'UI Local',

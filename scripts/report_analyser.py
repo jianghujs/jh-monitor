@@ -1727,7 +1727,7 @@ class HostReportAnalyser(object):
         try:
             api = ha_api()
             api.ensureHaSchema()
-            rows = jh.M('ha_pair').where('local_type=?', (api.PAIR_TYPE,)).field(api.PAIR_FIELDS).order('update_time desc,id desc').select()
+            rows = jh.M('ha_pair').where('local_type=?', (api.PAIR_TYPE,)).field(api.PAIR_FIELDS).order('sort_id asc,id desc').select()
         except Exception:
             return overview
         if not isinstance(rows, list):

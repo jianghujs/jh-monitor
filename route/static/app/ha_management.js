@@ -2,6 +2,9 @@ var haLocalPairs = [];
 var haLocalLogTimer = null;
 var haLocalRefreshTimer = null;
 var haLocalRefreshInterval = 60000;
+var haLocalSortSaving = false;
+var haLocalSortResumeRefresh = false;
+var haLocalSortDragContext = null;
 
 function haLocalApi(path, data, callback, method) {
   $.ajax({url: '/ha/api/local/' + path, type: method || 'POST', data: data || {}, dataType: 'json'}).done(function(res) {
@@ -21,11 +24,13 @@ function haLocalHealthTag(status) { return status === 'normal' ? '<span class="h
 function haLocalTaskStatusTag(status) { return status === 'running' || status === 'pending' ? '<span class="ha-local-status ha-local-switching">' + (status === 'running' ? '进行中' : '等待中') + '</span>' : status === 'success' ? '<span class="ha-local-status ha-local-normal">成功</span>' : status === 'failed' ? '<span class="ha-local-status ha-local-danger">失败</span>' : status === 'recovered' ? '<span class="ha-local-status ha-local-warning">已恢复</span>' : '<span class="ha-local-status ha-local-unknown">--</span>'; }
 
 function haLocalLoadPairs() {
+  if (haLocalSortSaving || haLocalSortDragContext) return;
   haLocalApi('list', {}, function(data) {
+    if (haLocalSortSaving || haLocalSortDragContext) return;
     haLocalPairs = (data && data.list) || [];
     var rows = haLocalPairs.map(function(pair) {
       var host = pair.host || {};
-      return '<tr><td><div class="ha-local-main">' + haLocalEscape(pair.pair_name || '--') + '</div><div class="ha-local-subtext ha-local-pair-id-line"><span class="ha-local-pair-id-text" title="' + haLocalEscape(pair.pair_id) + '">' + haLocalEscape(pair.pair_id) + '</span><button type="button" class="ha-local-copy-btn" title="复制主备关系 ID" onclick="haLocalCopyPairId(\'' + haLocalEscape(pair.pair_id) + '\')"><i class="glyphicon glyphicon-duplicate"></i></button></div></td>' +
+      return '<tr data-ha-pair-row-id="' + haLocalEscape(pair.pair_id) + '"><td class="text-center"><span class="ha-local-sort-handle" aria-hidden="true"><i></i><i></i><i></i></span></td><td><div class="ha-local-main">' + haLocalEscape(pair.pair_name || '--') + '</div><div class="ha-local-subtext ha-local-pair-id-line"><span class="ha-local-pair-id-text" title="' + haLocalEscape(pair.pair_id) + '">' + haLocalEscape(pair.pair_id) + '</span><button type="button" class="ha-local-copy-btn" title="复制主备关系 ID" onclick="haLocalCopyPairId(\'' + haLocalEscape(pair.pair_id) + '\')"><i class="glyphicon glyphicon-duplicate"></i></button></div></td>' +
         '<td><div class="ha-local-main">' + haLocalEscape(host.host_name || '--') + '</div><div class="ha-local-host-sub"><span class="ha-local-subtext">' + haLocalEscape(host.host_ip || host.host_id || '等待注册') + '</span>' + haLocalOnlineTag(host.online_status) + '</div></td>' +
         '<td>' + haLocalRoleTag(host.role) + '</td>' +
         '<td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><div class="ha-local-subtext" title="' + haLocalEscape(pair.status_text) + '">' + haLocalEscape(pair.status_text || '--') + '</div></td>' +
@@ -33,7 +38,188 @@ function haLocalLoadPairs() {
     }).join('');
     $('#haLocalPairBody').html(rows);
     $('#haLocalEmpty').toggle(!haLocalPairs.length); $('#haLocalTableWrap').toggle(!!haLocalPairs.length);
+    haLocalInitSort();
   });
+}
+
+function haLocalGetSortRowIds() {
+  return $('#haLocalPairBody tr').map(function() {
+    return $(this).attr('data-ha-pair-row-id');
+  }).get().filter(function(pairId) {
+    return !!pairId;
+  });
+}
+
+function haLocalIsSameSortOrder(beforeRows, afterRows) {
+  if (!beforeRows || !afterRows || beforeRows.length !== afterRows.length) return false;
+  for (var i = 0; i < beforeRows.length; i++) {
+    if (beforeRows[i] !== afterRows[i]) return false;
+  }
+  return true;
+}
+
+function haLocalCreateSortPlaceholder(row) {
+  var columnCount = row.children().length;
+  var height = Math.max(row.outerHeight() - 8, 24);
+  return $("<tr class='ha-local-sort-placeholder'><td colspan='" + columnCount + "'><div class='ha-local-sort-placeholder-inner' style='height:" + height + "px'></div></td></tr>");
+}
+
+function haLocalCreateSortPreview(row, tableWidth) {
+  var preview = $("<div class='ha-local-sort-drag-preview'><table class='table table-hover ha-local-table'><tbody></tbody></table></div>");
+  var clonedRow = row.clone();
+  row.children().each(function(index) {
+    clonedRow.children().eq(index).width($(this).outerWidth());
+  });
+  preview.find('tbody').append(clonedRow);
+  preview.find('table').width(tableWidth);
+  $('body').append(preview);
+  return preview;
+}
+
+function haLocalMoveSortPreview(pageX, pageY) {
+  if (!haLocalSortDragContext || !haLocalSortDragContext.preview) return;
+  haLocalSortDragContext.preview.css({
+    left: pageX - haLocalSortDragContext.pointerOffsetLeft,
+    top: pageY - haLocalSortDragContext.pointerOffsetTop
+  });
+}
+
+function haLocalUpdateSortPlaceholder(pageY) {
+  if (!haLocalSortDragContext || !haLocalSortDragContext.placeholder) return;
+  var body = haLocalSortDragContext.body;
+  var placeholder = haLocalSortDragContext.placeholder;
+  var inserted = false;
+  body.children('tr').not(placeholder).each(function() {
+    var row = $(this);
+    if (pageY < row.offset().top + row.outerHeight() / 2) {
+      row.before(placeholder);
+      inserted = true;
+      return false;
+    }
+  });
+  if (!inserted) body.append(placeholder);
+}
+
+function haLocalUpdateSortAutoScroll(pageY) {
+  if (!haLocalSortDragContext || !haLocalSortDragContext.scrollContainer.length) return;
+  var scrollContainer = haLocalSortDragContext.scrollContainer;
+  var offset = scrollContainer.offset();
+  if (!offset) return;
+  var threshold = 48;
+  var bottom = offset.top + scrollContainer.outerHeight();
+  var delta = 0;
+  if (pageY < offset.top + threshold) delta = -Math.max(6, Math.ceil((offset.top + threshold - pageY) / 4));
+  if (pageY > bottom - threshold) delta = Math.max(6, Math.ceil((pageY - (bottom - threshold)) / 4));
+  if (delta) scrollContainer.scrollTop(scrollContainer.scrollTop() + delta);
+}
+
+function haLocalCleanupSortDrag() {
+  if (haLocalSortDragContext && haLocalSortDragContext.preview) haLocalSortDragContext.preview.remove();
+  $(document).off('.haLocalSortDrag');
+  $('body').removeClass('ha-local-sort-dragging');
+  haLocalSortDragContext = null;
+}
+
+function haLocalStartSortDrag(event, draggedRow) {
+  var row = $(draggedRow);
+  var offset = row.offset();
+  var tableWidth = row.closest('table').outerWidth();
+  var placeholder = haLocalCreateSortPlaceholder(row);
+  haLocalSortDragContext = {
+    body: $('#haLocalPairBody'),
+    row: row,
+    placeholder: placeholder,
+    preview: null,
+    scrollContainer: row.closest('.tablescroll'),
+    initialOrder: haLocalGetSortRowIds(),
+    pointerOffsetLeft: event.pageX - offset.left,
+    pointerOffsetTop: event.pageY - offset.top
+  };
+  row.before(placeholder);
+  row.detach();
+  haLocalSortDragContext.preview = haLocalCreateSortPreview(row, tableWidth);
+  haLocalMoveSortPreview(event.pageX, event.pageY);
+  haLocalUpdateSortPlaceholder(event.pageY);
+  $('body').addClass('ha-local-sort-dragging');
+  haLocalSortResumeRefresh = !!haLocalRefreshTimer;
+  if (haLocalSortResumeRefresh) haLocalStopRefresh();
+}
+
+function haLocalFinishSortDrag() {
+  if (!haLocalSortDragContext) return;
+  var context = haLocalSortDragContext;
+  context.placeholder.before(context.row);
+  context.placeholder.remove();
+  var afterOrder = haLocalGetSortRowIds();
+  var changed = !haLocalIsSameSortOrder(context.initialOrder, afterOrder);
+  haLocalCleanupSortDrag();
+  if (changed) {
+    haLocalSaveSort(afterOrder);
+  } else if (haLocalSortResumeRefresh) {
+    haLocalSortResumeRefresh = false;
+    haLocalStartRefresh();
+  }
+}
+
+function haLocalSaveSort(pairIds) {
+  if (pairIds.length <= 1) {
+    if (haLocalSortResumeRefresh) {
+      haLocalSortResumeRefresh = false;
+      haLocalStartRefresh();
+    }
+    return;
+  }
+  haLocalSortSaving = true;
+  var loading = layer.msg('正在保存排序', {icon: 16, time: 0, shade: [0.3, '#000']});
+  $.post('/ha/api/local/pair/sort', {pair_ids: pairIds}, function(res) {
+    layer.close(loading);
+    layer.msg((res && res.msg) || '排序保存失败', {icon: res && res.status ? 1 : 2});
+    if (res && res.status) {
+      haLocalSortSaving = false;
+      haLocalLoadPairs();
+    }
+  }, 'json').fail(function() {
+    layer.close(loading);
+    layer.msg('排序保存失败', {icon: 2});
+  }).always(function() {
+    haLocalSortSaving = false;
+    if (haLocalSortResumeRefresh) {
+      haLocalSortResumeRefresh = false;
+      haLocalStartRefresh();
+    }
+  });
+}
+
+function haLocalBindSortEvents() {
+  $('#haLocalPairBody').off('mousedown.haLocalSort', '.ha-local-sort-handle').on('mousedown.haLocalSort', '.ha-local-sort-handle', function(event) {
+    if ($(this).hasClass('disabled') || event.which !== 1) return false;
+    event.preventDefault();
+    var draggedRow = $(this).closest('tr');
+    var startX = event.pageX;
+    var startY = event.pageY;
+    var started = false;
+    $(document).off('.haLocalSortDrag').on('mousemove.haLocalSortDrag', function(moveEvent) {
+      if (!started) {
+        if (Math.max(Math.abs(moveEvent.pageX - startX), Math.abs(moveEvent.pageY - startY)) < 4) return;
+        started = true;
+        haLocalStartSortDrag(event, draggedRow);
+      }
+      haLocalMoveSortPreview(moveEvent.pageX, moveEvent.pageY);
+      haLocalUpdateSortAutoScroll(moveEvent.pageY);
+      haLocalUpdateSortPlaceholder(moveEvent.pageY);
+    }).on('mouseup.haLocalSortDrag', function() {
+      if (started) haLocalFinishSortDrag();
+      else $(document).off('.haLocalSortDrag');
+    });
+    return false;
+  });
+}
+
+function haLocalInitSort() {
+  haLocalCleanupSortDrag();
+  haLocalBindSortEvents();
+  var canSort = $('#haLocalPairBody tr').length > 1;
+  $('#haLocalPairBody .ha-local-sort-handle').toggleClass('disabled', !canSort).attr('title', canSort ? '拖动排序' : '至少需要两条主备关系才能拖动排序');
 }
 
 function haLocalStartRefresh() {
@@ -81,10 +267,27 @@ function haLocalToggleRefresh() {
   }
 }
 
+function haLocalGeneratePairId() {
+  var values = [];
+  if (window.crypto && window.crypto.getRandomValues) {
+    var randomValues = new Uint32Array(4);
+    window.crypto.getRandomValues(randomValues);
+    for (var i = 0; i < randomValues.length; i++) values.push(randomValues[i].toString(16).toUpperCase().padStart(8, '0'));
+  } else {
+    for (var j = 0; j < 4; j++) values.push(Math.floor(Math.random() * 0x100000000).toString(16).toUpperCase().padStart(8, '0'));
+  }
+  return 'HA' + values.join('');
+}
+
+function haLocalResetPairId() {
+  $('#haLocalPairId').val(haLocalGeneratePairId());
+}
+
 function haLocalOpenCreate() {
-  var html = '<div class="bt-form ha-local-dialog pd20"><div class="line"><span class="tname">关系名称</span><div class="info-r"><input id="haLocalPairName" class="bt-input-text" placeholder="例如：生产环境主备" style="width:300px"></div></div><div class="line"><span class="tname"></span><div class="info-r c9">添加后，将生成的主备关系 ID 填入本地版插件的云监控配置。</div></div></div>';
-  layer.open({type: 1, title: '添加主备关系', area: '500px', content: html, btn: ['添加', '取消'], yes: function(index) {
-    haLocalApi('pair/create', {pair_name: $('#haLocalPairName').val()}, function(data) {
+  var pairId = haLocalGeneratePairId();
+  var html = '<div class="bt-form ha-local-dialog pd20"><div class="line"><span class="tname">关系名称</span><div class="info-r"><input id="haLocalPairName" class="bt-input-text" placeholder="例如：生产环境主备" style="width:300px"></div></div><div class="line"><span class="tname">主备关系 ID</span><div class="info-r ha-local-pair-id-input"><input id="haLocalPairId" class="bt-input-text" value="' + haLocalEscape(pairId) + '" style="width:260px"><button type="button" class="btn btn-default btn-sm" title="重新生成主备关系 ID" onclick="haLocalResetPairId()"><span class="glyphicon glyphicon-refresh"></span></button></div></div><div class="line"><span class="tname"></span><div class="info-r c9">可在两个机房填写相同 ID；仅支持字母、数字、下划线和连字符。</div></div></div>';
+  layer.open({type: 1, title: '添加主备关系', area: '540px', content: html, btn: ['添加', '取消'], yes: function(index) {
+    haLocalApi('pair/create', {pair_name: $('#haLocalPairName').val(), pair_id: $('#haLocalPairId').val()}, function(data) {
       if (!data) return;
       layer.close(index); haLocalShowPairId(data); haLocalLoadPairs();
     });

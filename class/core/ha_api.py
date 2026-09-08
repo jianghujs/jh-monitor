@@ -20,7 +20,7 @@ class ha_api:
     LOG_ROOT = '/www/server/jh-monitor/logs/ha_switch'
     DB_PATH = '/www/server/jh-monitor/data/default.db'
     PAIR_TYPE = 'local'
-    PAIR_FIELDS = 'id,pair_id,pair_name,status,status_text,last_report_at,local_type,addtime,update_time'
+    PAIR_FIELDS = 'id,pair_id,pair_name,status,status_text,last_report_at,local_type,sort_id,addtime,update_time'
     HOST_FIELDS = (
         'id,pair_id,host_id,host_name,host_ip,role,online_status,health_status,collect_status,'
         'collect_method,health_detail,switch_task_id,last_report_at,registered_at,addtime,update_time'
@@ -110,7 +110,7 @@ class ha_api:
             """CREATE TABLE IF NOT EXISTS ha_pair (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 pair_id TEXT, pair_name TEXT, status TEXT DEFAULT 'unknown', status_text TEXT,
-                last_report_at TEXT, local_type TEXT, addtime TEXT, update_time TEXT
+                last_report_at TEXT, local_type TEXT, sort_id INTEGER DEFAULT 0, addtime TEXT, update_time TEXT
             )""",
             """CREATE TABLE IF NOT EXISTS ha_host_state (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,7 +132,7 @@ class ha_api:
         columns = {
             'ha_pair': {
                 'pair_name': 'TEXT', 'status': "TEXT DEFAULT 'unknown'", 'status_text': 'TEXT',
-                'last_report_at': 'TEXT', 'local_type': 'TEXT',
+                'last_report_at': 'TEXT', 'local_type': 'TEXT', 'sort_id': 'INTEGER DEFAULT 0',
                 'addtime': 'TEXT', 'update_time': 'TEXT',
             },
             'ha_host_state': {
@@ -167,6 +167,17 @@ class ha_api:
             result = db.originExecute(statement)
             if isinstance(result, str):
                 return False
+        max_sort_row = db.originExecute(
+            'SELECT COALESCE(MAX(sort_id), 0) FROM ha_pair WHERE local_type=?', (self.PAIR_TYPE,)
+        ).fetchone()
+        next_sort = int(max_sort_row[0] or 0) if max_sort_row else 0
+        sort_rows = db.originExecute(
+            'SELECT id FROM ha_pair WHERE local_type=? AND (sort_id IS NULL OR sort_id <= 0) ORDER BY id DESC',
+            (self.PAIR_TYPE,)
+        ).fetchall()
+        for row in sort_rows:
+            next_sort += 1
+            db.execute('UPDATE ha_pair SET sort_id=? WHERE id=?', (next_sort, row[0]))
         return True
 
     def _getPair(self, pair_id):
@@ -505,11 +516,22 @@ class ha_api:
         pair_name = self._safeText(payload.get('pair_name'), 128)
         if not pair_name:
             return jh.returnJson(False, '主备关系名称不能为空')
-        pair_id = self._generatePairId()
+        pair_id = self._safeText(payload.get('pair_id'), 128)
+        if pair_id:
+            if not self._validId(pair_id):
+                return jh.returnJson(False, '主备关系 ID 仅支持字母、数字、下划线和连字符，长度不超过128位')
+            if jh.M('ha_pair').where('pair_id=?', (pair_id,)).count():
+                return jh.returnJson(False, '主备关系 ID 已存在')
+        else:
+            pair_id = self._generatePairId()
         now = self._now()
+        sort_row = jh.M('ha_pair').originExecute(
+            'SELECT COALESCE(MAX(sort_id), 0) FROM ha_pair WHERE local_type=?', (self.PAIR_TYPE,)
+        ).fetchone()
+        sort_id = (int(sort_row[0] or 0) if sort_row else 0) + 1
         result = jh.M('ha_pair').add(
-            'pair_id,pair_name,status,status_text,last_report_at,local_type,addtime,update_time',
-            (pair_id, pair_name, 'unknown', '等待当前机器上报', '', self.PAIR_TYPE, now, now)
+            'pair_id,pair_name,status,status_text,last_report_at,local_type,sort_id,addtime,update_time',
+            (pair_id, pair_name, 'unknown', '等待当前机器上报', '', self.PAIR_TYPE, sort_id, now, now)
         )
         if isinstance(result, str):
             return jh.returnJson(False, '添加主备关系失败')
@@ -533,6 +555,47 @@ class ha_api:
             conn.execute('DELETE FROM ha_pair WHERE pair_id=? AND local_type=?', (pair_id, self.PAIR_TYPE))
         self._removeTaskFiles(task_ids)
         return jh.returnJson(True, '主备关系已删除', {'pair_id': pair_id})
+
+    def pairSortApi(self):
+        self.ensureHaSchema()
+        payload = self._bodyJson()
+        raw_json = request.get_json(silent=True)
+        if isinstance(raw_json, list):
+            row_ids = raw_json
+        else:
+            row_ids = request.form.getlist('pair_ids[]') or request.form.getlist('pair_ids')
+            row_ids = row_ids or payload.get('pair_ids') or payload.get('row_ids') or []
+        if isinstance(row_ids, str):
+            row_ids = row_ids.split(',')
+        if not isinstance(row_ids, list):
+            return jh.returnJson(False, '主备关系排序数据无效')
+
+        pair_ids = []
+        for row_id in row_ids:
+            pair_id = self._safeText(row_id, 128)
+            if not self._validId(pair_id):
+                return jh.returnJson(False, '主备关系 ID 无效')
+            if pair_id not in pair_ids:
+                pair_ids.append(pair_id)
+        if not pair_ids:
+            return jh.returnJson(False, '请先选择有效的主备关系排序数据')
+
+        rows = jh.M('ha_pair').where('local_type=?', (self.PAIR_TYPE,)).field('id,pair_id').order('sort_id asc,id desc').select()
+        rows = rows if isinstance(rows, list) else []
+        existing_ids = [item.get('pair_id') for item in rows if isinstance(item, dict) and item.get('pair_id')]
+        existing_id_set = set(existing_ids)
+        if any(pair_id not in existing_id_set for pair_id in pair_ids):
+            return jh.returnJson(False, '主备关系不存在或不属于本地版')
+
+        ordered_ids = pair_ids + [pair_id for pair_id in existing_ids if pair_id not in pair_ids]
+        with sqlite3.connect(self.DB_PATH) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            for sort_value, pair_id in enumerate(ordered_ids, 1):
+                conn.execute(
+                    'UPDATE ha_pair SET sort_id=? WHERE pair_id=? AND local_type=?',
+                    (sort_value, pair_id, self.PAIR_TYPE)
+                )
+        return jh.returnJson(True, '主备关系排序已保存')
 
     def localRegisterApi(self):
         self.ensureHaSchema()
@@ -620,7 +683,7 @@ class ha_api:
 
     def localListApi(self):
         self.ensureHaSchema()
-        rows = jh.M('ha_pair').where('local_type=?', (self.PAIR_TYPE,)).field(self.PAIR_FIELDS).order('update_time desc,id desc').select()
+        rows = jh.M('ha_pair').where('local_type=?', (self.PAIR_TYPE,)).field(self.PAIR_FIELDS).order('sort_id asc,id desc').select()
         pairs = []
         if isinstance(rows, list):
             for item in rows:

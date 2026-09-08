@@ -18,6 +18,7 @@ def call(api, method, path, payload=None, query=None):
         handler = {
             'create': api.pairCreateApi,
             'delete': api.pairDeleteApi,
+            'sort': api.pairSortApi,
             'register': api.localRegisterApi,
             'report': api.localReportApi,
             'log': api.switchLogApi,
@@ -52,17 +53,21 @@ def main():
     suffix = str(int(time.time()))
     pair_id = ''
     other_pair_id = ''
+    sort_pair_id = ''
     task_id = 'TASK_LOCAL_' + suffix
     clean(api, [], [task_id])
     try:
-        created = call(api, 'POST', 'create', {'pair_name': '本地主备接口'})
+        custom_pair_id = 'HA_CUSTOM_' + suffix
+        created = call(api, 'POST', 'create', {'pair_name': '本地主备接口', 'pair_id': custom_pair_id})
         assert created['status'], created
         pair_id = created['data']['pair_id']
-        assert api._validId(pair_id) and pair_id != '本地主备接口', created
+        assert pair_id == custom_pair_id, created
         assert created['data']['pair_name'] == '本地主备接口'
         assert set(created['data']) == {'pair_id', 'pair_name'}, created
         assert api._getPair(pair_id)['status'] == 'unknown'
         assert not call(api, 'POST', 'create', {'pair_name': ''})['status']
+        assert not call(api, 'POST', 'create', {'pair_name': '重复 ID', 'pair_id': custom_pair_id})['status']
+        assert not call(api, 'POST', 'create', {'pair_name': '无效 ID', 'pair_id': 'invalid id'})['status']
         unknown = host_payload(pair_id + '_UNKNOWN')
         assert not call(api, 'POST', 'register', unknown)['status']
         registered = call(api, 'POST', 'register', host_payload(pair_id))
@@ -106,6 +111,17 @@ def main():
         cross['switch_task'] = dict(task_report['switch_task'])
         assert not call(api, 'POST', 'report', cross)['status']
 
+        sortable = call(api, 'POST', 'create', {'pair_name': '本地主备排序'})
+        assert sortable['status']
+        sort_pair_id = sortable['data']['pair_id']
+        sorted_result = call(api, 'POST', 'sort', {'pair_ids': [sort_pair_id, other_pair_id, pair_id]})
+        assert sorted_result['status'], sorted_result
+        listed = json.loads(api.localListApi())['data']['list']
+        sorted_ids = [item['pair_id'] for item in listed if item['pair_id'] in (pair_id, other_pair_id, sort_pair_id)]
+        assert sorted_ids == [sort_pair_id, other_pair_id, pair_id], sorted_ids
+        rejected_sort = call(api, 'POST', 'sort', {'pair_ids': [pair_id, 'UNKNOWN_PAIR_ID']})
+        assert not rejected_sort['status'], rejected_sort
+
         cases = [
             ({'task_status': 'success', 'role': 'master', 'health_status': 'normal'}, 'normal'),
             ({'task_status': 'running'}, 'switching'),
@@ -134,7 +150,7 @@ def main():
         pair_id = ''
         print('ok')
     finally:
-        clean(api, [pair_id, other_pair_id], [task_id])
+        clean(api, [pair_id, other_pair_id, sort_pair_id], [task_id])
 
 
 if __name__ == '__main__':
