@@ -416,7 +416,9 @@ class ha_api:
     def _normalizePair(self, pair, include_tasks=False):
         result = dict(pair)
         hosts = self._getHosts(pair.get('pair_id'))
-        result['host'] = self._normalizeHost(hosts[0]) if hosts else None
+        result['hosts'] = [self._normalizeHost(host) for host in hosts]
+        # Keep the latest host field for existing clients while exposing every reporting machine.
+        result['host'] = result['hosts'][0] if result['hosts'] else None
         if include_tasks:
             result['tasks'] = [self._normalizeTask(task) for task in self._getTasks(pair.get('pair_id'))]
         return result

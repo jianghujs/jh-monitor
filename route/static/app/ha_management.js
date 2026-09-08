@@ -22,6 +22,18 @@ function haLocalOnlineTag(status) { return status === 'online' ? '<span class="h
 function haLocalHealth(status) { return ({normal:'正常',warning:'提醒',danger:'异常'}[status] || '--'); }
 function haLocalHealthTag(status) { return status === 'normal' ? '<span class="ha-local-status ha-local-normal">正常</span>' : status === 'warning' ? '<span class="ha-local-status ha-local-warning">提醒</span>' : status === 'danger' ? '<span class="ha-local-status ha-local-danger">异常</span>' : '<span class="ha-local-status ha-local-unknown">待上报</span>'; }
 function haLocalTaskStatusTag(status) { return status === 'running' || status === 'pending' ? '<span class="ha-local-status ha-local-switching">' + (status === 'running' ? '进行中' : '等待中') + '</span>' : status === 'success' ? '<span class="ha-local-status ha-local-normal">成功</span>' : status === 'failed' ? '<span class="ha-local-status ha-local-danger">失败</span>' : status === 'recovered' ? '<span class="ha-local-status ha-local-warning">已恢复</span>' : '<span class="ha-local-status ha-local-unknown">--</span>'; }
+function haLocalPairHosts(pair) { return pair.hosts && pair.hosts.length ? pair.hosts : (pair.host ? [pair.host] : []); }
+function haLocalHostsHtml(pair) {
+  var hosts = haLocalPairHosts(pair);
+  if (!hosts.length) return '<span class="ha-local-subtext">等待注册</span>';
+  return hosts.map(function(host) {
+    return '<span class="ha-local-host-compact" title="' + haLocalEscape((host.host_name || host.host_id || '--') + ' / ' + (host.host_ip || host.host_id || '--')) + '"><span class="ha-local-host-name">' + haLocalEscape(host.host_name || host.host_id || '--') + '</span>' + haLocalOnlineTag(host.online_status) + '</span>';
+  }).join('');
+}
+function haLocalHostRolesHtml(pair) {
+  var hosts = haLocalPairHosts(pair);
+  return hosts.length ? hosts.map(function(host) { return '<span class="ha-local-host-role-summary">' + haLocalRoleTag(host.role) + '</span>'; }).join('') : '--';
+}
 
 function haLocalLoadPairs() {
   if (haLocalSortSaving || haLocalSortDragContext) return;
@@ -29,10 +41,9 @@ function haLocalLoadPairs() {
     if (haLocalSortSaving || haLocalSortDragContext) return;
     haLocalPairs = (data && data.list) || [];
     var rows = haLocalPairs.map(function(pair) {
-      var host = pair.host || {};
       return '<tr data-ha-pair-row-id="' + haLocalEscape(pair.pair_id) + '"><td class="text-center"><span class="ha-local-sort-handle" aria-hidden="true"><i></i><i></i><i></i></span></td><td><div class="ha-local-main">' + haLocalEscape(pair.pair_name || '--') + '</div><div class="ha-local-subtext ha-local-pair-id-line"><span class="ha-local-pair-id-text" title="' + haLocalEscape(pair.pair_id) + '">' + haLocalEscape(pair.pair_id) + '</span><button type="button" class="ha-local-copy-btn" title="复制主备关系 ID" onclick="haLocalCopyPairId(\'' + haLocalEscape(pair.pair_id) + '\')"><i class="glyphicon glyphicon-duplicate"></i></button></div></td>' +
-        '<td><div class="ha-local-main">' + haLocalEscape(host.host_name || '--') + '</div><div class="ha-local-host-sub"><span class="ha-local-subtext">' + haLocalEscape(host.host_ip || host.host_id || '等待注册') + '</span>' + haLocalOnlineTag(host.online_status) + '</div></td>' +
-        '<td>' + haLocalRoleTag(host.role) + '</td>' +
+        '<td><div class="ha-local-host-summary"><span class="ha-local-host-count">' + haLocalPairHosts(pair).length + ' 台</span>' + haLocalHostsHtml(pair) + '</div></td>' +
+        '<td>' + haLocalHostRolesHtml(pair) + '</td>' +
         '<td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><div class="ha-local-subtext" title="' + haLocalEscape(pair.status_text) + '">' + haLocalEscape(pair.status_text || '--') + '</div></td>' +
         '<td>' + haLocalEscape(pair.last_report_at || '--') + '</td><td class="text-right ha-local-actions"><a class="btlink" href="javascript:;" onclick="haLocalOpenDetail(\'' + haLocalEscape(pair.pair_id) + '\')">详情</a><a class="btlink" href="javascript:;" onclick="haLocalOpenEdit(\'' + haLocalEscape(pair.pair_id) + '\')">编辑</a><a class="btlink" href="javascript:;" onclick="haLocalDeletePair(\'' + haLocalEscape(pair.pair_id) + '\')">删除</a></td></tr>';
     }).join('');
@@ -356,9 +367,12 @@ function haLocalDeletePair(pairId) {
 function haLocalOpenDetail(pairId) {
   haLocalApi('detail', {pair_id: pairId}, function(pair) {
     if (!pair) return;
-    var host = pair.host || {}; var tasks = pair.tasks || [];
+    var hosts = haLocalPairHosts(pair); var tasks = pair.tasks || [];
+    var hostRows = hosts.map(function(host) {
+      return '<tr><td><div class="ha-local-main">' + haLocalEscape(host.host_name || '--') + '</div><div class="ha-local-subtext">' + haLocalEscape(host.host_ip || host.host_id || '--') + '</div></td><td>' + haLocalRoleTag(host.role) + '</td><td>' + haLocalOnlineTag(host.online_status) + '</td><td>' + haLocalHealthTag(host.health_status) + '</td><td>' + haLocalEscape(host.last_report_at || '--') + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" class="c9">暂无机器上报</td></tr>';
     var taskRows = tasks.map(function(task) { return '<tr><td>' + haLocalEscape(task.switch_task_id) + '</td><td>' + haLocalRoleTag(task.target_role) + '</td><td>' + haLocalTaskStatusTag(task.status) + '</td><td>' + haLocalEscape(task.current_step || task.status_text || '--') + '</td><td class="text-right"><a class="btlink" href="javascript:;" onclick="haLocalOpenLog(\'' + haLocalEscape(task.switch_task_id) + '\')">查看日志</a></td></tr>'; }).join('') || '<tr><td colspan="5" class="c9">暂无切换任务</td></tr>';
-    var html = '<div class="pd20"><table class="table table-hover ha-local-detail-table"><tbody><tr><th>主备关系 ID</th><td>' + haLocalEscape(pair.pair_id) + '</td></tr><tr><th>关系名称</th><td>' + haLocalEscape(pair.pair_name || '--') + '</td></tr><tr><th>关系状态</th><td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><span class="ha-local-detail-text">' + haLocalEscape(pair.status_text || '--') + '</span></td></tr><tr><th>当前机器</th><td>' + haLocalEscape(host.host_name || '--') + '<span class="ha-local-detail-text">' + haLocalEscape(host.host_ip || host.host_id || '--') + '</span>' + haLocalOnlineTag(host.online_status) + '</td></tr><tr><th>角色与自检</th><td>' + haLocalRoleTag(host.role) + haLocalHealthTag(host.health_status) + '</td></tr><tr><th>最近上报</th><td>' + haLocalEscape(pair.last_report_at || '--') + '</td></tr></tbody></table><table class="table table-hover"><thead><tr><th>任务</th><th>目标</th><th>状态</th><th>当前步骤</th><th></th></tr></thead><tbody>' + taskRows + '</tbody></table></div>';
+    var html = '<div class="pd20"><table class="table table-hover ha-local-detail-table"><tbody><tr><th>主备关系 ID</th><td>' + haLocalEscape(pair.pair_id) + '</td></tr><tr><th>关系名称</th><td>' + haLocalEscape(pair.pair_name || '--') + '</td></tr><tr><th>关系状态</th><td><span class="ha-local-status ' + haLocalStatusClass(pair.status) + '">' + haLocalStatusText(pair.status) + '</span><span class="ha-local-detail-text">' + haLocalEscape(pair.status_text || '--') + '</span></td></tr><tr><th>关系最近上报</th><td>' + haLocalEscape(pair.last_report_at || '--') + '</td></tr></tbody></table><div class="ha-local-detail-section-title">上报机器</div><table class="table table-hover ha-local-host-table"><thead><tr><th>机器</th><th>角色</th><th>在线状态</th><th>自检</th><th>最近上报</th></tr></thead><tbody>' + hostRows + '</tbody></table><div class="ha-local-detail-section-title">切换任务</div><table class="table table-hover"><thead><tr><th>任务</th><th>目标</th><th>状态</th><th>当前步骤</th><th></th></tr></thead><tbody>' + taskRows + '</tbody></table></div>';
     layer.open({type: 1, title: '主备关系详情 - ' + haLocalEscape(pair.pair_id), area: ['900px', '650px'], content: html});
   });
 }

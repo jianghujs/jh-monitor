@@ -32,15 +32,23 @@ def main():
         }
         with app.test_request_context('/ha/api/local/register', method='POST', json=payload):
             assert json.loads(api.localRegisterApi())['status']
+        second_payload = dict(payload)
+        second_payload.update({
+            'host_id': 'H_UI_LOCAL_STANDBY', 'host_name': 'UI Local Standby', 'host_ip': '10.0.0.11',
+            'role': 'standby', 'online_status': 'offline', 'health_status': 'danger',
+        })
+        with app.test_request_context('/ha/api/local/register', method='POST', json=second_payload):
+            assert json.loads(api.localRegisterApi())['status']
         with app.test_request_context('/ha/api/local/list', method='GET'):
             listed = json.loads(api.localListApi())
         pair = [item for item in listed['data']['list'] if item['pair_id'] == pair_id][0]
         assert pair['pair_name'] == '本地主备界面' and pair['pair_id'] != pair['pair_name'], pair
-        assert pair['host']['host_name'] == 'UI Local' and pair['status'] == 'warning', pair
+        assert pair['host']['host_name'] == 'UI Local Standby' and pair['status'] == 'danger', pair
+        assert [host['host_id'] for host in pair['hosts']] == ['H_UI_LOCAL_STANDBY', 'H_UI_LOCAL'], pair
         with app.test_request_context('/ha/api/local/detail', method='GET', query_string={'pair_id': pair_id}):
             detail = json.loads(api.localDetailApi())
         assert detail['status'] and detail['data']['pair_id'] == pair_id and detail['data']['pair_name'] == '本地主备界面', detail
-        assert detail['data']['tasks'] == [] and detail['data']['host']['role'] == 'master', detail
+        assert detail['data']['tasks'] == [] and len(detail['data']['hosts']) == 2, detail
         updated_pair_id = pair_id + '_EDIT'
         with app.test_request_context('/ha/api/local/pair/update', method='POST', json={
             'original_pair_id': pair_id, 'pair_id': updated_pair_id, 'pair_name': '本地主备界面已修改'
