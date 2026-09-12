@@ -259,8 +259,17 @@ def hostGrowthAlarmTask():
             
             # 获取主机列表
             host_list = jh.M('host').field('host_id,host_name').select()
+
+            if not isinstance(host_list, list):
+                print(f"{Fore.RED}|- 获取主机列表失败，跳过本轮资源增长分析: {host_list}{Style.RESET_ALL}")
+                time.sleep(scan_interval)
+                continue
             
             for host in host_list:
+                if not isinstance(host, dict):
+                    print(f"{Fore.RED}|- 跳过格式异常的主机记录: {host}{Style.RESET_ALL}")
+                    continue
+
                 host_id = host['host_id']
                 host_name = host['host_name']
                 
@@ -268,19 +277,31 @@ def hostGrowthAlarmTask():
                 last_alarm = sql.table('host_alarm').where('host_id=? AND alarm_type=?', 
                     (host_id, '资源增长预警')).order('id desc').field('alarm_level,addtime').find()
                 
-                if last_alarm:
-                    last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
-                    time_diff = current_time - last_alarm_time
-                    
-                    if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
-                        (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
-                        continue
+                if isinstance(last_alarm, dict):
+                    try:
+                        last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
+                        time_diff = current_time - last_alarm_time
+
+                        if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
+                            (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
+                            continue
+                    except (KeyError, TypeError, ValueError):
+                        print(f"{Fore.RED}|- 主机 [{host_name}] 的上次资源增长告警记录格式异常，忽略冷却时间: {last_alarm}{Style.RESET_ALL}")
+                elif last_alarm:
+                    print(f"{Fore.RED}|- 查询主机 [{host_name}] 的上次资源增长告警失败，忽略冷却时间: {last_alarm}{Style.RESET_ALL}")
 
                 print(f"|- 开始分析主机 [{host_name}] 资源增长...")
 
                 history_start = current_time - (max(memory_scan_history_minutes, disk_scan_history_minutes) * 60)
                 status_history = host_status_service_utils.getHostStatusHistory(host_id, history_start, current_time)
-                running_history = [item for item in status_history if item.get('host_status') == 'Running']
+                if not isinstance(status_history, list):
+                    print(f"{Fore.RED}|- 主机 [{host_name}] 的状态历史数据格式异常，跳过本轮分析{Style.RESET_ALL}")
+                    continue
+
+                running_history = [
+                    item for item in status_history
+                    if isinstance(item, dict) and item.get('host_status') == 'Running'
+                ]
 
                 if not running_history:
                     continue

@@ -2472,6 +2472,13 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         
         # 解析最新数据
         latest_data = json.loads(latest_record[resource_data_key])
+
+        if resource_type == 'disk':
+            if not isinstance(latest_data, list):
+                return alarm
+            latest_data = [item for item in latest_data if isinstance(item, dict)]
+        elif resource_type == 'memory' and not isinstance(latest_data, dict):
+            return alarm
         
         # 初始化历史数据列表
         history_data_list = []
@@ -2481,6 +2488,12 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
             try:
                 # 解析历史数据
                 history_data = json.loads(record[resource_data_key])
+                if resource_type == 'disk':
+                    if not isinstance(history_data, list):
+                        continue
+                    history_data = [item for item in history_data if isinstance(item, dict)]
+                elif resource_type == 'memory' and not isinstance(history_data, dict):
+                    continue
                 history_data_list.append({
                     'data': history_data,
                     'addtime': record['addtime']
@@ -2499,14 +2512,16 @@ def analyze_resource_growth(host_id, host_name, latest_record, history_records, 
         if resource_type == 'disk':
             # 分析每个挂载点
             for mount_point in latest_data:
-                mount_point_path = mount_point['mountpoint']
-                current_usage = mount_point['usedPercent']
+                mount_point_path = mount_point.get('mountpoint')
+                current_usage = mount_point.get('usedPercent')
+                if mount_point_path is None or current_usage is None:
+                    continue
                 
                 # 收集该挂载点的历史数据
                 mount_point_history = []
                 for history in history_data_list:
                     for disk in history['data']:
-                        if disk['mountpoint'] == mount_point_path:
+                        if disk.get('mountpoint') == mount_point_path and disk.get('usedPercent') is not None:
                             mount_point_history.append({
                                 'data': disk['usedPercent'],
                                 'addtime': history['addtime']
