@@ -53,6 +53,70 @@ normalize_host_id_for_index() {
   printf "%s" "$normalized"
 }
 
+build_filebeat_endpoint() {
+  local raw_endpoints="$1"
+  local mode="$2"
+
+  python3 - "$raw_endpoints" "$mode" <<'PY_ENDPOINT'
+import re
+import sys
+from urllib.parse import urlparse
+
+raw_endpoints, mode = sys.argv[1], sys.argv[2]
+endpoints = []
+
+for item in re.split(r'[\n,]+', raw_endpoints):
+    endpoint = item.strip()
+    if not endpoint:
+        continue
+    if '://' not in endpoint:
+        endpoint = 'http://' + endpoint
+    parsed = urlparse(endpoint)
+    if not parsed.hostname:
+        continue
+
+    scheme = parsed.scheme or 'http'
+    default_port = 443 if scheme == 'https' else 9200
+    host = parsed.hostname
+    if ':' in host:
+        host = '[' + host + ']'
+    endpoints.append('{0}://{1}:{2}'.format(scheme, host, parsed.port or default_port))
+
+if not endpoints:
+    raise SystemExit(1)
+
+if mode == 'kibana':
+    endpoint = urlparse(endpoints[0])
+    host = endpoint.hostname
+    if ':' in host:
+        host = '[' + host + ']'
+    print('{0}://{1}:5601'.format(endpoint.scheme, host))
+else:
+    print(', '.join('"{0}"'.format(endpoint) for endpoint in endpoints))
+PY_ENDPOINT
+}
+
+resolve_filebeat_endpoints() {
+  local raw_endpoints="${JH_MONITOR_ES_ADDR:-${SERVER_IP:-}}"
+  if [ -z "$raw_endpoints" ]; then
+    read -p "请输入ELK服务端地址: " raw_endpoints
+  fi
+  if [ -z "$raw_endpoints" ]; then
+    _log_fail "未指定ELK服务端地址"
+    exit 1
+  fi
+
+  FILEBEAT_ES_ENDPOINTS="$(build_filebeat_endpoint "$raw_endpoints" elasticsearch)" || {
+    _log_fail "ELK服务端地址格式不正确" address="$raw_endpoints"
+    exit 1
+  }
+  FILEBEAT_KIBANA_ENDPOINT="$(build_filebeat_endpoint "$raw_endpoints" kibana)" || {
+    _log_fail "Kibana服务端地址生成失败" address="$raw_endpoints"
+    exit 1
+  }
+  _log_detail "已解析ELK服务端地址" elasticsearch="$FILEBEAT_ES_ENDPOINTS" kibana="$FILEBEAT_KIBANA_ENDPOINT"
+}
+
 escape_sed_replacement() {
   printf "%s" "$1" | sed -e 's/[\/&]/\\&/g'
 }
@@ -92,15 +156,20 @@ mv /tmp/filebeat.yml /etc/filebeat/filebeat.yml
 chmod 644 /etc/filebeat/filebeat.yml
 _log_detail "主配置已写入" path="/etc/filebeat/filebeat.yml"
 
-if [ -z "$SERVER_IP" ]; then
-  read -p "请输入ELK服务端IP: " SERVER_IP
-  if [ -z "$SERVER_IP" ]; then
-    _log_fail "未指定ELK服务端IP"
-    exit 1
-  fi
-fi
-_log_step "替换配置占位符" serverIp="$SERVER_IP"
-sed -i "s/<serverIp>/$SERVER_IP/g" /etc/filebeat/filebeat.yml
+resolve_filebeat_endpoints
+_log_step "替换配置占位符" elasticsearch="$FILEBEAT_ES_ENDPOINTS" kibana="$FILEBEAT_KIBANA_ENDPOINT"
+ESCAPED_ES_ENDPOINTS="$(escape_sed_replacement "$FILEBEAT_ES_ENDPOINTS")"
+ESCAPED_KIBANA_ENDPOINT="$(escape_sed_replacement "$FILEBEAT_KIBANA_ENDPOINT")"
+sed -i "s/<esEndpoints>/$ESCAPED_ES_ENDPOINTS/g" /etc/filebeat/filebeat.yml
+sed -i "s/<kibanaEndpoint>/$ESCAPED_KIBANA_ENDPOINT/g" /etc/filebeat/filebeat.yml
+
+# 兼容尚未更新的旧模板；旧模板只有 <serverIp> 占位符。
+FIRST_ES_HOST="${FILEBEAT_ES_ENDPOINTS%%,*}"
+FIRST_ES_HOST="${FIRST_ES_HOST#\"}"
+FIRST_ES_HOST="${FIRST_ES_HOST%\"}"
+FIRST_ES_HOST="${FIRST_ES_HOST#*://}"
+ESCAPED_FIRST_ES_HOST="$(escape_sed_replacement "$FIRST_ES_HOST")"
+sed -i "s/<serverIp>/$ESCAPED_FIRST_ES_HOST/g" /etc/filebeat/filebeat.yml
 
 HOST_ID="$(resolve_host_id)"
 if [ -n "$HOST_ID" ]; then

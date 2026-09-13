@@ -15,6 +15,7 @@
 import os
 import sys
 import time
+import shlex
 
 import jh
 sys.path.append(os.getcwd() + "/class/plugin")
@@ -29,6 +30,7 @@ import host_status_service as host_status_service_utils
 import json
 import traceback
 from jinja2 import Environment, FileSystemLoader
+from urllib.parse import urlparse
 
 from flask import Flask, request
 
@@ -474,17 +476,73 @@ class host_api:
         )
         return jh.getJson(log_detail)
 
+    def _getClientEsAddresses(self, es_config=None, server_ip=None):
+        if server_ip is None:
+            server_ip = jh.getHostAddr()
+        if es_config is None:
+            try:
+                content = jh.readFile('data/es.json')
+                es_config = json.loads(content) if content else {}
+            except Exception:
+                es_config = {}
+
+        raw_items = str(es_config.get('addr', '') or '').strip().replace('\n', ',').split(',')
+        if raw_items == [''] and isinstance(es_config.get('hosts'), list):
+            raw_items = []
+            for item in es_config.get('hosts'):
+                if not isinstance(item, dict):
+                    continue
+                scheme = str(item.get('scheme', 'http') or 'http')
+                host = str(item.get('host', '') or '').strip()
+                port = item.get('port') or (443 if scheme == 'https' else 9200)
+                if host:
+                    raw_items.append('{0}://{1}:{2}'.format(scheme, host, port))
+
+        addresses = []
+        for item in raw_items:
+            current = str(item or '').strip()
+            if current == '':
+                continue
+            if '://' not in current:
+                current = 'http://' + current
+            try:
+                parsed = urlparse(current)
+                host = parsed.hostname or ''
+                if host in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
+                    host = str(server_ip or '').strip()
+                if host == '':
+                    continue
+                if ':' in host:
+                    host = '[{0}]'.format(host)
+                scheme = parsed.scheme or 'http'
+                port = parsed.port or (443 if scheme == 'https' else 9200)
+                addresses.append('{0}://{1}:{2}'.format(scheme, host, port))
+            except Exception:
+                continue
+        return addresses
+
     def getClientInstallShellLanApi(self):
         server_ip = jh.getHostAddr()
+        es_addresses = self._getClientEsAddresses()
         github_script_url = "https://raw.githubusercontent.com/jianghujs/jh-monitor/master/scripts/client/install.sh"
         gitee_script_url = "https://gitee.com/jianghujs/jh-monitor/raw/master/scripts/client/install.sh"
-        command_template = "wget -O /tmp/install.sh %s && bash /tmp/install.sh %s http://%s:10844"
-        command_template_cn = "wget -O /tmp/install.sh %s && bash /tmp/install.sh %s http://%s:10844 cn"
+        es_env = ''
+        if es_addresses:
+            es_env = 'JH_MONITOR_ES_ADDR={0} '.format(shlex.quote(','.join(es_addresses)))
+
+        def build_command(script_url, action, cn=False):
+            command = 'wget -O /tmp/install.sh {0} && {1}bash /tmp/install.sh {2} http://{3}:10844'.format(
+                script_url, es_env, action, server_ip
+            )
+            if cn:
+                command += ' cn'
+            return command
+
         return jh.returnJson(True, 'ok', {
-            'github': command_template % (github_script_url, 'install', server_ip),
-            'gitee': command_template_cn % (gitee_script_url, 'install', server_ip),
-            'github_update': command_template % (github_script_url, 'update', server_ip),
-            'gitee_update': command_template_cn % (gitee_script_url, 'update', server_ip)
+            'github': build_command(github_script_url, 'install'),
+            'gitee': build_command(gitee_script_url, 'install', True),
+            'github_update': build_command(github_script_url, 'update'),
+            'gitee_update': build_command(gitee_script_url, 'update', True)
         })
 
     def alarmApi(self):

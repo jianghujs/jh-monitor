@@ -54,7 +54,7 @@ setup.template.priority: 200
 setup.kibana:
 
   # Kibana Host
-  host: "<serverIp>:5601"
+  host: "<kibanaEndpoint>"
   username: "elastic"
   password: "changeme"
 
@@ -67,7 +67,7 @@ setup.kibana:
 
 # ---------------------------- Elasticsearch Output ----------------------------
 output.elasticsearch:
-  hosts: ["<serverIp>:9200"]
+  hosts: [<esEndpoints>]
   indices:
     - index: "host-monitor-task-event"
       when.equals:
