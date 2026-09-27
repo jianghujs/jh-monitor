@@ -285,12 +285,14 @@ class HostReportAnalyser(object):
         """计算已启用主机、到期主机以及对应的发送配置。"""
         dispatch_config = c_api.getReportDispatchConfigData() or {}
         report_enabled = bool(dispatch_config.get('enabled'))
+        send_abnormal_host_report = bool(dispatch_config.get('send_abnormal_host_report'))
         report_cron = dispatch_config.get('cron', c_api.getDefaultReportCronData())
         report_host_ids = dispatch_config.get('report_host_ids', []) or []
         report_config = {}
         for host_id in report_host_ids:
             report_config[host_id] = {
                 'enabled': report_enabled,
+                'send_abnormal_host_report': send_abnormal_host_report,
                 'cron': dict(report_cron)
             }
         self._last_schedule_debug_rows = []

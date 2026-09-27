@@ -84,6 +84,7 @@ class config_api:
     def _getDefaultReportScheduleConfig(self):
         return {
             'enabled': False,
+            'send_abnormal_host_report': False,
             'report_host_ids': [],
             'cron': self._getDefaultReportCron()
         }
@@ -259,6 +260,10 @@ class config_api:
 
         data = {
             'enabled': self._toBool(report_config.get('enabled', default_schedule['enabled'])),
+            'send_abnormal_host_report': self._toBool(report_config.get(
+                'send_abnormal_host_report',
+                default_schedule['send_abnormal_host_report']
+            )),
             'report_host_ids': self._normalizeReportHostIds(
                 report_config.get('report_host_ids', default_schedule['report_host_ids']),
                 valid_host_ids
@@ -286,12 +291,14 @@ class config_api:
         if not has_schedule_key:
             return {
                 'enabled': False,
+                'send_abnormal_host_report': False,
                 'report_host_ids': [],
                 'cron': dict(self._getDefaultReportCron())
             }
 
         return {
             'enabled': bool(schedule_config.get('enabled')),
+            'send_abnormal_host_report': bool(schedule_config.get('send_abnormal_host_report')),
             'report_host_ids': self._normalizeReportHostIds(
                 schedule_config.get('report_host_ids', []),
                 valid_host_ids
@@ -299,7 +306,7 @@ class config_api:
             'cron': dict(schedule_config.get('cron', self._getDefaultReportCron()))
         }
 
-    def saveReportDispatchConfigData(self, enabled, report_host_ids, cron_config):
+    def saveReportDispatchConfigData(self, enabled, send_abnormal_host_report, report_host_ids, cron_config):
         report_config = self._getRawReportConfig()
         normalized_ids = self._normalizeReportHostIds(report_host_ids)
         ok, msg, normalized_cron = self._normalizeReportCron(cron_config or self._getDefaultReportCron())
@@ -307,12 +314,14 @@ class config_api:
             normalized_cron = self._getDefaultReportCron()
 
         report_config['enabled'] = bool(enabled)
+        report_config['send_abnormal_host_report'] = bool(send_abnormal_host_report)
         report_config['report_host_ids'] = normalized_ids
         report_config['cron'] = normalized_cron
         report_config.pop('report_last_sent_at', None)
         self._writeJsonConfig(self.__report_config_addr, report_config)
         return {
             'enabled': bool(enabled),
+            'send_abnormal_host_report': bool(send_abnormal_host_report),
             'report_host_ids': normalized_ids,
             'cron': normalized_cron
         }
@@ -329,6 +338,7 @@ class config_api:
 
         self.saveReportDispatchConfigData(
             schedule_config.get('enabled', False),
+            schedule_config.get('send_abnormal_host_report', False),
             report_host_ids,
             schedule_config.get('cron', self._getDefaultReportCron())
         )
@@ -716,6 +726,7 @@ class config_api:
             report_host_ids = self._normalizeReportHostIds(report_host_ids, valid_host_ids)
 
         enabled = self._toBool(request.form.get('enabled', '0'))
+        send_abnormal_host_report = self._toBool(request.form.get('send_abnormal_host_report', '0'))
         cron_form = {
             'type': request.form.get('type', '').strip(),
             'where1': request.form.get('where1', '').strip(),
@@ -743,12 +754,14 @@ class config_api:
         self._writeJsonConfig(self.__report_config_addr, report_config)
         self.saveReportDispatchConfigData(
             enabled,
+            send_abnormal_host_report,
             report_host_ids,
             cron_config
         )
 
         return jh.returnJson(True, '服务器报告配置保存成功!', {
             'enabled': enabled,
+            'send_abnormal_host_report': send_abnormal_host_report,
             'report_host_ids': report_host_ids,
             'cron': cron_config
         })
@@ -835,10 +848,15 @@ class config_api:
             report_date = time.strftime('%Y-%m-%d', time.localtime(now_ts))
             report_config = {}
             dispatch_config = self.getReportDispatchConfigData() or {}
+            send_abnormal_host_report = self._toBool(request.form.get(
+                'send_abnormal_host_report',
+                dispatch_config.get('send_abnormal_host_report', False)
+            ))
             for row in host_rows:
                 host_id = row.get('host_id')
                 report_config[host_id] = {
                     'enabled': True,
+                    'send_abnormal_host_report': send_abnormal_host_report,
                     'cron': dispatch_config.get('cron', self.getDefaultReportCronData())
                 }
 

@@ -378,7 +378,13 @@ def main():
             send_result = sender.run_delivery(
                 due_rows=host_rows,
                 enabled_rows=host_rows,
-                report_config={host_id: {'enabled': True} for host_id in selected_host_ids},
+                report_config={
+                    host_id: {
+                        'enabled': True,
+                        'send_abnormal_host_report': True
+                    }
+                    for host_id in selected_host_ids
+                },
                 report_date=report_date
             )
             result['send'] = send_result

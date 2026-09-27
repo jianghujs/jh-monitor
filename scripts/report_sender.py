@@ -17,6 +17,13 @@ from report_analyser import (
 
 
 class HostReportSender(HostReportAnalyser):
+    def _is_abnormal_host_report_enabled(self, report_config):
+        """读取是否独立发送异常主机报告。"""
+        for config in (report_config or {}).values():
+            if isinstance(config, dict) and value_tool.safeBool(config.get('send_abnormal_host_report')):
+                return True
+        return False
+
     def _get_single_delivery_host_ids(self, due_rows, enabled_rows):
         """总览触发后，单机报告检查所有已启用主机，异常主机再单独发送。"""
         target_rows = enabled_rows or due_rows or []
@@ -223,6 +230,7 @@ class HostReportSender(HostReportAnalyser):
         email_enabled = False
         if isinstance(notify_data, dict) and 'email' in notify_data and notify_data['email'].get('enable'):
             email_enabled = True
+        send_abnormal_host_report = self._is_abnormal_host_report_enabled(report_config)
         self.log_tool.start(
             '[report-delivery] 开始执行发送流水线',
             report_date=window['report_date'],
@@ -230,6 +238,7 @@ class HostReportSender(HostReportAnalyser):
             due_rows=len(due_rows),
             due_host_ids=[row.get('host_id') for row in due_rows if row.get('host_id')],
             email_enabled=email_enabled,
+            send_abnormal_host_report=send_abnormal_host_report,
             force_send=force_send,
         )
         if not email_enabled:
@@ -258,7 +267,13 @@ class HostReportSender(HostReportAnalyser):
                 self._mark_report_skipped(OVERVIEW_REPORT_INDEX, overview_doc_id, overview_document, '；'.join(overview_errors))
             return {'status': 'blocked', 'reason': 'overview_not_ready', 'errors': overview_errors, 'report_date': window['report_date']}
 
-        host_ids = self._get_single_delivery_host_ids(due_rows, enabled_rows)
+        host_ids = self._get_single_delivery_host_ids(due_rows, enabled_rows) if send_abnormal_host_report else []
+        if not send_abnormal_host_report:
+            self.log_tool.step(
+                '[report-delivery] 未开启独立异常主机报告，跳过单机邮件',
+                report_date=window['report_date'],
+            )
+            single_documents = []
         if not isinstance(single_documents, list):
             single_documents = []
             if len(host_ids) > 0:
@@ -381,6 +396,7 @@ class HostReportSender(HostReportAnalyser):
             'report_date': window['report_date'],
             'overview_sent': overview_success,
             'overview_skipped': overview_already_sent,
+            'send_abnormal_host_report': send_abnormal_host_report,
             'single_success': single_success,
             'single_failed': single_failed,
             'single_skipped': single_skipped,

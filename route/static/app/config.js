@@ -136,6 +136,7 @@ function getReportConfigFormState(data){
 		},
 		report_schedule_config: {
 			enabled: !!reportScheduleConfig.enabled,
+			send_abnormal_host_report: !!reportScheduleConfig.send_abnormal_host_report,
 			report_host_ids: (reportScheduleConfig.report_host_ids || []).slice(),
 			cron: $.extend({}, reportScheduleCronDefault, reportScheduleConfig.cron || {})
 		},
@@ -161,12 +162,14 @@ function applyReportConfigFormState(state){
 	reportScheduleCron = $.extend({}, reportScheduleCronDefault, reportScheduleConfig.cron || {});
 	updateReportScheduleText();
 	$('#report_enabled_switch').createRadioSwitch(!!reportScheduleConfig.enabled, function(){});
+	$('#send_abnormal_host_report_switch').createRadioSwitch(!!reportScheduleConfig.send_abnormal_host_report, function(){});
 	renderReportHostOptions(reportScheduleConfig.report_host_ids || []);
 }
 
 function getReportSchedulePayload(){
 	return {
 		'enabled': $('#report_enabled_switch').getRadioSwitchValue() ? 1 : 0,
+		'send_abnormal_host_report': $('#send_abnormal_host_report_switch').getRadioSwitchValue() ? 1 : 0,
 		'report_host_ids': getSelectedReportHostIds(),
 		'cpu': $('#report_cpu').val(),
 		'memory': $('#report_memory').val(),

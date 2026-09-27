@@ -256,7 +256,14 @@ def main():
             send_result = sender.run_delivery(
                 due_rows=host_rows,
                 enabled_rows=host_rows,
-                report_config={row.get('host_id'): {'enabled': True} for row in host_rows if row.get('host_id')},
+                report_config={
+                    row.get('host_id'): {
+                        'enabled': True,
+                        'send_abnormal_host_report': True
+                    }
+                    for row in host_rows
+                    if row.get('host_id')
+                },
                 report_date=report_date
             )
             result['send'] = send_result

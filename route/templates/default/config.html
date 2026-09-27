@@ -221,6 +221,12 @@
 					</p>
 
 					<p class="mtb15">
+						<span class="set-tit text-right report-config-label" title="独立发送异常主机报告" style="float: left;">独立异常报告</span>
+						<span id="send_abnormal_host_report_switch" style="float: left; margin-top: 4px;"></span>
+						<span class="set-info c7">开启后，异常主机会在总览邮件之外再单独发送一封报告。</span>
+					</p>
+
+					<p class="mtb15">
 						<span class="set-tit text-right report-config-label" title="服务器报告频率" style="float: left;">服务器报告频率</span>
 						<button type="button" class="btn btn-default btn-sm btn_open_report_schedule">配置报告频率</button>
 						<span class="set-info c7" id="report_cron_text" style="margin-left: 10px;">每天 00:00</span>
@@ -324,5 +330,5 @@
 	margin-left: 4px;
 }
 </style>
-<script src="/static/app/config.js?v={{config.version}}.202608221755"></script>
+<script src="/static/app/config.js?v={{config.version}}.202609271430"></script>
 {% endblock %}
