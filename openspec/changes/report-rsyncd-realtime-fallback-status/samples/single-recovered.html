@@ -1,0 +1,92 @@
+<style>
+  .panel_report h3 { font-weight: bold; }
+  .panel_report table {
+      border-top: 1px solid #999;
+      border-left: 1px solid #999;
+      border-spacing: 0;
+      width: 100%;
+  }
+  .panel_report table tr td {
+      padding: 5px;
+      line-height: 20px;
+  }
+  .panel_report table tr td:first-child {
+      width: 30%;
+  }
+  .panel_report table tr td:nth-child(2) {
+      width: 70%;
+  }
+  .panel_report .project-table tr td:first-child {
+      width: 70%;
+  }
+  .panel_report .project-table tr td:nth-child(2) {
+      width: 30%;
+  }
+  .panel_report .system-table tr td:first-child {
+      width: 40%;
+  }
+  .panel_report .system-table tr td:nth-child(2) {
+      width: 60%;
+  }
+</style>
+<div class="panel_report bgw p-5">
+  <div class="pt-5" style="color: #efefef; font-size: 14px;">
+    <div>统计范围：2026-10-01 08:13:20 至 2026-10-02 08:13:20</div>
+    <div>报告时间：2026-10-02 08:13:20</div>
+  </div>
+  <div class="mx-auto leading-10 plr15">
+    <div class="p-5" style="display: flex; flex-direction: column;align-items: center;">
+      <h3 class="text-2xl mb-2">概要信息：</h3>
+      <ul>
+      
+        <li><span style='color: red;'>实时任务兜底同步「storage&lt;script&gt;」窗口内失败 1 次，曾异常，已恢复（后续成功运行：2026-10-02 08:11:40）；2026-10-02 08:08:20：删除比例超过阈值 &lt;30%</span></li>
+      
+      </ul>
+    </div>
+    <div class="m-auto" style="width: 600px;">
+      <h3 class="font-bold my-5">系统状态：</h3>
+      <table border class="system-table w-full">
+      
+        <tr><td>CPU</td><td>平均使用率<span style='color: auto'>0%</span><br/>当前CPU使用率：<span style='color: auto'>0%</span></td></tr>
+      
+        <tr><td>内存</td><td>平均使用率<span style='color: auto'>0%</span><br/>当前内存使用率：<span style='color: auto'>0%</span></td></tr>
+      
+        <tr><td>资源使用率</td><td>平均使用率<span style='color: auto'>0%</span></td></tr>
+      
+        <tr><td>最后监控时间</td><td><span style='color: auto'>2026-10-02 08:13:20</span></td></tr>
+      
+      </table>
+
+      <h3 class="font-bold my-5">备份：</h3>
+      <table border class="w-full">
+      
+        <tr><td>Rsyncd</td><td>检查时间：无<br/>执行状态：<span style="color: green">成功</span><br/>任务数量：启用 1 / 总数 1<br/>实时同步延迟文件数：0<br/>实时同步状态：<span style="color: auto">正常</span><br/>实时任务兜底同步「storage&lt;script&gt;」：最近执行 2026-10-02 08:11:40，正常；窗口内失败 1 次；曾异常，已恢复（后续成功运行：2026-10-02 08:11:40）；2026-10-02 08:08:20：删除比例超过阈值 &lt;30%<br/>定时同步状态：<span style="color: auto">正常</span></td></tr>
+      
+      </table>
+
+      <h3 class="font-bold my-5">网站：</h3>
+      <table border class="w-full">
+      
+      </table>
+
+      <h3 class="font-bold my-5">JianghuJS项目：</h3>
+      <table border class="project-table">
+      
+      </table>
+
+      <h3 class="font-bold my-5">Docker项目：</h3>
+      <table border class="project-table w-full">
+      
+      </table>
+
+      <h3 class="font-bold my-5">数据库：</h3>
+      <p style="color: #efefef; font-size: 14px;">提示：由于数据库存储的单位是页，MySQL的InnoDB引擎默认页大小是16KB。如果你添加的数据小于这个数值，可能不会立即反映在数据库大小上。</p>
+      <table border class="w-full">
+      
+        <tr><td>数据库总大小</td><td>变化：0B<br/>总大小：0B</td></tr>
+      
+      </table>
+
+    </div>
+  </div>
+</div>
