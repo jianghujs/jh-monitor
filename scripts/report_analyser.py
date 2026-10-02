@@ -866,78 +866,6 @@ class HostReportAnalyser(object):
             key=lambda item: value_tool.safeInt(item.get('add_timestamp', 0), value_tool.parseTime(item.get('add_time', '')))
         )[-1]
 
-    def _build_rsyncd_fallback_section(self, docs, result, window):
-        """汇总每次兜底运行；同一日志的后续观察覆盖运行中快照。"""
-        lines, warnings, errors = [], [], []
-        tasks = {str(item.get('name', '')) for item in result.get('send_open_realtime_list', []) or []
-                 if item.get('status', 'enabled') == 'enabled'}
-        if not tasks:
-            return lines, warnings, errors, tasks
-        if result.get('fallback_check_version') != 1:
-            warning = '实时任务兜底同步：未提供兜底检查，请更新插件'
-            lines.append(warning)
-            warnings.append(warning)
-        elif result.get('fallback_scan_complete') is not True:
-            warning = '实时任务兜底同步：检查不完整（{0}）'.format(result.get('fallback_scan_reason') or '扫描结果缺失')
-            lines.append(warning)
-            warnings.append(warning)
-
-        runs = {}
-        for doc in docs:
-            if not self._is_doc_in_window(doc, window) or not doc.get('execute_ok'):
-                continue
-            payload = doc.get('result') or {}
-            if not isinstance(payload, dict) or payload.get('fallback_check_version') != 1:
-                continue
-            for run in payload.get('fallback_runs', []) or []:
-                if not isinstance(run, dict) or run.get('task_name') not in tasks or not run.get('log_file'):
-                    continue
-                run_ts = value_tool.safeInt(run.get('run_timestamp'))
-                observed = value_tool.safeInt(run.get('observed_timestamp'))
-                if run_ts <= 0 or observed <= 0 or observed > window['end_timestamp'] or run_ts > observed:
-                    continue
-                key = (doc.get('host_id'), run['task_name'], run['log_file'])
-                if key not in runs or observed >= value_tool.safeInt(runs[key].get('observed_timestamp')):
-                    runs[key] = run
-
-        def run_time(run):
-            return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(value_tool.safeInt(run['run_timestamp'])))
-
-        labels = {'success': '正常', 'failed': '异常', 'running': '运行中', 'unknown': '结果未知'}
-        for name in sorted(tasks):
-            task_runs = sorted([run for run in runs.values() if run['task_name'] == name],
-                               key=lambda run: (value_tool.safeInt(run['run_timestamp']), run['log_file']))
-            if not task_runs:
-                if result.get('fallback_check_version') == 1 and result.get('fallback_scan_complete') is True:
-                    lines.append('实时任务兜底同步「{0}」：窗口内无兜底运行记录'.format(name))
-                continue
-            latest = task_runs[-1]
-            failures = [run for run in task_runs if run.get('status') == 'failed'
-                        and window['start_timestamp'] <= value_tool.safeInt(run['run_timestamp']) <= window['end_timestamp']]
-            terminal = [run for run in task_runs if run.get('status') in ('success', 'failed')]
-            line = '实时任务兜底同步「{0}」：最近执行 {1}，{2}；窗口内失败 {3} 次'.format(
-                name, run_time(latest), labels.get(latest.get('status'), '结果未知'), len(failures))
-            if value_tool.safeInt(latest['run_timestamp']) < window['start_timestamp']:
-                line += '（最近运行开始于窗口前；窗口内无新运行记录）'
-            if failures:
-                recovered = bool(terminal and terminal[-1].get('status') == 'success'
-                                 and value_tool.safeInt(terminal[-1]['run_timestamp']) > value_tool.safeInt(failures[-1]['run_timestamp']))
-                state = '曾异常，已恢复（后续成功运行：{0}）'.format(run_time(terminal[-1])) if recovered else '异常未恢复'
-                detail = '；'.join('{0}：{1}'.format(run_time(run), run.get('reason') or '同步失败') for run in failures)
-                error = '实时任务兜底同步「{0}」窗口内失败 {1} 次，{2}；{3}'.format(name, len(failures), state, detail)
-                errors.append(error)
-                line += '；' + state + '；' + detail
-            elif latest.get('status') == 'failed':
-                error = '实时任务兜底同步「{0}」窗口前最近运行异常：{1}；{2}'.format(
-                    name, run_time(latest), latest.get('reason') or '同步失败')
-                errors.append(error)
-                line += '；' + (latest.get('reason') or '同步失败')
-            elif latest.get('status') not in ('success', 'running'):
-                line += '；' + (latest.get('reason') or '缺少完成证据')
-                warnings.append(line)
-            lines.append(line)
-        return lines, warnings, errors, tasks
-
     def _build_rsyncd_check_section(self, rsyncd_check_docs, window, validation_errors):
         """基于 collector 执行 tool_check.py 的结果生成 Rsyncd 报告段落。"""
         latest_check = self._get_latest_rsyncd_check_doc(rsyncd_check_docs)
@@ -995,21 +923,6 @@ class HostReportAnalyser(object):
                 desc_parts.append('实时同步状态：<span style="color: auto">正常</span>')
 
             fixtime_abnormal_tasks = result.get('fixtime_abnormal_tasks', []) or []
-            fallback_lines, fallback_warnings, fallback_errors, realtime_names = self._build_rsyncd_fallback_section(
-                rsyncd_check_docs, result, window)
-            desc_parts.extend(value_tool.escapeHtml(line) for line in fallback_lines)
-            summary_tips.extend("<span style='color: orange;'>{0}</span>".format(value_tool.escapeHtml(line))
-                                for line in fallback_warnings)
-            summary_tips.extend("<span style='color: red;'>{0}</span>".format(value_tool.escapeHtml(line))
-                                for line in fallback_errors)
-            # error_tips 被概览模板直接渲染，新增内容在此统一转义。
-            error_tips.extend(value_tool.escapeHtml(line) for line in fallback_errors)
-            if fallback_errors:
-                validation_errors.append('rsyncd_fallback_abnormal')
-            if result.get('fallback_check_version') == 1:
-                fixtime_abnormal_tasks = [task for task in fixtime_abnormal_tasks
-                                         if task.get('name') not in realtime_names
-                                         and task.get('task_type') != 'realtime_fallback']
             if len(fixtime_abnormal_tasks) > 0:
                 names = []
                 details = []
@@ -1019,13 +932,14 @@ class HostReportAnalyser(object):
                     names.append(task_name)
                     details.append('{0}（{1}）'.format(task_name, reason))
                 desc_parts.append('定时同步异常：<span style="color: red">{0}</span>'.format(value_tool.escapeHtml('、'.join(details))))
-                summary_names.extend([name for name in names if name])
-                error_tips.append('定时同步状态异常：' + '；'.join(details))
+                summary_names.extend([value_tool.escapeHtml(name) for name in names if name])
+                error_tips.append('定时同步状态异常：' + value_tool.escapeHtml('；'.join(details)))
                 validation_errors.append('rsyncd_fixtime_abnormal')
             else:
                 desc_parts.append('定时同步状态：<span style="color: auto">正常</span>')
 
-            for item in result.get('send_open_fixtime_list', []) or []:
+            sync_tasks = (result.get('send_open_fixtime_list', []) or []) + (result.get('send_open_realtime_list', []) or [])
+            for item in sync_tasks:
                 item_name = str(item.get('name', '') or '')
                 last_sync_at = str(item.get('last_sync_at', '') or '无')
                 reason = str(item.get('log_format_reason', '') or '')

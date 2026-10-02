@@ -1,47 +1,25 @@
 # 实施与验证记录
 
-已完成实时任务兜底日志检查、日报窗口内异常汇总和恢复提示。实际 ES 映射与持久化验证受环境连接失败阻塞，暂不归档。
+按最新要求简化为统一最近日志检查，移除独立兜底检测、历史统计、恢复提示和新增采集字段。
 
-## 交付文件
+## 修改范围
 
-| 仓库 | 文件 | 用途 |
-| --- | --- | --- |
-| jh-panel | plugins/rsyncd/index.py | 兜底运行记录开始 PID、结束结果和标准错误 |
-| jh-panel | plugins/rsyncd/tool_check.py | 最近 24 小时运行证据、当前历史状态及旧字段兼容 |
-| jh-monitor | scripts/report_analyser.py | 合并快照、去重、失败恢复判定与日报展示 |
-| jh-monitor | test/test_rsyncd_fallback_report.py | 11 项离线回归验证，包含完整报告和模拟发送 |
+- 面板插件 plugins/rsyncd/tool_check.py：实时与普通定时任务共用最新日志检查；缺失、早于最近 24 小时或内容异常时返回异常。
+- 监控端 scripts/report_analyser.py：明细显示两类任务的最近日志结果，沿用既有异常通路并转义任务名称与原因。
+- test/test_rsyncd_fallback_report.py：5 组离线检查，含多场景子测试和完整报告模拟发送。
 
-report_collector.py 已通过大于 8000 字符结构化结果及超时验证，无需修改。task.py、report_sender.py、同步计划及历史索引结构未修改。
+插件 index.py 的本次改动已撤回，执行命令保持原状。采集器、ES 字段及任务调度无需修改。
 
-## 已通过验证
+## 已通过
 
-- Python 语法检查：上述修改文件全部通过。
-- python3 test/test_rsyncd_fallback_report.py：11 项通过；覆盖超阈值、预检与连接错误、普通定时检查、23/24 容忍策略、运行中和中断、日志大小上限、跨窗口日志、失败恢复、重复快照、日志清理、旧版与停用任务、HTML 转义、采集截断与超时、完整单机及概览渲染、模拟通知。
-- python3 test/test_report_collected_host_name.py：通过。
-- python3 test/test_report_analyser_host.py：通过。
-- 在 /www/server/jh-panel 下运行 python3 plugins/rsyncd/index.py status '{}'：输出 start。
-- 两个仓库的 git diff --check 通过。
-- openspec validate report-rsyncd-realtime-fallback-status --strict：通过。
+5 组回归测试全部通过，覆盖两类任务的正常、缺失、过期、窗口边界、超阈值、空日志、权限错误、读取失败、停用任务、容忍警告、最新快照取代旧异常，以及完整单机日报、概览和模拟通知。Python 语法检查及 OpenSpec 严格校验通过。
 
-可审阅样例为 samples/single-recovered.html 和 samples/overview-recovered.html，使用虚构主机及模拟运行日志生成，包含“曾异常，已恢复”提示。
+样例：samples/single-abnormal.html、samples/overview-abnormal.html，使用虚构主机和模拟日志生成。
 
-## 未完成的环境验证
+## 环境限制
 
-源码 host-debian-backup 映射允许动态字段，报告仍使用既有字段。当前 ES 适配器从 data/es.json 的 hosts 读取地址，本机配置使用旧 addr 字段，适配器回退到本机端点并被拒绝。另行只读检查旧 addr 指定的 192.168.3.33:9200 也返回 ConnectionError，未修改连接配置或凭据，未能确认实际集群和映射。
+前次实际 ES 连接检查返回 Connection refused；使用测试索引执行 test_report_es_persistence.py --host-id H_debian_GsiV --use-test-index --dry-run --send 退出码为 4，模拟发送返回 overview_not_ready。本轮未重复执行已知不可用的环境验证，持久化验收仍待连接恢复后完成。未发真实通知。
 
-已执行：
+## 更新顺序
 
-    python3 test/test_report_es_persistence.py --host-id H_debian_GsiV --use-test-index --dry-run --send
-
-结果：退出码 4，ES Connection refused，测试报告回读不存在，模拟发送流程返回 overview_not_ready，dry_run_messages 为空。真实通知未发送；日志保存于 /tmp/rsyncd-fallback-persistence-check.log。此结果不能作为持久化通过依据。
-
-ES 恢复后应先只读确认目标集群、原始 result 映射及新增字段类型，再使用上述测试索引命令完成持久化验收。任务 1.2 与 4.3 保持未完成。
-
-## 更新与回滚
-
-1. 发布监控端分析器；需要加载常驻任务新代码时使用 jhm 1 -y。当前未主动重启或部署。
-2. 被采集主机配套更新 rsyncd/index.py 与 tool_check.py。无需调整既有兜底计划或重新生成同步 cmd。
-3. 等待正常采集，确认 result.fallback_check_version 为 1，核对下一次日报。旧插件显示“未提供兜底检查，请更新插件”。
-4. 回滚恢复对应代码即可，新增采集字段可以保留；不迁移历史报告，也不主动运行真实同步或发送通知。
-
-日志中的 PID 用于区分新运行的进行中状态；旧日志有明确异常或完整成功汇总时仍可判定，缺少完成证据时提示未知。未曾采集且已被清理的历史日志无法恢复。无运行记录不自动视为计划未执行故障。
+更新监控端分析器及被采集主机 tool_check.py。常驻任务需要加载新代码时使用 jhm 1 -y；本轮未主动重启服务。回滚恢复这两个文件即可，无需数据迁移或同步计划调整。
