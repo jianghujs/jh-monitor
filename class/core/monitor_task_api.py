@@ -397,6 +397,15 @@ CREATE TABLE IF NOT EXISTS monitor_task (
         host = self._getHost(task_data.get('host_id', ''))
         if not host:
             return False, '指定主机不存在', None
+        # Every install/update retries ES preparation before reporting success.
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'es', 'service'))
+        from monitor_task_event_service import ensureTaskEventStorage
+        try:
+            ensureTaskEventStorage()
+        except Exception as ex:
+            msg = 'ES任务日志存储检查失败，恢复后请重新执行安装: {0}'.format(ex)
+            self.updateInstallStatus(task_id, 'failed', msg)
+            return False, msg, None
         now_time = self._now()
         existing = self.getTaskById(task_id)
         # 日志路径与频率均由服务器统一管理，安装回调只负责绑定主机。
@@ -511,13 +520,13 @@ CREATE TABLE IF NOT EXISTS monitor_task (
 
         # Query latest event from ES
         try:
-            es_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'es')
+            es_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'es', 'service')
             if es_dir not in sys.path:
                 sys.path.insert(0, es_dir)
             from monitor_task_event_service import getLatestTaskEvent
             latest_event = getLatestTaskEvent(task_id, host_id)
-        except Exception:
-            latest_event = {}
+        except Exception as ex:
+            return 'unknown', 'ES任务日志查询失败: {0}'.format(ex), '', now_str
 
         if not latest_event:
             # No event yet - check if within first interval

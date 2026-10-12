@@ -9,16 +9,45 @@ _SOURCE_FIELDS = ['task_id', 'task_name', 'host_id', 'host_ip', 'status', 'msg',
 def buildLatestTaskEventQuery(task_id, host_id):
     return {
         'size': 1,
+        # Old auto-created indices store IDs and run_at as text. Read the
+        # original time so both legacy text and explicit date mappings sort
+        # by execution time, including events uploaded after an outage.
+        'runtime_mappings': {
+            'task_run_time': {
+                'type': 'date',
+                'script': {
+                    'source': """
+                        def raw = params._source.run_at;
+                        if (raw == null || raw == '') {
+                            raw = params._source['@timestamp'];
+                        }
+                        if (raw == null || raw == '') return;
+                        try {
+                            emit(ZonedDateTime.parse(raw).toInstant().toEpochMilli());
+                        } catch (Exception e) {
+                            emit(LocalDateTime.parse(raw.replace(' ', 'T'))
+                                .toInstant(ZoneOffset.UTC).toEpochMilli());
+                        }
+                    """,
+                },
+            },
+        },
         'query': {
             'bool': {
                 'filter': [
-                    {'term': {'task_id': task_id}},
-                    {'term': {'host_id': host_id}},
+                    {'bool': {'should': [
+                        {'term': {'task_id': task_id}},
+                        {'term': {'task_id.keyword': task_id}},
+                    ], 'minimum_should_match': 1}},
+                    {'bool': {'should': [
+                        {'term': {'host_id': host_id}},
+                        {'term': {'host_id.keyword': host_id}},
+                    ], 'minimum_should_match': 1}},
                 ]
             }
         },
         'sort': [
-            {'run_at': {'order': 'desc', 'unmapped_type': 'date'}},
+            {'task_run_time': {'order': 'desc'}},
             {'@timestamp': {'order': 'desc'}},
         ],
         '_source': _SOURCE_FIELDS,

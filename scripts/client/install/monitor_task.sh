@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eE -o pipefail
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -46,10 +46,13 @@ info_step()  { info "|- $*"; }
 info_detail(){ info "|--- $*"; }
 
 fail() {
+  trap - ERR
   log "❌ $*"
   report_status "failed" "$*" || true
   exit 1
 }
+
+trap 'fail "安装步骤失败，请修复后重新执行安装"' ERR
 
 urlencode() {
   local value="$1"
@@ -74,7 +77,7 @@ post_form() {
   local url="$1"
   shift
   if command -v curl >/dev/null 2>&1; then
-    curl -fsS -X POST "$url" "$@"
+    curl -fsS --connect-timeout 5 --max-time 90 -X POST "$url" "$@"
   elif command -v wget >/dev/null 2>&1; then
     local body=""
     local arg key val
@@ -104,13 +107,13 @@ report_status() {
   [ -n "$SERVER_URL" ] || return 0
   [ -n "$TASK_ID" ] || return 0
   if command -v curl >/dev/null 2>&1; then
-    curl -fsS -X POST "${SERVER_URL%/}/pub/update_monitor_task_install_status" \
+    curl -fsS --connect-timeout 5 --max-time 90 -X POST "${SERVER_URL%/}/pub/update_monitor_task_install_status" \
       --data-urlencode "task_id=${TASK_ID}" \
       --data-urlencode "install_status=${status}" \
-      --data-urlencode "install_msg=${msg}" >/dev/null || true
+      --data-urlencode "install_msg=${msg}" | python3 -c 'import json,sys; r=json.load(sys.stdin); sys.exit(0 if r.get("status") is True else 1)'
   else
     local body="task_id=$(urlencode "$TASK_ID")&install_status=$(urlencode "$status")&install_msg=$(urlencode "$msg")"
-    post_form "${SERVER_URL%/}/pub/update_monitor_task_install_status" "$body" >/dev/null || true
+    post_form "${SERVER_URL%/}/pub/update_monitor_task_install_status" "$body" | python3 -c 'import json,sys; r=json.load(sys.stdin); sys.exit(0 if r.get("status") is True else 1)'
   fi
 }
 
@@ -152,14 +155,14 @@ validate_args() {
 register_task() {
   info_step "向云监控注册任务" taskId="${TASK_ID}" taskName="${TASK_NAME}"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsS -X POST "${SERVER_URL%/}/pub/register_monitor_task" \
+    curl -fsS --connect-timeout 5 --max-time 90 -X POST "${SERVER_URL%/}/pub/register_monitor_task" \
       --data-urlencode "task_id=${TASK_ID}" \
       --data-urlencode "task_name=${TASK_NAME}" \
       --data-urlencode "host_id=${HOST_ID}" >/tmp/jh_monitor_task_register.json || fail "register task failed"
   else
     fail "curl is required for task registration"
   fi
-  if ! grep -q '"status": true\|"status":true' /tmp/jh_monitor_task_register.json; then
+  if ! python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); sys.exit(0 if r.get("status") is True else 1)' /tmp/jh_monitor_task_register.json; then
     cat /tmp/jh_monitor_task_register.json >&2 || true
     fail "monitor server rejected task registration"
   fi
@@ -406,11 +409,15 @@ validate_and_reload_filebeat() {
   info_detail "配置校验通过"
   info_step "重载 filebeat"
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl reload filebeat >/dev/null 2>&1 || systemctl restart filebeat >/dev/null 2>&1 || true
+    systemctl restart filebeat || fail "filebeat 重启失败，修复后重新执行安装"
+    systemctl is-active --quiet filebeat || fail "filebeat 未正常运行"
   else
-    service filebeat reload >/dev/null 2>&1 || service filebeat restart >/dev/null 2>&1 || true
+    service filebeat restart || fail "filebeat 重启失败，修复后重新执行安装"
+    service filebeat status >/dev/null || fail "filebeat 未正常运行"
   fi
   info_detail "filebeat 已重载"
+  info_step "检查 filebeat 到 ES 的连接与认证"
+  filebeat test output -c "$FILEBEAT_MAIN" -E output.elasticsearch.timeout=15s || fail "ES输出检查失败；已有日志保留，ES恢复后请重新执行安装"
 }
 
 install_task() {
@@ -431,12 +438,14 @@ install_task() {
   echo ""
   validate_and_reload_filebeat
   echo ""
-  report_status "installed" "安装成功"
+  report_status "installed" "安装检查通过：ES模板、Filebeat服务及连接正常；日志入库请查看任务状态" || fail "安装状态回写失败，请重新执行安装"
   info_done "安装完成" taskId="${TASK_ID}" taskName="${TASK_NAME}" logPath="${LOG_PATH}"
   info ""
   info "在你的业务脚本中，执行完成后调用以下命令写入任务结果："
   info "  jh-monitor-task-log --task-id \"${TASK_ID}\" --status success --msg \"执行成功\""
   info "状态可选: success(成功) / warning(告警) / error(异常)"
+  info "可重复执行本安装命令，重新检查ES存储并更新采集配置；已有日志与采集进度会保留。"
+  info "连接检查通过不代表业务日志已入库，请在监控任务中刷新状态确认。"
   info_sep
 }
 
