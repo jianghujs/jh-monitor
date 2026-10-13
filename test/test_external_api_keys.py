@@ -184,6 +184,27 @@ class ReadRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['status'])
 
+    def test_historical_running_task_does_not_override_current_success(self):
+        created = self.store.create({'name': 'snapshot', 'scopes': ['ha:read']})
+        with self.store.connect() as db:
+            db.execute("INSERT INTO ha_switch_task VALUES('new','p','success')")
+            db.execute("UPDATE ha_host_state SET switch_task_id='new' WHERE pair_id='p'")
+        payload = self.get_relationships({'Authorization': 'Bearer ' + created['key']}).json
+        pair = payload['data']['list'][0]
+        self.assertEqual(pair['status'], 'normal')
+        self.assertEqual(pair['hosts'][0]['switch_task_status'], 'success')
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT status FROM ha_switch_task WHERE switch_task_id='t'").fetchone()[0], 'running')
+
+    def test_current_pending_or_running_task_still_blocks(self):
+        created = self.store.create({'name': 'snapshot', 'scopes': ['ha:read']})
+        for status in ('pending', 'running'):
+            with self.store.connect() as db:
+                db.execute("UPDATE ha_switch_task SET status=? WHERE switch_task_id='t'", (status,))
+            pair = self.get_relationships({'Authorization': 'Bearer ' + created['key']}).json['data']['list'][0]
+            self.assertEqual(pair['status'], 'switching')
+            self.assertEqual(pair['hosts'][0]['switch_task_status'], status)
+
     def test_auth_failures_are_json_with_status_codes(self):
         created = self.store.create({'name': '无权限', 'scopes': []})
         response = self.get_relationships({'Authorization': 'Bearer ' + created['key']})

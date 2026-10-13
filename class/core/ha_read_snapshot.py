@@ -27,8 +27,10 @@ def relationships_snapshot(db_path):
             JOIN ha_pair p ON p.pair_id=h.pair_id AND p.local_type='local'
             LEFT JOIN ha_switch_task t ON t.switch_task_id=h.switch_task_id AND t.pair_id=h.pair_id
             ORDER BY h.id''').fetchall()
-        # Pending tasks can precede the next host report, so also include these in the block decision.
-        busy = {r[0] for r in db.execute("SELECT DISTINCT pair_id FROM ha_switch_task WHERE status IN ('pending','running')")}
+        # localReportApi writes the host's task pointer and task status atomically.
+        # Only that current task is authoritative; historical tasks may retain
+        # pending/running after a newer task has already completed.
+        busy = {row['pair_id'] for row in hosts if row['switch_task_status'] in ('pending', 'running')}
         by_pair = {}
         for row in hosts:
             item = dict(row)
