@@ -1331,34 +1331,40 @@ function setBasicAuth(){
 function showPanelApi(){
 	$.post('/config/get_panel_token', '', function(rdata){
 		var tip = layer.open({
-			area: ['500px', '355px'],
-			title: '配置面板API',
+			area: ['1200px', '720px'],
+			title: 'API 接口配置',
 			closeBtn:1,
 			shift: 0,
 			type: 1,
 			content: '<div class="bt-form pd20">\
-		<div class="line">\
-			<span class="tname">接口密钥</span>\
-			<div class="info-r">\
-				<input class="bt-input-text mr5" name="token" type="text" style="width: 310px;" disabled>\
-				<button class="btn btn-success btn-xs reset_token" style="margin-left: -50px;">重置</button>\
+		<div class="akp-card">\
+			<div class="akp-card-head">\
+				<div class="akp-card-title">面板总密钥</div>\
+				<div class="akp-card-desc">开启 API 后，外部系统可用“IP 白名单 + 签名”访问（总密钥），也可使用下方带权限的调用密钥。总密钥权限最大，可调用全部面板接口，请谨慎使用。</div>\
+			</div>\
+			<div class="akp-field">\
+				<label class="akp-label">接口密钥</label>\
+				<div class="akp-control">\
+					<input class="bt-input-text akp-input" name="token" type="text" disabled>\
+					<button class="btn btn-default btn-sm reset_token">重置</button>\
+				</div>\
+			</div>\
+			<div class="akp-field">\
+				<label class="akp-label">IP 白名单</label>\
+				<div class="akp-control">\
+					<textarea class="bt-input-text akp-textarea" name="api_limit_addr" placeholder="每行 1 个 IP；留空时签名通道不可用"></textarea>\
+				</div>\
+			</div>\
+			<div class="akp-field">\
+				<label class="akp-label"></label>\
+				<div class="akp-control"><button class="btn btn-success btn-sm save_api">保存配置</button></div>\
 			</div>\
 		</div>\
-		<div class="line">\
-			<span class="tname" style="width: 90px; overflow: initial; height: 20px; line-height: 20px;">IP白名单<br/>(每行1个)</span>\
-			<div class="info-r"><textarea class="bt-input-text" name="api_limit_addr" style="width: 310px; height: 80px; line-height: 20px; padding: 5px 8px;"></textarea></div>\
-		</div>\
-		<div class="line">\
-			<span class="tname"></span>\
-			<div class="info-r"><button class="btn btn-success btn-sm save_api">保存配置</button></div>\
-		</div>\
-		<ul class="help-info-text c7">\
-			<li>开启API后，必需在IP白名单列表中的IP才能访问面板API接口</li>\
-			<li style="color: red;">请不要在生产环境开启，这可能增加服务器安全风险；</li>\
-		</ul>\
+		<div class="api-key-section"></div>\
 	</div>',
 			success:function(layero,index){
 
+				if (typeof renderPanelApiKeys === 'function') { renderPanelApiKeys($('.api-key-section', layero)); }
 				$('input[name="token"]').val(rdata.data.token);
 				$('textarea[name="api_limit_addr"]').val(rdata.data.limit_addr);
 

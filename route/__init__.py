@@ -149,7 +149,9 @@ def sendAuthenticated():
 @app.before_request
 def requestCheck():
     # Flask请求勾子
-    if app.config['BASIC_AUTH_OPEN']:
+    from api_key_routes import is_external_route
+    external_ha = is_external_route(request.path)
+    if app.config['BASIC_AUTH_OPEN'] and not external_ha:
         auth = request.authorization
         if request.path in ['/download', '/hook', '/down']:
             return
@@ -163,6 +165,9 @@ def requestCheck():
 
     domain_check = jh.checkDomainPanel()
     if domain_check:
+        if external_ha:
+            from flask import jsonify
+            return jsonify(status=False, msg='Domain access denied'), 403
         return domain_check
 
 
@@ -483,22 +488,27 @@ def api(reqClass=None, reqAction=None, reqData=None):
     if comReturn:
         return comReturn
 
-    import config_api
-    isOk, data = config_api.config_api().checkPanelToken()
-    if not isOk:
-        return jh.returnJson(False, '未开启API')
+    # 调用密钥：管理员密钥可调用全部接口，普通密钥只能调用登记了权限的接口。
+    from api_key_auth import AuthError as PanelAuthError
+    from api_key_auth import authorize_request, master_signature_valid
+    if request.headers.get('Authorization'):
+        try:
+            authorize_request(request.headers, request.values, request.remote_addr, _external_key_store,
+                              PANEL_API_CONFIG_PATH, request.method, request.path)
+        except PanelAuthError as error:
+            return jh.getJson({'status': False, 'msg': str(error)}), error.status
+    else:
+        import config_api
+        isOk, data = config_api.config_api().checkPanelToken()
+        if not isOk:
+            return jh.returnJson(False, '未开启API')
 
-    request_time = request.form.get('request_time', '')
-    request_token = request.form.get('request_token', '')
-    request_ip = request.remote_addr
-
-    token_md5 = jh.md5(str(request_time) + jh.md5(data['token_crypt']))
-
-    if not (token_md5 == request_token):
-        return jh.returnJson(False, '密钥错误')
-
-    if not jh.inArray(data['limit_addr'], request_ip):
-        return jh.returnJson(False, '非法请求')
+        # 与外部只读接口共用同一套总密钥规则，返回格式保持原样。
+        try:
+            master_signature_valid(PANEL_API_CONFIG_PATH, request.form.get('request_time', ''),
+                                   request.form.get('request_token', ''), request.remote_addr)
+        except PanelAuthError as error:
+            return jh.returnJson(False, str(error))
 
     if reqClass == None:
         return jh.returnJson(False, '请指定请求方法类')
@@ -726,3 +736,11 @@ if not jh.isAppleSystem():
         print(e)
 
 ##################### ssh  end ###########################
+
+# 面板 API 接口的调用密钥：与总密钥同一入口，权限来自登记清单。
+from api_key_routes import register_api_key_routes
+from api_key_store import ApiKeyStore
+PANEL_API_CONFIG_PATH = '/www/server/jh-monitor/data/api.json'
+_external_key_store = ApiKeyStore('/www/server/jh-monitor/data/default.db', '/www/server/jh-monitor/data/api_key_master.key')
+_external_key_store.migrate()
+register_api_key_routes(app, _external_key_store, isLogined, PANEL_API_CONFIG_PATH)

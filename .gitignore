@@ -192,3 +192,7 @@ scripts/client/artifacts
 data/artifacts
 data/__pycache__
 data/env
+
+# Recoverable external API credential master key and private backups
+data/api_key_master.key*
+data/backups/
