@@ -40,7 +40,7 @@ import host_status_service as host_status_service_utils
 class config_api:
 
     __version = '1.1.17'
-    __api_addr = 'data/api.json'
+    __api_addr = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/api.json'))
     __report_config_addr = 'data/report_config.json'
     __es_config_addr = 'data/es.json'
 
@@ -1341,32 +1341,37 @@ class config_api:
             'id,type,uid,log,addtime').select()
         return jh.returnJson(False, 'ok', data)
 
-    def checkPanelToken(self):
-        api_file = self.__api_addr
-        if not os.path.exists(api_file):
-            return False, ''
+    def _readPanelApiConfig(self):
+        # 缺失配置按首次安装处理；读取或格式错误不能覆盖已有密钥。
+        try:
+            with open(self.__api_addr, 'r', encoding='utf-8') as source:
+                data = json.load(source)
+        except FileNotFoundError:
+            return {"open": False, "token": "", "limit_addr": []}
+        except (OSError, UnicodeError) as error:
+            raise ValueError('无法读取 API 配置文件，请检查 data/api.json 的路径和权限') from error
+        except ValueError as error:
+            raise ValueError('API 配置文件格式无效，请检查 data/api.json，原文件未修改') from error
+        if not isinstance(data, dict) or type(data.get('open', False)) is not bool:
+            raise ValueError('API 配置必须为 JSON 对象，open 必须为布尔值')
+        if not isinstance(data.get('limit_addr', []), list) or any(not isinstance(item, str) for item in data.get('limit_addr', [])):
+            raise ValueError('API 配置 limit_addr 必须为字符串数组')
+        data.setdefault('open', False)
+        data.setdefault('token', '')
+        data.setdefault('limit_addr', [])
+        return data
 
-        tmp = jh.readFile(api_file)
-        data = json.loads(tmp)
-        if data['open']:
-            return True, data
-        else:
-            return False, ''
+    def checkPanelToken(self):
+        data = self._readPanelApiConfig()
+        return (True, data) if data['open'] else (False, '')
 
     def getPanelTokenApi(self):
         api_file = self.__api_addr
-
-        tmp = jh.readFile(api_file)
-        if not os.path.exists(api_file):
-            ready_data = {"open": False, "token": "", "limit_addr": []}
-            jh.writeFile(api_file, json.dumps(ready_data))
-            jh.execShell("chmod 600 " + api_file)
-            tmp = jh.readFile(api_file)
-        data = json.loads(tmp)
+        data = self._readPanelApiConfig()
 
         if not 'key' in data:
             data['key'] = jh.getRandomString(16)
-            jh.writeFile(api_file, json.dumps(data))
+            self._writeJsonConfig(api_file, data)
 
         if 'token_crypt' in data:
             data['token'] = jh.deCrypt(data['token'], data['token_crypt'])
@@ -1375,7 +1380,7 @@ class config_api:
             data['token'] = jh.md5(token)
             data['token_crypt'] = jh.enCrypt(
                 data['token'], token).decode('utf-8')
-            jh.writeFile(api_file, json.dumps(data))
+            self._writeJsonConfig(api_file, data)
             data['token'] = "***********************************"
 
         data['limit_addr'] = '\n'.join(data['limit_addr'])
@@ -1449,8 +1454,7 @@ class config_api:
         op_type = request.form.get('op_type', '').strip()
 
         api_file = self.__api_addr
-        tmp = jh.readFile(api_file)
-        data = json.loads(tmp)
+        data = self._readPanelApiConfig()
 
         if op_type == '1':
             token = jh.getRandomString(32)
@@ -1458,7 +1462,7 @@ class config_api:
             data['token_crypt'] = jh.enCrypt(
                 data['token'], token).decode('utf-8')
             jh.writeLog('API配置', '重新生成API-Token')
-            jh.writeFile(api_file, json.dumps(data))
+            self._writeJsonConfig(api_file, data)
             return jh.returnJson(True, 'ok', token)
 
         elif op_type == '2':
@@ -1472,14 +1476,14 @@ class config_api:
 
             token = stats[data['open']] + '成功!'
             jh.writeLog('API配置', '%sAPI接口' % stats[data['open']])
-            jh.writeFile(api_file, json.dumps(data))
+            self._writeJsonConfig(api_file, data)
             return jh.returnJson(not not data['open'], token)
 
         elif op_type == '3':
             limit_addr = request.form.get('limit_addr', '').strip()
             data['limit_addr'] = limit_addr.split('\n')
             jh.writeLog('API配置', '变更IP限制为[%s]' % limit_addr)
-            jh.writeFile(api_file, json.dumps(data))
+            self._writeJsonConfig(api_file, data)
             return jh.returnJson(True, '保存成功!')
 
     def get(self):
@@ -1542,8 +1546,7 @@ class config_api:
 
         api_token = self.__api_addr
         if os.path.exists(api_token):
-            bac = jh.readFile(api_token)
-            bac = json.loads(bac)
+            bac = self._readPanelApiConfig()
             if bac['open']:
                 data['api_token'] = 'checked'
         else:
