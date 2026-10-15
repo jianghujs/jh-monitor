@@ -254,6 +254,38 @@ class ReadRouteTests(unittest.TestCase):
         self.post('/config/set_api_key', {'action': 'delete', 'key_id': created['key_id']}, csrf)
         self.assertEqual(self.get_relationships(auth).status_code, 401)
 
+    def test_custom_key_route_rejects_duplicate_and_update_without_leaking_plaintext(self):
+        csrf = self.admin_csrf()
+        raw_key = 'Route_Custom_Key_' + ('A' * 32)
+        with self.assertLogs(self.app.logger.name, level='INFO') as logs:
+            created = self.post('/config/set_api_key', {
+                'action': 'create', 'name': '自定义密钥', 'key': raw_key, 'scopes': '["ha:read"]'
+            }, csrf)
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.json['data']['key'], raw_key)
+        self.assertNotIn(raw_key, '\n'.join(logs.output))
+        listing = self.client.post('/config/get_api_keys').get_data(as_text=True)
+        self.assertNotIn(raw_key, listing)
+
+        csrf = self.admin_csrf()
+        duplicate = self.post('/config/set_api_key', {
+            'action': 'create', 'name': '重复密钥', 'key': raw_key, 'scopes': '["ha:read"]'
+        }, csrf)
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertNotIn(raw_key, duplicate.get_data(as_text=True))
+
+        key_id = created.json['data']['key_id']
+        csrf = self.admin_csrf()
+        changed_key = 'Route_Changed_Key_' + ('B' * 32)
+        update = self.post('/config/set_api_key', {
+            'action': 'update', 'key_id': key_id, 'name': '不能修改', 'key': changed_key,
+            'scopes': '["ha:read"]'
+        }, csrf)
+        self.assertEqual(update.status_code, 400)
+        self.assertNotIn(changed_key, update.get_data(as_text=True))
+        self.assertEqual(self.store.reveal(key_id)['key'], raw_key)
+        self.assertEqual(self.store.list()[0]['name'], '自定义密钥')
+
 
 class StoreTests(unittest.TestCase):
     """主密钥与密文的完整性。"""
@@ -301,6 +333,174 @@ class StoreTests(unittest.TestCase):
         records = [item for item in self.store.list() if item['key_id'] == created['key_id']]
         self.assertEqual(records[0]['key_type'], 'admin')
         self.assertEqual(records[0]['scopes'], [])
+
+    def test_auto_generated_and_custom_key_boundaries_authenticate_and_reveal(self):
+        generated = [
+            self.store.create({'name': '缺省'}),
+            self.store.create({'name': '空字符串', 'key': ''}),
+        ]
+        for item in generated:
+            self.assertTrue(item['key'].startswith('jhm_'))
+            self.assertEqual(len(item['key']), 68)
+            self.assertEqual(self.store.reveal(item['key_id'])['key'], item['key'])
+            self.assertEqual(self.store.authenticate('Bearer ' + item['key'])['key_id'], item['key_id'])
+
+        for length in (32, 68, 128):
+            raw_key = 'A' + ('b' * (length - 2)) + 'Z'
+            created = self.store.create({'name': '边界-%s' % length, 'key': raw_key, 'scopes': ['ha:read']})
+            self.assertEqual(created['key'], raw_key)
+            self.assertEqual(self.store.reveal(created['key_id'])['key'], raw_key)
+            self.assertEqual(self.store.authenticate('bearer ' + raw_key)['key_id'], created['key_id'])
+            with self.assertRaises(ApiKeyError) as raised:
+                self.store.authenticate('Bearer ' + raw_key.swapcase())
+            self.assertEqual(raised.exception.status, 401)
+
+    def test_invalid_custom_keys_are_rejected_without_records(self):
+        invalid = [
+            None, False, 123, [], 'a' * 31, 'a' * 129, ' ' * 32,
+            ('a' * 31) + ' ', ('a' * 31) + '\n', ('a' * 31) + '中',
+            ('a' * 31) + '.', ('a' * 31) + '/',
+        ]
+        for index, raw_key in enumerate(invalid):
+            with self.subTest(raw_key=repr(raw_key)):
+                with self.assertRaises(ApiKeyError) as raised:
+                    self.store.create({'name': '非法-%s' % index, 'key': raw_key})
+                self.assertIn('32～128', str(raised.exception))
+        self.assertEqual(self.store.list(), [])
+
+    def test_duplicate_keys_include_disabled_expired_and_concurrent_records(self):
+        disabled_key = 'Disabled_Key_' + ('D' * 32)
+        disabled = self.store.create({'name': '停用记录', 'key': disabled_key, 'scopes': ['ha:read']})
+        self.store.update(disabled['key_id'], {
+            'name': '停用记录', 'key_type': 'normal', 'scopes': ['ha:read'], 'is_enabled': False
+        })
+        expired_key = 'Expired_Key_' + ('E' * 32)
+        expired = self.store.create({'name': '过期记录', 'key': expired_key, 'scopes': ['ha:read']})
+        self.store.update(expired['key_id'], {
+            'name': '过期记录', 'key_type': 'normal', 'scopes': ['ha:read'], 'is_enabled': True,
+            'expires_at': '2000-01-01T00:00:00+00:00'
+        })
+        for raw_key in (disabled_key, expired_key):
+            with self.assertRaises(ApiKeyError) as raised:
+                self.store.create({'name': '覆盖尝试', 'key': raw_key, 'key_type': 'admin'})
+            self.assertEqual(raised.exception.status, 409)
+        records = {item['key_id']: item for item in self.store.list()}
+        self.assertEqual(records[disabled['key_id']]['name'], '停用记录')
+        self.assertFalse(records[disabled['key_id']]['is_enabled'])
+        self.assertEqual(records[expired['key_id']]['name'], '过期记录')
+        self.assertEqual(records[expired['key_id']]['key_type'], 'normal')
+
+        concurrent_key = 'Concurrent_Key_' + ('C' * 32)
+        def create_same(index):
+            try:
+                return self.store.create({'name': '并发-%s' % index, 'key': concurrent_key})
+            except ApiKeyError as error:
+                return error
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(create_same, range(2)))
+        self.assertEqual(len([item for item in results if isinstance(item, dict)]), 1)
+        conflicts = [item for item in results if isinstance(item, ApiKeyError)]
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].status, 409)
+        digest = hashlib.sha256(concurrent_key.encode()).hexdigest()
+        with self.store.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM api_key WHERE key_hash=?', (digest,)).fetchone()[0], 1)
+
+    def test_update_rejects_nonempty_key_and_preserves_metadata(self):
+        raw_key = 'Original_Update_Key_' + ('O' * 32)
+        created = self.store.create({'name': '原名称', 'key': raw_key, 'scopes': ['ha:read']})
+        with self.assertRaises(ApiKeyError):
+            self.store.update(created['key_id'], {
+                'name': '新名称', 'key': 'Changed_Update_Key_' + ('N' * 32), 'scopes': []
+            })
+        record = self.store.list()[0]
+        self.assertEqual(record['name'], '原名称')
+        self.assertEqual(record['scopes'], ['ha:read'])
+        self.assertEqual(self.store.reveal(created['key_id'])['key'], raw_key)
+
+
+class IndependentDeploymentTests(unittest.TestCase):
+    """两套云监控可保存相同原文，权限、状态与加密材料各自独立。"""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.deployments = [self.make_deployment('A'), self.make_deployment('B')]
+        self.raw_key = 'Shared_Two_Site_Key_' + ('S' * 32)
+        self.created = []
+        for deployment in self.deployments:
+            self.created.append(deployment['store'].create({
+                'name': '双机房调用', 'key': self.raw_key, 'scopes': ['ha:read']
+            }))
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def make_deployment(self, site):
+        root = Path(self.temp.name) / site
+        root.mkdir()
+        store = ApiKeyStore(str(root / 'monitor.db'), str(root / 'api_key_master.key'))
+        store.migrate()
+        with store.connect() as db:
+            db.executescript('''CREATE TABLE ha_pair(id INTEGER PRIMARY KEY,pair_id TEXT,pair_name TEXT,status TEXT,status_text TEXT,local_type TEXT);
+            CREATE TABLE ha_host_state(id INTEGER PRIMARY KEY,pair_id TEXT,host_id TEXT,host_name TEXT,role TEXT,online_status TEXT,health_status TEXT,collect_status TEXT,last_report_at TEXT,update_time TEXT,switch_task_id TEXT);
+            CREATE TABLE ha_switch_task(switch_task_id TEXT,pair_id TEXT,status TEXT);''')
+            db.execute("INSERT INTO ha_pair VALUES(1,'pair',?,'normal','ok','local')", ('机房-' + site,))
+        config = str(root / 'api.json')
+        self.write_config(config, True)
+        app = Flask('deployment_' + site)
+        app.secret_key = 'test-' + site
+        register_api_key_routes(app, store, lambda: False, config)
+        return {'store': store, 'config': config, 'client': app.test_client()}
+
+    @staticmethod
+    def write_config(path, is_open):
+        with io.open(path, 'w', encoding='utf-8') as target:
+            json.dump({'open': is_open, 'token': 'hash', 'token_crypt': 'crypt',
+                       'limit_addr': ['127.0.0.1'], 'key': 'panel'}, target)
+
+    def request(self, index):
+        return self.deployments[index]['client'].get(
+            '/ha/api/local/relationships', headers={'Authorization': 'Bearer ' + self.raw_key},
+            environ_base={'REMOTE_ADDR': '127.0.0.1'})
+
+    def update_first(self, **changes):
+        data = {'name': '双机房调用', 'key_type': 'normal', 'scopes': ['ha:read'], 'is_enabled': True}
+        data.update(changes)
+        self.deployments[0]['store'].update(self.created[0]['key_id'], data)
+
+    def test_same_plaintext_uses_independent_ids_nonces_ciphertext_and_relationships(self):
+        self.assertNotEqual(self.created[0]['key_id'], self.created[1]['key_id'])
+        rows = []
+        for deployment, created in zip(self.deployments, self.created):
+            self.assertEqual(deployment['store'].reveal(created['key_id'])['key'], self.raw_key)
+            with deployment['store'].connect() as db:
+                rows.append(db.execute('SELECT key_nonce,key_ciphertext FROM api_key WHERE key_id=?',
+                                       (created['key_id'],)).fetchone())
+        self.assertNotEqual(bytes(rows[0]['key_nonce']), bytes(rows[1]['key_nonce']))
+        self.assertNotEqual(bytes(rows[0]['key_ciphertext']), bytes(rows[1]['key_ciphertext']))
+        self.assertNotEqual(Path(self.deployments[0]['store'].master_path).read_bytes(),
+                            Path(self.deployments[1]['store'].master_path).read_bytes())
+        responses = [self.request(0), self.request(1)]
+        self.assertEqual([response.status_code for response in responses], [200, 200])
+        self.assertEqual([response.json['data']['list'][0]['pair_name'] for response in responses], ['机房-A', '机房-B'])
+
+    def test_one_site_switch_permission_status_and_expiry_do_not_affect_other_site(self):
+        scenarios = [
+            ('api_closed', None),
+            ('disabled', {'is_enabled': False}),
+            ('expired', {'expires_at': '2000-01-01T00:00:00+00:00'}),
+            ('scope_removed', {'scopes': []}),
+        ]
+        for name, update in scenarios:
+            with self.subTest(name=name):
+                self.write_config(self.deployments[0]['config'], True)
+                self.update_first()
+                if name == 'api_closed':
+                    self.write_config(self.deployments[0]['config'], False)
+                else:
+                    self.update_first(**update)
+                self.assertIn(self.request(0).status_code, (401, 403))
+                self.assertEqual(self.request(1).status_code, 200)
 
 
 if __name__ == '__main__':

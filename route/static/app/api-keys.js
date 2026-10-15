@@ -16,6 +16,10 @@
 		'.akp-control{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;}',
 		'.akp-input{width:100%;max-width:380px;height:32px;line-height:32px;}',
 		'.akp-input-short{max-width:200px;}',
+		'.akp-key-input-wrap{display:flex;width:100%;max-width:380px;}',
+		'.akp-key-input-wrap .akp-input{max-width:none;border-radius:3px 0 0 3px;}',
+		'.akp-key-toggle{flex:0 0 34px;height:32px;border:1px solid #ccc;border-left:0;border-radius:0 3px 3px 0;background:#f7f7f7;color:#777;cursor:pointer;}',
+		'.akp-key-toggle:hover{color:#20a53a;background:#fff;}',
 		'.akp-textarea{width:100%;max-width:380px;height:84px;line-height:20px;padding:6px 8px;resize:vertical;}',
 		'.akp-alert{margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#fff7e6;border:1px solid #ffe0a3;color:#ad6800;font-size:12px;}',
 		'.akp-empty{padding:32px 0;text-align:center;color:#a0a6ad;font-size:13px;}',
@@ -41,7 +45,7 @@
 		'.akp-muted{color:#999;}',
 		'.akp-mono{font-family:Menlo,Consolas,monospace;}',
 		'.akp-form{padding:20px 22px;}',
-		'.akp-form .akp-label{width:80px;}',
+		'.akp-form .akp-label{width:100px;white-space:nowrap;}',
 		'.akp-seg{display:inline-flex;border:1px solid #dcdfe6;border-radius:6px;overflow:hidden;}',
 		'.akp-seg-item{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;font-size:13px;color:#5c6570;cursor:pointer;border-left:1px solid #dcdfe6;font-weight:normal;margin:0;}',
 		'.akp-seg-item:first-child{border-left:none;}',
@@ -100,6 +104,11 @@ function renderPanelApiKeys(container) {
 			return '<label class="akp-perm-item"><input type="checkbox" name="scope" value="' + scope + '">'
 				+ '<span>' + scopeLabels[scope] + '</span><em>' + scope + '</em></label>';
 		}).join('') || '<div class="akp-hint" style="margin-top:0;">暂无可分配的权限</div>';
+		var keyField = isNew ? ('<div class="akp-field akp-custom-key-field"><label class="akp-label">密钥串（可选）</label><div class="akp-control">'
+			+ '<div class="akp-key-input-wrap"><input class="bt-input-text akp-input" name="key" type="password" autocomplete="new-password" placeholder="选填，留空自动生成">'
+			+ '<button type="button" class="akp-key-toggle" title="显示密钥串"><i class="glyphicon glyphicon-eye-open"></i></button></div>'
+			+ '<div class="akp-hint">留空自动生成；可粘贴另一套云监控的调用密钥。支持 32～128 位字母、数字、下划线或短横线。</div>'
+			+ '</div></div>') : '';
 		var form = $('<div class="akp-form">'
 			+ '<div class="akp-field"><label class="akp-label">密钥类型</label><div class="akp-control">'
 			+ '<div class="akp-seg">'
@@ -108,6 +117,7 @@ function renderPanelApiKeys(container) {
 			+ '</div><div class="akp-hint akp-type-hint"></div></div></div>'
 			+ '<div class="akp-field"><label class="akp-label">名称</label><div class="akp-control">'
 			+ '<input class="bt-input-text akp-input" name="name" type="text" maxlength="128" placeholder="例如：江湖数据同步"></div></div>'
+			+ keyField
 			+ '<div class="akp-field akp-field-perms"><label class="akp-label">接口权限</label><div class="akp-control">'
 			+ '<div class="akp-perms">' + scopeInputs + '</div></div></div>'
 			+ '<div class="akp-field"><label class="akp-label">备注</label><div class="akp-control">'
@@ -139,26 +149,39 @@ function renderPanelApiKeys(container) {
 		}
 		form.find('[name=key_type]').change(syncType);
 		syncType();
+		form.find('.akp-key-toggle').click(function () {
+			var input = form.find('[name=key]');
+			var show = input.attr('type') === 'password';
+			input.attr('type', show ? 'text' : 'password');
+			$(this).attr('title', show ? '隐藏密钥串' : '显示密钥串')
+				.html('<i class="glyphicon glyphicon-eye-' + (show ? 'close' : 'open') + '"></i>');
+		});
 
 		form.appendTo(document.body);
 		layer.open({
-			type: 1, title: isNew ? '新增调用密钥' : '编辑调用密钥', area: ['600px', '560px'], content: form,
+			type: 1, title: isNew ? '新增调用密钥' : '编辑调用密钥', area: ['600px', isNew ? '640px' : '560px'], content: form,
 			btn: ['保存', '取消'],
 			yes: function (index) {
 				var type = form.find('[name=key_type]:checked').val() || 'normal';
 				var name = $.trim(form.find('[name=name]').val());
 				if (!name) { layer.msg('请填写名称'); return; }
+				var key = isNew ? form.find('[name=key]').val() : '';
+				if (key && (key.length < 32 || key.length > 128 || !/^[A-Za-z0-9_-]+$/.test(key))) {
+					layer.msg('密钥串必须为 32～128 位字母、数字、下划线或短横线'); return;
+				}
 				var scopes = type === 'admin' ? []
 					: form.find('[name=scope]:checked').map(function () { return this.value; }).get();
 				if (type === 'normal' && !scopes.length) { layer.msg('请至少勾选一个接口权限'); return; }
 				var expiry = form.find('[name=expires_at]').val();
-				submit({
+				var payload = {
 					action: isNew ? 'create' : 'update', key_id: item.key_id || '',
 					name: name, key_type: type, remark: form.find('[name=remark]').val(),
 					scopes: JSON.stringify(scopes),
 					is_enabled: form.find('[name=is_enabled]').prop('checked') ? '1' : '0',
 					expires_at: expiry ? new Date(expiry).toISOString() : ''
-				}).then(function () {
+				};
+				if (isNew) { payload.key = key; }
+				submit(payload).then(function () {
 					layer.close(index); load();
 					if (isNew) { layer.msg('调用密钥已创建'); }
 				}, function (xhr) { fail(xhr); });

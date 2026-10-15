@@ -92,7 +92,13 @@ def register_api_key_routes(app, store, is_logged_in, api_config_path):
                     'is_enabled': form_boolean(request.form.get('is_enabled', '1')),
                     'expires_at': request.form.get('expires_at') or None,
                 }
-                data = store.create(payload) if action == 'create' else store.update(request.form.get('key_id'), payload)
+                if action == 'create':
+                    payload['key'] = request.form.get('key', '')
+                    data = store.create(payload)
+                else:
+                    if request.form.get('key', '') != '':
+                        raise ApiKeyError('编辑调用密钥时不能修改密钥串')
+                    data = store.update(request.form.get('key_id'), payload)
             elif action == 'delete':
                 data = store.delete(request.form.get('key_id'))
             elif action == 'reveal':

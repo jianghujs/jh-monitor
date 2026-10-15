@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import uuid
@@ -15,6 +16,8 @@ from api_permissions import SCOPES
 PUBLIC_FIELDS = ('key_id', 'name', 'key_type', 'key_prefix', 'scopes', 'is_enabled', 'expires_at',
                  'remark', 'created_at', 'updated_at', 'last_used_at')
 KEY_TYPES = ('admin', 'normal')
+API_KEY_PATTERN = re.compile(r'[A-Za-z0-9_-]{32,128}')
+API_KEY_RULE_MESSAGE = '密钥串必须为 32～128 位字母、数字、下划线或短横线'
 
 
 def now_iso():
@@ -104,6 +107,19 @@ class ApiKeyStore:
         return (name, json.dumps(sorted(set(scopes))), int(enabled), expiry,
                 str(data.get('remark') or '')[:1000], key_type)
 
+    @staticmethod
+    def key_is_valid(raw_key):
+        return isinstance(raw_key, str) and API_KEY_PATTERN.fullmatch(raw_key) is not None
+
+    @classmethod
+    def key_for_create(cls, data):
+        if 'key' not in data or data.get('key') == '':
+            return 'jhm_' + secrets.token_hex(32)
+        raw_key = data.get('key')
+        if not cls.key_is_valid(raw_key):
+            raise ApiKeyError(API_KEY_RULE_MESSAGE)
+        return raw_key
+
     def list(self):
         with self.connect() as db:
             rows = db.execute('SELECT ' + ','.join(PUBLIC_FIELDS) + ' FROM api_key ORDER BY created_at DESC').fetchall()
@@ -118,7 +134,8 @@ class ApiKeyStore:
     def create(self, data):
         metadata = self.metadata(data)
         key_id = uuid.uuid4().hex
-        raw_key = 'jhm_' + secrets.token_hex(32)
+        raw_key = self.key_for_create(data)
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
         nonce = secrets.token_bytes(12)
         master = self.master_key()
         with self.connect() as db:
@@ -126,16 +143,24 @@ class ApiKeyStore:
         if existing:
             self.reveal(existing['key_id'])  # Do not create new ciphertext under a replaced/wrong key.
         ciphertext = AESGCM(master).encrypt(nonce, raw_key.encode(), (key_id + ':1').encode())
-        with self.connect() as db:
-            db.execute('''INSERT INTO api_key
-                (key_id,key_prefix,key_hash,key_ciphertext,key_nonce,encryption_version,
-                 name,scopes,is_enabled,expires_at,remark,key_type,created_at,updated_at)
-                VALUES (?,?,?,?,?,1,?,?,?,?,?,?,?,?)''',
-                (key_id, raw_key[:12], hashlib.sha256(raw_key.encode()).hexdigest(), ciphertext,
-                 nonce) + metadata + (now_iso(), now_iso()))
+        try:
+            with self.connect() as db:
+                db.execute('''INSERT INTO api_key
+                    (key_id,key_prefix,key_hash,key_ciphertext,key_nonce,encryption_version,
+                     name,scopes,is_enabled,expires_at,remark,key_type,created_at,updated_at)
+                    VALUES (?,?,?,?,?,1,?,?,?,?,?,?,?,?)''',
+                    (key_id, raw_key[:12], key_hash, ciphertext, nonce) + metadata + (now_iso(), now_iso()))
+        except sqlite3.IntegrityError:
+            with self.connect() as db:
+                duplicate = db.execute('SELECT key_id FROM api_key WHERE key_hash=?', (key_hash,)).fetchone()
+            if duplicate:
+                raise ApiKeyError('该密钥已存在，请使用已有记录或填写其他密钥', 409)
+            raise
         return {'key_id': key_id, 'key': raw_key}
 
     def update(self, key_id, data):
+        if 'key' in data and data.get('key') not in ('', None):
+            raise ApiKeyError('编辑调用密钥时不能修改密钥串')
         with self.connect() as db:
             changed = db.execute('''UPDATE api_key SET name=?,scopes=?,is_enabled=?,expires_at=?,remark=?,key_type=?,updated_at=?
                 WHERE key_id=?''', self.metadata(data) + (now_iso(), key_id)).rowcount
@@ -167,7 +192,7 @@ class ApiKeyStore:
         if scope is not None and scope not in SCOPES:
             raise ApiKeyError('未登记的权限', 403)
         parts = (authorization or '').split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer' or len(parts[1]) != 68:
+        if len(parts) != 2 or parts[0].lower() != 'bearer' or not self.key_is_valid(parts[1]):
             raise ApiKeyError('调用密钥无效或已停用', 401)
         digest = hashlib.sha256(parts[1].encode()).hexdigest()
         with self.connect() as db:
