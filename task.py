@@ -246,6 +246,51 @@ def getCollectedHostNameFromStatus(status_record, host_remark=''):
     return ''
 
 
+def get_resource_growth_alarm_cooldown_decision(last_alarm, current_time, alarm_level,
+                                                notify_critical_interval, notify_warning_interval):
+    if isinstance(last_alarm, dict):
+        try:
+            last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
+            if last_alarm['alarm_level'] != alarm_level:
+                return False, ''
+            time_diff = current_time - last_alarm_time
+            should_skip = (
+                (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or
+                (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval)
+            )
+            return should_skip, ''
+        except (KeyError, TypeError, ValueError) as ex:
+            return True, '上次资源增长告警记录格式异常: {}'.format(str(ex))
+
+    if isinstance(last_alarm, list) and not last_alarm:
+        return False, ''
+
+    if last_alarm is None:
+        return False, ''
+
+    return True, '查询上次资源增长告警失败: {}'.format(last_alarm)
+
+
+def persist_and_notify_resource_growth_alarm(sql, host_id, host_name, alarm_level,
+                                             alarm_content, addtime, title, html_msg, notify_interval):
+    insert_result = sql.table('host_alarm').add(
+        'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
+        (host_id, host_name, '资源增长预警', alarm_level, alarm_content, addtime)
+    )
+    if type(insert_result) is not int or insert_result <= 0:
+        return False, '写入资源增长预警记录失败: {}'.format(insert_result)
+
+    notify_level = 'critical' if alarm_level == '紧急' else 'warning'
+    jh.notifyMessage(
+        title=title,
+        msg=html_msg,
+        msgtype='html',
+        stype='资源增长预警:{}:{}'.format(host_id, notify_level),
+        trigger_time=notify_interval
+    )
+    return True, ''
+
+
 def hostGrowthAlarmTask():
     """资源增长预测和告警"""
     try:
@@ -290,23 +335,6 @@ def hostGrowthAlarmTask():
                     host.get('host_name', '')
                 )
                 
-                # 检查上次告警时间
-                last_alarm = sql.table('host_alarm').where('host_id=? AND alarm_type=?', 
-                    (host_id, '资源增长预警')).order('id desc').field('alarm_level,addtime').find()
-                
-                if isinstance(last_alarm, dict):
-                    try:
-                        last_alarm_time = int(time.mktime(time.strptime(last_alarm['addtime'], '%Y-%m-%d %H:%M:%S')))
-                        time_diff = current_time - last_alarm_time
-
-                        if (last_alarm['alarm_level'] == '紧急' and time_diff < notify_critical_interval) or \
-                            (last_alarm['alarm_level'] == '警告' and time_diff < notify_warning_interval):
-                            continue
-                    except (KeyError, TypeError, ValueError):
-                        print(f"{Fore.RED}|- 主机 [{host_name}] 的上次资源增长告警记录格式异常，忽略冷却时间: {last_alarm}{Style.RESET_ALL}")
-                elif last_alarm:
-                    print(f"{Fore.RED}|- 查询主机 [{host_name}] 的上次资源增长告警失败，忽略冷却时间: {last_alarm}{Style.RESET_ALL}")
-
                 print(f"|- 开始分析主机 [{host_name}] 资源增长...")
 
                 history_start = current_time - (max(memory_scan_history_minutes, disk_scan_history_minutes) * 60)
@@ -392,14 +420,19 @@ def hostGrowthAlarmTask():
                         'critical': '紧急',
                         'warning': '警告'
                     }
-                    
-                    # 添加告警记录
-                    sql.table('host_alarm').add(
-                        'host_id,host_name,alarm_type,alarm_level,alarm_content,addtime',
-                        (host_id, host_name, '资源增长预警', alarm_level_map[final_alarm['level']], final_alarm['content'], time.strftime('%Y-%m-%d %H:%M:%S'))
+                    alarm_level = alarm_level_map[final_alarm['level']]
+                    last_alarm = sql.table('host_alarm').where(
+                        'host_id=? AND alarm_type=? AND alarm_level=?',
+                        (host_id, '资源增长预警', alarm_level)
+                    ).order('id desc').field('alarm_level,addtime').find()
+                    should_skip, cooldown_error = get_resource_growth_alarm_cooldown_decision(
+                        last_alarm, current_time, alarm_level,
+                        notify_critical_interval, notify_warning_interval
                     )
-
-                    print(f"|- 添加主机 [{host_name}] 资源增长预警 - {alarm_level_map[final_alarm['level']]}，告警主体")
+                    if cooldown_error:
+                        print(f"{Fore.RED}|- 主机 [{host_name}] {cooldown_error}，跳过本轮通知{Style.RESET_ALL}")
+                    if should_skip:
+                        continue
                     
                     # 发送通知消息
                     panel_title = jh.getConfig('title')
@@ -424,13 +457,22 @@ def hostGrowthAlarmTask():
                     </div>
                     """
                     
-                    jh.notifyMessage(
-                        title=f'资源增长预警-{alarm_level_map[final_alarm["level"]]}：{host_name} {now_time}',
-                        msg=html_msg, 
-                        msgtype='html',
-                        stype='资源增长预警', 
-                        trigger_time=0
+                    persisted, persist_error = persist_and_notify_resource_growth_alarm(
+                        sql=sql,
+                        host_id=host_id,
+                        host_name=host_name,
+                        alarm_level=alarm_level,
+                        alarm_content=final_alarm['content'],
+                        addtime=time.strftime('%Y-%m-%d %H:%M:%S'),
+                        title=f'资源增长预警-{alarm_level}：{host_name} {now_time}',
+                        html_msg=html_msg,
+                        notify_interval=final_alarm['notify_interval']
                     )
+                    if not persisted:
+                        print(f"{Fore.RED}|- 主机 [{host_name}] {persist_error}，停止发送通知{Style.RESET_ALL}")
+                        continue
+
+                    print(f"|- 添加主机 [{host_name}] 资源增长预警 - {alarm_level}，告警主体")
             
             print(f"{Fore.GREEN}★ ========= [resourceGrowthAlarm] SUCCESS - 完成资源增长分析: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time())))}{Style.RESET_ALL}")
             
