@@ -47,6 +47,8 @@ class CredentialTests(unittest.TestCase):
         return resolve_credentials(headers or {}, form or {}, remote_addr, self.store, self.api_config)
 
     def test_permission_registry_maps_route_to_scope(self):
+        self.assertEqual(route_scope('GET', '/host/api/list'), 'host:read')
+        self.assertIsNone(route_scope('POST', '/host/api/list'))
         self.assertEqual(route_scope('GET', '/ha/api/local/relationships'), 'ha:read')
         self.assertIsNone(route_scope('POST', '/ha/api/local/relationships'))
         self.assertIsNone(route_scope('GET', '/api/config_api/get'))
@@ -156,9 +158,75 @@ class ReadRouteTests(unittest.TestCase):
                                environ_base={'REMOTE_ADDR': '127.0.0.1'})
 
     def test_external_route_is_separate_from_page_routes(self):
+        self.assertTrue(is_external_route('/host/api/list'))
         self.assertTrue(is_external_route('/ha/api/local/relationships'))
         for path in ['/ha/api/local/list', '/config/get_api_keys', '/api/config_api/get']:
             self.assertFalse(is_external_route(path))
+
+    def prepare_inventory(self):
+        with self.store.connect() as db:
+            db.executescript('''
+                CREATE TABLE host(id INTEGER PRIMARY KEY,host_id TEXT,host_name TEXT,
+                    host_group_id TEXT,ip TEXT,os TEXT,is_jhpanel BOOLEAN,is_pve BOOLEAN,
+                    is_master BOOLEAN,backup_host_id TEXT,ssh_pkey TEXT,remark TEXT);
+                CREATE TABLE host_group(host_group_id TEXT,host_group_name TEXT);
+                INSERT INTO host_group VALUES('g','Room A');
+                INSERT INTO host VALUES(1,'h1','Server A','g','10.0.0.1','Debian',1,0,1,'h2','SECRET','PRIVATE');
+                INSERT INTO host VALUES(2,'h2','Server B','missing','10.0.0.2','Linux',0,1,NULL,NULL,'SECRET','PRIVATE');
+            ''')
+
+    def test_host_scope_ui_and_public_snapshot(self):
+        self.prepare_inventory()
+        self.admin_csrf()
+        self.assertEqual(self.client.get('/config/get_api_keys').json['data']['scopes']['host:read'],
+                         '读取云监控主机列表')
+        created = self.store.create({'name': 'Holmes', 'scopes': ['host:read']})
+        auth = {'Authorization': 'Bearer ' + created['key']}
+        with self.store.connect() as db:
+            before = list(db.iterdump())
+        result = self.client.get('/host/api/list', headers=auth)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers['Cache-Control'], 'no-store')
+        data = result.json['data']
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(data['schema_version'], 1)
+        self.assertIsNotNone(datetime.datetime.fromisoformat(data['snapshot_at']).tzinfo)
+        self.assertEqual(set(data['list'][0]), {'host_id', 'host_name', 'host_group_id',
+                         'host_group_name', 'group_resolved', 'ip', 'os', 'is_jhpanel',
+                         'is_pve', 'is_master', 'backup_host_id'})
+        self.assertEqual(data['list'][0]['host_group_name'], 'Room A')
+        self.assertTrue(data['list'][0]['group_resolved'])
+        self.assertIs(data['list'][0]['is_pve'], False)
+        self.assertFalse(data['list'][1]['group_resolved'])
+        self.assertIsNone(data['list'][1]['host_group_name'])
+        self.assertNotIn('SECRET', result.get_data(as_text=True))
+        self.assertNotIn('PRIVATE', result.get_data(as_text=True))
+        with self.store.connect() as db:
+            # Authentication may update only API key usage; inventory must be unchanged.
+            after = list(db.iterdump())
+        self.assertEqual([s for s in before if 'INSERT INTO "host' in s],
+                         [s for s in after if 'INSERT INTO "host' in s])
+        self.assertEqual(self.get_relationships(auth).status_code, 403)
+
+    def test_host_route_auth_and_empty_inventory(self):
+        self.prepare_inventory()
+        self.assertEqual(self.client.get('/host/api/list').status_code, 401)
+        self.assertEqual(self.client.get('/host/api/list', headers={'Authorization': 'Bearer invalid'}).status_code, 401)
+        ha = self.store.create({'name': 'HA only', 'scopes': ['ha:read']})
+        self.assertEqual(self.client.get('/host/api/list', headers={'Authorization': 'Bearer ' + ha['key']}).status_code, 403)
+        key = self.store.create({'name': 'Inventory', 'scopes': ['host:read']})
+        auth = {'Authorization': 'Bearer ' + key['key']}
+        with self.store.connect() as db:
+            db.execute('DELETE FROM host')
+        self.assertEqual(self.client.get('/host/api/list', headers=auth).json['data']['list'], [])
+        admin = self.store.create({'name': 'Admin', 'key_type': 'admin'})
+        self.assertEqual(self.client.get('/host/api/list', headers={'Authorization': 'Bearer ' + admin['key']}).status_code, 200)
+        self.assertEqual(self.client.get('/host/api/list', query_string=self.signature_headers(),
+                                        environ_base={'REMOTE_ADDR': '127.0.0.1'}).status_code, 200)
+        self.store.update(key['key_id'], {'name': 'Inventory', 'scopes': ['host:read'], 'is_enabled': False})
+        self.assertEqual(self.client.get('/host/api/list', headers=auth).status_code, 401)
+        self.write_config(open_api=False, limit_addr=[])
+        self.assertEqual(self.client.get('/host/api/list', headers=auth).status_code, 403)
 
     def test_scoped_key_returns_snapshot_and_master_signature_also_works(self):
         created = self.store.create({'name': '数据同步', 'scopes': ['ha:read']})

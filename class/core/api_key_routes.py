@@ -17,11 +17,12 @@ from api_key_auth import AuthError, authorize_request
 from api_key_store import ApiKeyError
 from api_permissions import scope_labels
 from ha_read_snapshot import relationships_snapshot
+from host_read_snapshot import hosts_snapshot
 
 
 def is_external_route(path):
     # 外部接口使用自己的凭据，不叠加面板 BasicAuth 与登录态。
-    return path == '/ha/api/local/relationships'
+    return path in ('/ha/api/local/relationships', '/host/api/list')
 
 
 def register_api_key_routes(app, store, is_logged_in, api_config_path):
@@ -111,6 +112,17 @@ def register_api_key_routes(app, store, is_logged_in, api_config_path):
             return response(message=str(error), status=error.status)
         except Exception:
             return response(message='调用密钥存储暂不可用', status=503)
+
+    @app.route('/host/api/list', methods=['GET'])
+    def read_hosts():
+        try:
+            authorize_request(request.headers, request.values, request.remote_addr, store, api_config_path,
+                              request.method, request.path)
+            return response(hosts_snapshot(store.db_path))
+        except (AuthError, ApiKeyError) as error:
+            return response(message=str(error), status=error.status)
+        except Exception:
+            return response(message='主机列表暂不可用', status=503)
 
     @app.route('/ha/api/local/relationships', methods=['GET'])
     def read_relationships():

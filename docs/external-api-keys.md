@@ -3,7 +3,7 @@
 “设置 -> API接口配置”是这个面板唯一的对外 API 入口。弹层里同时提供两类凭据，不再有第二个 API 管理入口：
 
 - **接口密钥（总密钥）**：面板原有凭据，权限最大，可调用全部面板 API；调用方需要提供签名（request_time + request_token）并出现在 IP 白名单里。IP 白名单留空时该通道不可用。
-- **调用密钥**：给外部系统单独分配，分“管理员密钥”和“普通密钥”两类。管理员密钥可访问全部接口（含以后新增的接口），不需要勾选权限；普通密钥只能访问登记清单里勾选的接口（当前为 ha:read 读取云监控主备关系）。调用方只需在请求头带 Authorization: Bearer <密钥>，不依赖 IP 白名单，可单独停用或删除。
+- **调用密钥**：给外部系统单独分配，分“管理员密钥”和“普通密钥”两类。管理员密钥可访问全部接口（含以后新增的接口），不需要勾选权限；普通密钥只能访问勾选的接口：ha:read 读取云监控主备关系、host:read 读取云监控主机列表。调用方只需在请求头带 Authorization: Bearer <密钥>，不依赖 IP 白名单，可单独停用或删除。
 
 弹层分两张卡片：上面是“面板总密钥”（接口密钥、IP 白名单、保存配置），下面是“调用密钥”。调用密钥用与主机管理、主备管理一致的表格样式（灰底表头、悬停高亮、操作列为绿色文字链接），列依次是名称、类型、密钥、权限、有效期、最近使用、状态、操作。名称单元格显示名称，有备注时追加一行“备注：…”并截断为一行，鼠标悬停显示完整备注；类型列用标签区分管理员与普通。密钥单元格显示脱敏前缀，右侧眼睛图标可展开或隐藏原文，旁边的复制图标直接复制。状态列在操作列前，是面板同款开关，直接点击即可启用或停用，停用后请求立即返回 401 且名称变灰。操作列保留编辑与删除。新增或编辑时先选类型，选管理员时不显示权限勾选，选普通时至少勾选一个权限。
 
@@ -21,6 +21,27 @@ GET /ha/api/local/relationships，两种凭据都可使用：
 成功响应为 status=true、data.schema_version=1、data.snapshot_at 和 data.list。关系字段为 pair_id/pair_name/status/status_text/hosts；主机字段为 host_id/host_name/role/online_status/health_status/collect_status/last_report_at/received_at/switch_task_status。仅返回当前 local 关系（包含空关系），时间带时区，无效时间为 null，角色来自实际上报而不是任务期望角色。业务查询不初始化表结构、不修改主备数据。
 
 认证失败一律返回 JSON：401 表示凭据缺失/无效/停用/过期或签名错误，403 表示无该接口权限、总开关未开启、IP 不在白名单或域名校验失败。
+
+## 查询主机列表（HolmesGPT 巡检）
+
+GET /host/api/list。普通密钥勾选“读取云监控主机列表”（host:read）；管理员密钥和原总密钥签名也可调用。认证、API 总开关、域名限制及错误码沿用主备只读接口。
+
+返回 status=true、data.schema_version=1、data.snapshot_at、data.total、data.list。返回全部登记主机，无分页；空清单为 total=0、list=[]。查询不依赖 ES，不执行采集或数据库迁移。
+
+| 字段 | 含义 |
+| --- | --- |
+| host_id / host_name | 主机标识 / 登记名称；host_id 与 ES host.host_id 对应 |
+| ip / os | 登记地址 / 系统 |
+| host_group_id / host_group_name | 登记分组编号 / 从分组表读取的当前名称 |
+| group_resolved | 分组编号是否匹配现有分组；无法匹配时为 false，名称为 null |
+| is_jhpanel / is_pve / is_master | 登记的面板、PVE、主备标记；不是实时检查结论 |
+| backup_host_id | 原样返回登记的备机关联值，不能假定等于 ES host_id |
+
+snapshot_at 是资产读取时间，不是主机状态采集时间。接口不返回 SSH 用户、私钥、密码、备注或完整配置。未登记的 NAS、防火墙不会自动出现在列表里；缺失机房归属时应补齐分组，不根据主机名称猜测。
+
+设置 -> API接口配置 -> 新增/编辑调用密钥 -> 普通密钥 -> 勾选“读取云监控主机列表”。已有普通密钥不会自动获得新增权限；API 总开关必须开启。
+
+HolmesGPT 在 /www/wwwroot/holmesgpt/.env 设置 JH_MONITOR_URL（基础地址，不带安全入口及末尾斜杠）和 JH_MONITOR_API_KEY（调用密钥原文，不带 Bearer 前缀）。同机使用 http://127.0.0.1:10844，跨机使用 HTTPS；存在域名限制时填写允许的域名。工具 jianghu_monitor_request 只允许 GET /host/api/list。
 
 ## 密钥的保存与找回
 

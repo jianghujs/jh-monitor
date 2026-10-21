@@ -7,10 +7,14 @@
 
 SCOPES = {
     'ha:read': '读取云监控主备关系',
+    'host:read': '读取云监控主机列表',
 }
 
 # 权限 -> 可访问的 (方法, 路径) 列表。
 SCOPE_ROUTES = {
+    'host:read': [
+        ('GET', '/host/api/list'),
+    ],
     'ha:read': [
         ('GET', '/ha/api/local/relationships'),
     ],
