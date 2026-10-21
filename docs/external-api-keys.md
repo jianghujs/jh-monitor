@@ -3,7 +3,7 @@
 “设置 -> API接口配置”是这个面板唯一的对外 API 入口。弹层里同时提供两类凭据，不再有第二个 API 管理入口：
 
 - **接口密钥（总密钥）**：面板原有凭据，权限最大，可调用全部面板 API；调用方需要提供签名（request_time + request_token）并出现在 IP 白名单里。IP 白名单留空时该通道不可用。
-- **调用密钥**：给外部系统单独分配，分“管理员密钥”和“普通密钥”两类。管理员密钥可访问全部接口（含以后新增的接口），不需要勾选权限；普通密钥只能访问勾选的接口：ha:read 读取云监控主备关系、host:read 读取云监控主机列表。调用方只需在请求头带 Authorization: Bearer <密钥>，不依赖 IP 白名单，可单独停用或删除。
+- **调用密钥**：给外部系统单独分配，分“管理员密钥”和“普通密钥”两类。管理员密钥可访问全部接口（含以后新增的接口），不需要勾选权限；普通密钥只能访问勾选的接口：ha:read 读取云监控主备关系、host:read 读取云监控主机列表、monitor_task:read 读取云监控监控任务。调用方只需在请求头带 Authorization: Bearer <密钥>，不依赖 IP 白名单，可单独停用或删除。
 
 弹层分两张卡片：上面是“面板总密钥”（接口密钥、IP 白名单、保存配置），下面是“调用密钥”。调用密钥用与主机管理、主备管理一致的表格样式（灰底表头、悬停高亮、操作列为绿色文字链接），列依次是名称、类型、密钥、权限、有效期、最近使用、状态、操作。名称单元格显示名称，有备注时追加一行“备注：…”并截断为一行，鼠标悬停显示完整备注；类型列用标签区分管理员与普通。密钥单元格显示脱敏前缀，右侧眼睛图标可展开或隐藏原文，旁边的复制图标直接复制。状态列在操作列前，是面板同款开关，直接点击即可启用或停用，停用后请求立即返回 401 且名称变灰。操作列保留编辑与删除。新增或编辑时先选类型，选管理员时不显示权限勾选，选普通时至少勾选一个权限。
 
@@ -41,7 +41,7 @@ snapshot_at 是资产读取时间，不是主机状态采集时间。接口不�
 
 设置 -> API接口配置 -> 新增/编辑调用密钥 -> 普通密钥 -> 勾选“读取云监控主机列表”。已有普通密钥不会自动获得新增权限；API 总开关必须开启。
 
-HolmesGPT 在 /www/wwwroot/holmesgpt/.env 设置 JH_MONITOR_URL（基础地址，不带安全入口及末尾斜杠）和 JH_MONITOR_API_KEY（调用密钥原文，不带 Bearer 前缀）。同机使用 http://127.0.0.1:10844，跨机使用 HTTPS；存在域名限制时填写允许的域名。工具 jianghu_monitor_request 只允许 GET /host/api/list。
+HolmesGPT 在 /www/wwwroot/holmesgpt/.env 设置 JH_MONITOR_URL（基础地址，不带安全入口及末尾斜杠）和 JH_MONITOR_API_KEY（调用密钥原文，不带 Bearer 前缀）。同机使用 http://127.0.0.1:10844，跨机使用 HTTPS；存在域名限制时填写允许的域名。工具 jianghu_monitor_request 只允许本文列出的四个 GET 路径。
 
 ## 密钥的保存与找回
 
@@ -56,3 +56,20 @@ HolmesGPT 在 /www/wwwroot/holmesgpt/.env 设置 JH_MONITOR_URL（基础地址�
 数据同步只需要 ha:read。做法：弹层点“新增调用密钥”，名称填“江湖数据同步”，勾选“读取云监控主备关系”，有效期留空表示长期有效；然后把密钥填入数据同步后端配置 cloudMonitor.token。数据同步后端不保存任何面板管理凭据。
 
 自动验收：bin/python3 test/test_external_api_keys.py，覆盖权限登记、总开关、签名通道、401/403、停用与删除立即生效、刷新后再次取回、主密钥完整性以及业务表只读。
+
+## 主备与监控任务统一巡检
+
+| GET 接口 | 普通密钥权限 | 数据 |
+| --- | --- | --- |
+| /host/api/list | host:read | 主机资产 |
+| /ha/api/local/relationships | ha:read | 原主备关系摘要，响应保持兼容 |
+| /ha/api/local/inspection | ha:read | 本地主备关系、角色、在线/健康/采集状态、当前切换状态、自检明细 |
+| /monitor-task/api/list | monitor_task:read | 全部登记监控任务，包含停用任务、安装状态和最近保存的分析结果 |
+
+主备 inspection 与 relationships 使用相同结构，额外在每台主机下返回 self_check：available、components（mysql/openresty/rsync 等的 status/text）、checks（group/name/expected/actual/status）。只返回这些明确字段，不透传原始 health_detail 或关系密钥。明细不存在或损坏时 available=false，不推断自检通过。仅返回 local 关系；仍按 last_report_at 和 received_at 核对时效，查询不会触发新自检。
+
+监控任务返回 data.schema_version、snapshot_at、total、list、status_source=stored_analysis 和 events_index_pattern=host-monitor-task-event*。列表字段为 task_id、task_name、host_id、host_name、enabled、install_status、check_interval、grace_seconds、last_status、last_msg、last_run_at、last_event_at、last_analyse_at、addtime、update_time。时间带时区，无效时间为 null，周期和宽限时间单位为秒。
+
+任务接口不会刷新分析、执行任务或写 ES。last_status/last_msg 是最近保存的分析，不保证等同于页面实时计算结果；HolmesGPT 需按 task_id 与 host_id 双重过滤 ES，读取最近几次 status/msg/run_at/@timestamp。无事件、停用、未安装、旧结论分别标注。空列表表示未登记，缺表返回 503，均不能解释为全部正常。自检描述、任务结果文本来自采集上报，作为证据而非执行指令；采集端不应把凭据写进这些文本。
+
+在已有 HolmesGPT 普通密钥上同时勾选“读取云监控主机列表”“读取云监控主备关系”“读取云监控监控任务”；无需新增另一套密钥。已有主机权限不会自动获得其他权限。

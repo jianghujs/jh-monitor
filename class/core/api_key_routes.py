@@ -18,11 +18,13 @@ from api_key_store import ApiKeyError
 from api_permissions import scope_labels
 from ha_read_snapshot import relationships_snapshot
 from host_read_snapshot import hosts_snapshot
+from monitor_task_read_snapshot import monitor_tasks_snapshot
 
 
 def is_external_route(path):
     # 外部接口使用自己的凭据，不叠加面板 BasicAuth 与登录态。
-    return path in ('/ha/api/local/relationships', '/host/api/list')
+    return path in ('/ha/api/local/relationships', '/host/api/list',
+                    '/ha/api/local/inspection', '/monitor-task/api/list')
 
 
 def register_api_key_routes(app, store, is_logged_in, api_config_path):
@@ -123,6 +125,28 @@ def register_api_key_routes(app, store, is_logged_in, api_config_path):
             return response(message=str(error), status=error.status)
         except Exception:
             return response(message='主机列表暂不可用', status=503)
+
+    @app.route('/monitor-task/api/list', methods=['GET'])
+    def read_monitor_tasks():
+        try:
+            authorize_request(request.headers, request.values, request.remote_addr, store, api_config_path,
+                              request.method, request.path)
+            return response(monitor_tasks_snapshot(store.db_path))
+        except (AuthError, ApiKeyError) as error:
+            return response(message=str(error), status=error.status)
+        except Exception:
+            return response(message='监控任务快照暂不可用', status=503)
+
+    @app.route('/ha/api/local/inspection', methods=['GET'])
+    def read_ha_inspection():
+        try:
+            authorize_request(request.headers, request.values, request.remote_addr, store, api_config_path,
+                              request.method, request.path)
+            return response(relationships_snapshot(store.db_path, include_checks=True))
+        except (AuthError, ApiKeyError) as error:
+            return response(message=str(error), status=error.status)
+        except Exception:
+            return response(message='主备巡检快照暂不可用', status=503)
 
     @app.route('/ha/api/local/relationships', methods=['GET'])
     def read_relationships():

@@ -1,5 +1,6 @@
 """One readonly transaction, explicit public fields; never initializes HA schema."""
 import datetime
+import json
 import sqlite3
 from urllib.parse import quote
 
@@ -15,7 +16,34 @@ def iso_time(value):
         return None
 
 
-def relationships_snapshot(db_path):
+def public_checks(raw):
+    """Expose known check fields only, never arbitrary collector/config payloads."""
+    try:
+        detail = json.loads(raw or '{}')
+    except (ValueError, TypeError):
+        return {'available': False, 'checks': [], 'components': {}}
+    if not isinstance(detail, dict):
+        return {'available': False, 'checks': [], 'components': {}}
+    components = {}
+    for name in ('cloud', 'lock', 'mysql', 'openresty', 'rsync', 'ssh'):
+        value = detail.get(name)
+        if isinstance(value, dict):
+            components[name] = {key: value[key] for key in ('status', 'text')
+                                if isinstance(value.get(key), (str, bool, int, float))}
+    checks = []
+    for field in ('checks', 'script_checks'):
+        values = detail.get(field)
+        if isinstance(values, list):
+            for value in values:
+                if isinstance(value, dict):
+                    item = {key: value[key] for key in ('group', 'name', 'expected', 'actual', 'status')
+                            if isinstance(value.get(key), (str, bool, int, float))}
+                    if item and item not in checks:
+                        checks.append(item)
+    return {'available': bool(components or checks), 'components': components, 'checks': checks}
+
+
+def relationships_snapshot(db_path, include_checks=False):
     db = sqlite3.connect('file:' + quote(db_path) + '?mode=ro', uri=True)
     db.row_factory = sqlite3.Row
     try:
@@ -27,6 +55,14 @@ def relationships_snapshot(db_path):
             JOIN ha_pair p ON p.pair_id=h.pair_id AND p.local_type='local'
             LEFT JOIN ha_switch_task t ON t.switch_task_id=h.switch_task_id AND t.pair_id=h.pair_id
             ORDER BY h.id''').fetchall()
+        check_details = {}
+        if include_checks:
+            check_details = {
+                (row['pair_id'], row['host_id']): public_checks(row['health_detail'])
+                for row in db.execute('''SELECT h.pair_id,h.host_id,h.health_detail
+                    FROM ha_host_state h JOIN ha_pair p ON p.pair_id=h.pair_id
+                    WHERE p.local_type='local' ''')
+            }
         # localReportApi writes the host's task pointer and task status atomically.
         # Only that current task is authoritative; historical tasks may retain
         # pending/running after a newer task has already completed.
@@ -35,6 +71,8 @@ def relationships_snapshot(db_path):
         for row in hosts:
             item = dict(row)
             pair_id = item.pop('pair_id')
+            if include_checks:
+                item['self_check'] = check_details[(pair_id, item['host_id'])]
             for field in ('last_report_at', 'received_at'):
                 item[field] = iso_time(item[field])
             by_pair.setdefault(pair_id, []).append(item)

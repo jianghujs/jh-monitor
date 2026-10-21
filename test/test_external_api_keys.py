@@ -47,6 +47,8 @@ class CredentialTests(unittest.TestCase):
         return resolve_credentials(headers or {}, form or {}, remote_addr, self.store, self.api_config)
 
     def test_permission_registry_maps_route_to_scope(self):
+        self.assertEqual(route_scope('GET', '/monitor-task/api/list'), 'monitor_task:read')
+        self.assertEqual(route_scope('GET', '/ha/api/local/inspection'), 'ha:read')
         self.assertEqual(route_scope('GET', '/host/api/list'), 'host:read')
         self.assertIsNone(route_scope('POST', '/host/api/list'))
         self.assertEqual(route_scope('GET', '/ha/api/local/relationships'), 'ha:read')
@@ -227,6 +229,84 @@ class ReadRouteTests(unittest.TestCase):
         self.assertEqual(self.client.get('/host/api/list', headers=auth).status_code, 401)
         self.write_config(open_api=False, limit_addr=[])
         self.assertEqual(self.client.get('/host/api/list', headers=auth).status_code, 403)
+
+    def prepare_inspection(self):
+        with self.store.connect() as db:
+            db.executescript('''
+                ALTER TABLE ha_host_state ADD COLUMN health_detail TEXT;
+                CREATE TABLE monitor_task(id INTEGER PRIMARY KEY,task_id TEXT,task_name TEXT,
+                    host_id TEXT,host_name TEXT,enabled INTEGER,install_status TEXT,
+                    check_interval INTEGER,grace_seconds INTEGER,last_status TEXT,last_msg TEXT,
+                    last_run_at TEXT,last_event_at TEXT,last_analyse_at TEXT,addtime TEXT,update_time TEXT,
+                    install_msg TEXT,log_path TEXT);
+                INSERT INTO monitor_task VALUES(1,'t1','Backup','h','Server',1,'installed',3600,300,
+                    'error','failed','2026-10-20 12:00:00',NULL,'bad time',NULL,NULL,'PRIVATE','PRIVATE');
+                INSERT INTO monitor_task VALUES(2,'t2','Disabled','h','Server',0,'pending',3600,300,
+                    'normal','',NULL,NULL,NULL,NULL,NULL,'PRIVATE','PRIVATE');
+            ''')
+            detail = {'mysql': {'status': 'error', 'text': 'replication stopped', 'password': 'SECRET'},
+                      'script_checks': [{'name': 'mysql', 'status': 'error', 'expected': 'running',
+                                         'actual': 'stopped', 'credentials': 'SECRET'}],
+                      'api_secret': 'SECRET'}
+            db.execute('UPDATE ha_host_state SET health_detail=?', (json.dumps(detail),))
+
+    def test_unified_inspection_readonly_and_scopes(self):
+        self.prepare_inspection()
+        key = self.store.create({'name': '巡检', 'scopes': ['ha:read', 'monitor_task:read']})
+        auth = {'Authorization': 'Bearer ' + key['key']}
+        with self.store.connect() as db:
+            before = [s for s in db.iterdump() if any('INSERT INTO "' + t + '"' in s
+                      for t in ('ha_pair', 'ha_host_state', 'ha_switch_task', 'monitor_task'))]
+        result = self.client.get('/ha/api/local/inspection', headers=auth)
+        self.assertEqual(result.status_code, 200)
+        pair = result.json['data']['list'][0]
+        self.assertEqual(pair['status'], 'switching')
+        check = pair['hosts'][0]['self_check']
+        self.assertTrue(check['available'])
+        self.assertEqual(check['components']['mysql']['status'], 'error')
+        self.assertEqual(check['checks'][0]['actual'], 'stopped')
+        self.assertNotIn('SECRET', result.get_data(as_text=True))
+        self.assertNotIn('self_check', self.get_relationships(auth).json['data']['list'][0]['hosts'][0])
+        result = self.client.get('/monitor-task/api/list', headers=auth)
+        self.assertEqual(result.status_code, 200)
+        data = result.json['data']
+        self.assertEqual(data['status_source'], 'stored_analysis')
+        self.assertEqual(data['total'], 2)
+        self.assertIs(data['list'][1]['enabled'], False)
+        self.assertEqual(data['list'][1]['last_status'], 'normal')
+        self.assertIsNone(data['list'][0]['last_analyse_at'])
+        self.assertIsNotNone(datetime.datetime.fromisoformat(data['list'][0]['last_run_at']).tzinfo)
+        self.assertNotIn('PRIVATE', result.get_data(as_text=True))
+        with self.store.connect() as db:
+            after = [s for s in db.iterdump() if any('INSERT INTO "' + t + '"' in s
+                     for t in ('ha_pair', 'ha_host_state', 'ha_switch_task', 'monitor_task'))]
+        self.assertEqual(before, after)
+        host_only = self.store.create({'name': 'Hosts only', 'scopes': ['host:read']})
+        for path in ['/ha/api/local/inspection', '/monitor-task/api/list']:
+            self.assertTrue(is_external_route(path))
+            self.assertEqual(self.client.get(path).status_code, 401)
+            self.assertEqual(self.client.get(path, headers={'Authorization': 'Bearer ' + host_only['key']}).status_code, 403)
+            self.assertEqual(self.client.post(path, headers=auth).status_code, 405)
+        ha_only = self.store.create({'name': 'HA only', 'scopes': ['ha:read']})
+        self.assertEqual(self.client.get('/monitor-task/api/list', headers={'Authorization': 'Bearer ' + ha_only['key']}).status_code, 403)
+        self.store.update(key['key_id'], {'name': '巡检', 'scopes': ['ha:read', 'monitor_task:read'], 'is_enabled': False})
+        self.assertEqual(self.client.get('/monitor-task/api/list', headers=auth).status_code, 401)
+
+    def test_inspection_empty_missing_schema_and_bad_details(self):
+        self.prepare_inspection()
+        key = self.store.create({'name': '巡检', 'scopes': ['ha:read', 'monitor_task:read']})
+        auth = {'Authorization': 'Bearer ' + key['key']}
+        for raw in ['invalid json', '[]', '{}']:
+            with self.store.connect() as db:
+                db.execute('UPDATE ha_host_state SET health_detail=?', (raw,))
+            data = self.client.get('/ha/api/local/inspection', headers=auth).json['data']
+            self.assertFalse(data['list'][0]['hosts'][0]['self_check']['available'])
+        with self.store.connect() as db:
+            db.execute('DELETE FROM monitor_task')
+        self.assertEqual(self.client.get('/monitor-task/api/list', headers=auth).json['data']['total'], 0)
+        with self.store.connect() as db:
+            db.execute('DROP TABLE monitor_task')
+        self.assertEqual(self.client.get('/monitor-task/api/list', headers=auth).status_code, 503)
 
     def test_scoped_key_returns_snapshot_and_master_signature_also_works(self):
         created = self.store.create({'name': '数据同步', 'scopes': ['ha:read']})

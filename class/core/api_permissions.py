@@ -8,6 +8,7 @@
 SCOPES = {
     'ha:read': '读取云监控主备关系',
     'host:read': '读取云监控主机列表',
+    'monitor_task:read': '读取云监控监控任务',
 }
 
 # 权限 -> 可访问的 (方法, 路径) 列表。
@@ -17,6 +18,10 @@ SCOPE_ROUTES = {
     ],
     'ha:read': [
         ('GET', '/ha/api/local/relationships'),
+        ('GET', '/ha/api/local/inspection'),
+    ],
+    'monitor_task:read': [
+        ('GET', '/monitor-task/api/list'),
     ],
 }
 
