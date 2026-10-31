@@ -186,6 +186,41 @@ def main():
         pair = api._getPair(pair_id)
         assert pair['status'] == 'normal' and all(name in pair['status_text'] for name in ('Local Test', 'Second Local')), pair
 
+        reference_time = int(time.time())
+        stale_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(reference_time - 86400))
+        fresh_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(reference_time - 60))
+        jh.M('ha_host_state').where('pair_id=? AND host_id=?', (pair_id, 'H_LOCAL_SECOND')).save(
+            'last_report_at,update_time', (stale_time, stale_time)
+        )
+        derived_pair = api._normalizePair(api._getPair(pair_id), reference_time=reference_time)
+        assert derived_pair['status'] == 'danger', derived_pair
+        assert 'Second Local' in derived_pair['status_text'] and '超过24小时未上报' in derived_pair['status_text'], derived_pair
+        derived_second = [host for host in derived_pair['hosts'] if host['host_id'] == 'H_LOCAL_SECOND'][0]
+        assert derived_second['online_status'] == 'online' and derived_second['reporting_abnormal'], derived_second
+
+        jh.M('ha_host_state').where('pair_id=?', (pair_id,)).save(
+            'last_report_at,update_time', (stale_time, stale_time)
+        )
+        both_stale = api._normalizePair(api._getPair(pair_id), reference_time=reference_time)
+        assert both_stale['status'] == 'danger' and len([x for x in both_stale['hosts'] if x['reporting_abnormal']]) == 2, both_stale
+
+        pending_host = api._normalizeHost({
+            'host_id': 'H_PENDING', 'host_name': 'Pending', 'registered_at': fresh_time,
+            'addtime': fresh_time, 'health_detail': '{}'
+        }, reference_time=reference_time)
+        assert pending_host['reporting_freshness'] == 'pending', pending_host
+        never_host = api._normalizeHost({
+            'host_id': 'H_NEVER', 'host_name': 'Never', 'registered_at': stale_time,
+            'addtime': stale_time, 'health_detail': '{}'
+        }, reference_time=reference_time)
+        assert never_host['reporting_freshness'] == 'never_reported', never_host
+
+        jh.M('ha_host_state').where('pair_id=?', (pair_id,)).save(
+            'last_report_at,update_time', (fresh_time, fresh_time)
+        )
+        recovered_pair = api._normalizePair(api._getPair(pair_id), reference_time=reference_time)
+        assert recovered_pair['status'] == 'normal', recovered_pair
+
         deleted = call(api, 'POST', 'delete', {'pair_id': pair_id})
         assert deleted['status'] and deleted['data']['pair_id'] == pair_id, deleted
         assert not api._getPair(pair_id)

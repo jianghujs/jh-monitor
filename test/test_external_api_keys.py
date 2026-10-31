@@ -336,7 +336,8 @@ class ReadRouteTests(unittest.TestCase):
         created = self.store.create({'name': 'snapshot', 'scopes': ['ha:read']})
         with self.store.connect() as db:
             db.execute("INSERT INTO ha_switch_task VALUES('new','p','success')")
-            db.execute("UPDATE ha_host_state SET switch_task_id='new' WHERE pair_id='p'")
+            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            db.execute("UPDATE ha_host_state SET switch_task_id='new',last_report_at=?,update_time=? WHERE pair_id='p'", (now, now))
         payload = self.get_relationships({'Authorization': 'Bearer ' + created['key']}).json
         pair = payload['data']['list'][0]
         self.assertEqual(pair['status'], 'normal')

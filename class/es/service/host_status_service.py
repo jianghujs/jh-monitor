@@ -20,22 +20,22 @@ def _debug(debug_fn, stage, payload=None):
     debug_fn(stage, payload)
 
 
-def getLatestStatusDocs(host_rows, debug_fn=None, host_status_indexes=None):
+def getLatestStatusDocsResult(host_rows, debug_fn=None, host_status_indexes=None, end_timestamp=None, es_client=None):
     try:
         if host_status_indexes is None:
             host_status_indexes = host_query_utils.HOST_STATUS_INDEXES
 
         if not host_rows:
             _debug(debug_fn, 'getLatestStatusDocsFromES.empty_host_rows', {})
-            return {}
+            return {'storage_available': True, 'status_docs': {}}
 
-        es = jh.getES()
+        es = es_client or jh.getES()
         conn = es.getConn()
         if conn is None:
             _debug(debug_fn, 'getLatestStatusDocsFromES.no_conn', {
                 'error': str(es.getError())
             })
-            return {}
+            return {'storage_available': False, 'status_docs': {}}
 
         index_status = {}
         for index_name in host_status_indexes.split(','):
@@ -58,14 +58,14 @@ def getLatestStatusDocs(host_rows, debug_fn=None, host_status_indexes=None):
         msearch_body = []
         query_preview = []
         for row in host_rows:
-            query_body = host_query_utils.buildLatestStatusQuery(row)
+            query_body = host_query_utils.buildLatestStatusQuery(row, end_timestamp=end_timestamp)
             msearch_body.append({
                 "index": host_status_indexes,
                 "expand_wildcards": "all",
                 "ignore_unavailable": True,
                 "allow_no_indices": True
             })
-            msearch_body.append(host_query_utils.buildLatestStatusSearchBody(row))
+            msearch_body.append(host_query_utils.buildLatestStatusSearchBody(row, end_timestamp=end_timestamp))
             if len(query_preview) < 5:
                 query_preview.append({
                     'host_id': row.get('host_id', ''),
@@ -88,23 +88,46 @@ def getLatestStatusDocs(host_rows, debug_fn=None, host_status_indexes=None):
             'miss_sample': miss_hosts,
             'hit_sample': host_status_mapper_utils.buildStatusDocHitSample(status_map)
         })
-        return status_map
+        return {'storage_available': True, 'status_docs': status_map}
     except Exception as ex:
         _debug(debug_fn, 'getLatestStatusDocsFromES.exception', {
             'error': str(ex),
             'traceback': traceback.format_exc()
         })
         traceback.print_exc()
-        return {}
+        return {'storage_available': False, 'status_docs': {}}
 
 
-def getLatestHostDetailMap(host_rows, debug_fn=None, host_status_indexes=None):
-    status_docs = getLatestStatusDocs(
+def getLatestStatusDocs(host_rows, debug_fn=None, host_status_indexes=None):
+    return getLatestStatusDocsResult(
+        host_rows,
+        debug_fn=debug_fn,
+        host_status_indexes=host_status_indexes
+    ).get('status_docs', {})
+
+
+def getLatestStatusDocsAtOrBefore(host_rows, end_timestamp, debug_fn=None, host_status_indexes=None, es_client=None):
+    return getLatestStatusDocsResult(
+        host_rows,
+        debug_fn=debug_fn,
+        host_status_indexes=host_status_indexes,
+        end_timestamp=end_timestamp,
+        es_client=es_client
+    )
+
+
+def getLatestHostDetailMap(host_rows, debug_fn=None, host_status_indexes=None, reference_time=None):
+    result = getLatestStatusDocsResult(
         host_rows,
         debug_fn=debug_fn,
         host_status_indexes=host_status_indexes
     )
-    return host_status_mapper_utils.buildHostDetailMapFromStatusDocs(host_rows, status_docs)
+    return host_status_mapper_utils.buildHostDetailMapFromStatusDocs(
+        host_rows,
+        result.get('status_docs', {}),
+        reference_time=reference_time,
+        storage_available=result.get('storage_available', False)
+    )
 
 
 def getHostStatusHistory(host_id='', start=None, end=None, debug_fn=None, host_status_indexes=None):

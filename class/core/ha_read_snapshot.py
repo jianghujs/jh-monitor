@@ -2,7 +2,12 @@
 import datetime
 import json
 import sqlite3
+import sys
+import os
 from urllib.parse import quote
+
+sys.path.append(os.getcwd() + '/class/plugin')
+import reporting_freshness as reporting_freshness_utils
 
 
 def iso_time(value):
@@ -48,13 +53,19 @@ def relationships_snapshot(db_path, include_checks=False):
     db.row_factory = sqlite3.Row
     try:
         db.execute('BEGIN')
-        pairs = db.execute("SELECT pair_id,pair_name,status,status_text FROM ha_pair WHERE local_type='local' ORDER BY id").fetchall()
+        pair_columns = {row['name'] for row in db.execute('PRAGMA table_info(ha_pair)')}
+        host_columns = {row['name'] for row in db.execute('PRAGMA table_info(ha_host_state)')}
+        pair_addtime = 'addtime' if 'addtime' in pair_columns else "NULL AS addtime"
+        host_registered_at = 'h.registered_at' if 'registered_at' in host_columns else 'NULL AS registered_at'
+        host_addtime = 'h.addtime' if 'addtime' in host_columns else 'NULL AS addtime'
+        pairs = db.execute("SELECT pair_id,pair_name,status,status_text,{0} FROM ha_pair WHERE local_type='local' ORDER BY id".format(pair_addtime)).fetchall()
         hosts = db.execute('''SELECT h.pair_id,h.host_id,h.host_name,h.role,h.online_status,
             h.health_status,h.collect_status,h.last_report_at,h.update_time AS received_at,
+            {0},{1},
             t.status AS switch_task_status FROM ha_host_state h
             JOIN ha_pair p ON p.pair_id=h.pair_id AND p.local_type='local'
             LEFT JOIN ha_switch_task t ON t.switch_task_id=h.switch_task_id AND t.pair_id=h.pair_id
-            ORDER BY h.id''').fetchall()
+            ORDER BY h.id'''.format(host_registered_at, host_addtime)).fetchall()
         check_details = {}
         if include_checks:
             check_details = {
@@ -68,6 +79,7 @@ def relationships_snapshot(db_path, include_checks=False):
         # pending/running after a newer task has already completed.
         busy = {row['pair_id'] for row in hosts if row['switch_task_status'] in ('pending', 'running')}
         by_pair = {}
+        reference_time = datetime.datetime.now().timestamp()
         for row in hosts:
             item = dict(row)
             pair_id = item.pop('pair_id')
@@ -75,6 +87,12 @@ def relationships_snapshot(db_path, include_checks=False):
                 item['self_check'] = check_details[(pair_id, item['host_id'])]
             for field in ('last_report_at', 'received_at'):
                 item[field] = iso_time(item[field])
+            item.update(reporting_freshness_utils.derive_reporting_freshness(
+                reference_time=reference_time,
+                report_time=row['received_at'] or row['last_report_at'],
+                display_report_time=row['last_report_at'],
+                created_time=row['registered_at'] or row['addtime']
+            ))
             by_pair.setdefault(pair_id, []).append(item)
         result = []
         for row in pairs:
@@ -83,6 +101,21 @@ def relationships_snapshot(db_path, include_checks=False):
             if item['pair_id'] in busy:
                 item['status'] = 'switching'
                 item['status_text'] = 'Switch task pending or running'
+            else:
+                stale_hosts = [host for host in item['hosts'] if host.get('reporting_abnormal')]
+                if stale_hosts:
+                    item['status'] = 'danger'
+                    item['status_text'] = '；'.join([
+                        '{0}: {1}'.format(host.get('host_name') or host.get('host_id'), host.get('reporting_status_text'))
+                        for host in stale_hosts
+                    ])
+                elif not item['hosts']:
+                    freshness = reporting_freshness_utils.derive_reporting_freshness(
+                        reference_time=reference_time, created_time=item.get('addtime')
+                    )
+                    if freshness.get('reporting_abnormal'):
+                        item['status'] = 'danger'
+                        item['status_text'] = freshness.get('reporting_status_text')
             result.append(item)
         return {'schema_version': 1, 'snapshot_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'list': result}
     finally:

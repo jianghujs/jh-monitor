@@ -53,6 +53,7 @@ if ES_SERVICE_DIR not in sys.path:
     sys.path.insert(0, ES_SERVICE_DIR)
 import host_status_service as host_status_service_utils
 import monitor_task_event_service as monitor_task_event_service_utils
+import reporting_freshness as reporting_freshness_utils
 
 try:
     from monitor_task_api import monitor_task_api
@@ -696,6 +697,23 @@ class HostReportAnalyser(object):
             host_id = value_tool.getNested(doc, ['host', 'host_id'], '') or doc.get('host_id', '')
             if host_id in grouped:
                 grouped[host_id]['status'].append(doc)
+
+        missing_status_rows = [
+            row for row in host_rows
+            if not grouped.get(row.get('host_id'), {}).get('status')
+        ]
+        if missing_status_rows:
+            latest_result = host_status_service_utils.getLatestStatusDocsAtOrBefore(
+                missing_status_rows, window['end_timestamp'], es_client=self._es
+            )
+            if not latest_result.get('storage_available'):
+                self.es_available = False
+                self.es_skip_reason = 'ES查询窗口前最后状态失败，已跳过主机运行数据'
+                self.log('[report-analysis] skip pre-window status reason={0}'.format(self.es_skip_reason))
+                return grouped
+            for host_id, doc in latest_result.get('status_docs', {}).items():
+                if host_id in grouped and doc:
+                    grouped[host_id]['status'].append(doc)
 
         for doc in xtrabackup_docs:
             host_id = doc.get('host_id', '')
@@ -1755,7 +1773,7 @@ class HostReportAnalyser(object):
             'unknown': '待上报'
         }.get(str(status or ''), str(status or '') or '未知')
 
-    def _build_ha_management_overview(self):
+    def _build_ha_management_overview(self, reference_time=None):
         """汇总当前主备管理状态，判断逻辑复用主备管理页面。"""
         overview = {
             'total': 0,
@@ -1784,7 +1802,7 @@ class HostReportAnalyser(object):
             if not isinstance(row, dict):
                 continue
             try:
-                pair = api._normalizePair(row)
+                pair = api._normalizePair(row, reference_time=reference_time)
             except Exception:
                 pair = dict(row)
                 pair['status'] = row.get('status') or 'unknown'
@@ -1837,6 +1855,26 @@ class HostReportAnalyser(object):
         validation_errors = []
         if self.es_available and len(status_docs) == 0:
             validation_errors.append('missing_system_status')
+
+        latest_status_doc = status_docs[-1] if status_docs else {}
+        latest_status_ts = value_tool.safeInt(
+            latest_status_doc.get('add_timestamp', 0),
+            value_tool.parseTime(latest_status_doc.get('add_time', ''))
+        )
+        if self.es_available:
+            reporting_freshness = reporting_freshness_utils.derive_reporting_freshness(
+                reference_time=window['end_timestamp'],
+                report_time=latest_status_ts,
+                created_time=host_row.get('addtime')
+            )
+        else:
+            reporting_freshness = {
+                'reporting_freshness': 'unavailable',
+                'reporting_abnormal': False,
+                'reporting_status_text': '状态存储不可用',
+                'reporting_age_seconds': 0,
+                'last_report_at': '',
+            }
 
         is_pve_host = self._is_pve_host(host_row, status_docs)
         if is_pve_host:
@@ -1895,6 +1933,25 @@ class HostReportAnalyser(object):
             }
             backup_tips = report_payload.get('backup_tips', [])
             siteinfo_tips = report_payload.get('siteinfo_tips', [])
+
+        if reporting_freshness.get('reporting_abnormal'):
+            reporting_code = (
+                'reporting_stale_24h'
+                if reporting_freshness.get('reporting_freshness') == 'stale'
+                else 'never_reported_24h'
+            )
+            validation_errors.append(reporting_code)
+            reporting_message = reporting_freshness.get('reporting_status_text') or '超过24小时未上报'
+            if reporting_freshness.get('last_report_at'):
+                reporting_message += '，最近上报：' + reporting_freshness.get('last_report_at')
+            summary_tips[:] = [tip for tip in summary_tips if '系统异常监控状态异常' not in str(tip)]
+            error_tips[:] = [tip for tip in error_tips if str(tip) != '系统监控状态异常']
+            red_tip = "<span style='color: red;'>{0}</span>".format(reporting_message)
+            if red_tip not in summary_tips:
+                summary_tips.append(red_tip)
+            if reporting_message not in error_tips:
+                error_tips.append(reporting_message)
+            report_payload['is_abnormal'] = True
 
         # 监控任务只单独展示，不参与主机报告异常/提醒判定。
         monitor_task_section = self._build_monitor_task_section(host_row, self.now_ts)
@@ -1980,6 +2037,11 @@ class HostReportAnalyser(object):
             'delivery': delivery_state,
             'is_abnormal': single_is_abnormal,
             'is_warning': single_is_warning,
+            'reporting_freshness': reporting_freshness.get('reporting_freshness'),
+            'reporting_abnormal': bool(reporting_freshness.get('reporting_abnormal')),
+            'reporting_status_text': reporting_freshness.get('reporting_status_text', ''),
+            'reporting_age_seconds': reporting_freshness.get('reporting_age_seconds', 0),
+            'last_report_at': reporting_freshness.get('last_report_at', ''),
             'extra_info': {
                 'raw_counts': {
                     'status': len(status_docs),
@@ -2053,6 +2115,8 @@ class HostReportAnalyser(object):
             latest_status_time = value_tool.getNested(current_doc, ['extra_info', 'latest_status_time'], '')
             if latest_status_time:
                 online_count += 1
+            else:
+                offline_documents.append(current_doc)
             if current_doc.get('is_abnormal') or not validation.get('is_complete', False):
                 abnormal_documents.append(current_doc)
             elif current_doc.get('is_warning'):
@@ -2086,7 +2150,15 @@ class HostReportAnalyser(object):
             })
 
         exception_host_summary_tips = []
+        exception_documents = []
+        exception_host_ids = set()
         for doc in abnormal_documents + offline_documents:
+            exception_key = doc.get('host_id') or self._build_host_label(doc)
+            if exception_key in exception_host_ids:
+                continue
+            exception_host_ids.add(exception_key)
+            exception_documents.append(doc)
+        for doc in exception_documents:
             summary_text = '；'.join(doc.get('error_tips', []) or [])
             if summary_text == '':
                 validation_errors = value_tool.getNested(doc, ['validation', 'errors'], []) or []
@@ -2109,7 +2181,7 @@ class HostReportAnalyser(object):
         # 监控任务总览：生成报告时实时查询 ES 最新事件，避免发送旧的 SQLite 状态。
         monitor_task_overview = self._build_monitor_task_overview(self.now_ts)
         self._apply_collected_names_to_monitor_tasks(monitor_task_overview, host_rows)
-        ha_overview = self._build_ha_management_overview() if self.is_ha_report_enabled() else {}
+        ha_overview = self._build_ha_management_overview(window['end_timestamp']) if self.is_ha_report_enabled() else {}
 
         overview_summary_messages = []
         if not self.es_available:

@@ -43,7 +43,7 @@ def _buildDualTermShouldFilter(field, value):
     }
 
 
-def buildLatestStatusQuery(host_row):
+def buildLatestStatusQuery(host_row, end_timestamp=None):
     should_filters = []
     host_id = str(host_row.get('host_id', '') or '').strip()
     host_ip = str(host_row.get('ip', '') or '').strip()
@@ -56,24 +56,28 @@ def buildLatestStatusQuery(host_row):
     if len(should_filters) == 0:
         return {"match_none": {}}
 
+    filters = [
+        {
+            "bool": {
+                "should": should_filters,
+                "minimum_should_match": 1
+            }
+        }
+    ]
+    if end_timestamp not in (None, ''):
+        filters.append({"range": {"add_timestamp": {"lte": end_timestamp}}})
+
     return {
         "bool": {
-            "filter": [
-                {
-                    "bool": {
-                        "should": should_filters,
-                        "minimum_should_match": 1
-                    }
-                }
-            ]
+            "filter": filters
         }
     }
 
 
-def buildLatestStatusSearchBody(host_row):
+def buildLatestStatusSearchBody(host_row, end_timestamp=None):
     return {
         "size": 1,
-        "query": buildLatestStatusQuery(host_row),
+        "query": buildLatestStatusQuery(host_row, end_timestamp=end_timestamp),
         "sort": [
             {
                 "add_timestamp": {

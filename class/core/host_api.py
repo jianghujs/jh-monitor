@@ -210,7 +210,12 @@ class host_api:
             'temperature_info': detail.get('temperature_info', '{}'),
             'ssh_user_list': detail.get('ssh_user_list', '[]'),
             'detail_addtime': detail.get('addtime', 0),
-            'detail_last_update': detail.get('last_update', '')
+            'detail_last_update': detail.get('last_update', ''),
+            'reporting_freshness': detail.get('reporting_freshness', 'pending'),
+            'reporting_abnormal': bool(detail.get('reporting_abnormal')),
+            'reporting_status_text': detail.get('reporting_status_text', ''),
+            'reporting_age_seconds': detail.get('reporting_age_seconds', 0),
+            'last_report_at': detail.get('last_report_at', '')
         })
         return row
 

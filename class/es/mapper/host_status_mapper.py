@@ -5,6 +5,7 @@ import sys
 
 sys.path.append(os.getcwd() + "/class/plugin")
 import value_tool as value_utils
+import reporting_freshness as reporting_freshness_utils
 
 
 def getCollectedHostName(status_doc):
@@ -260,13 +261,28 @@ def buildHostMetaFromStatusDoc(status_doc):
     }
 
 
-def buildHostDetailFromStatusDoc(host_row, status_doc):
+def buildHostDetailFromStatusDoc(host_row, status_doc, reference_time=None, storage_available=True):
     add_timestamp = value_utils.safeInt((status_doc or {}).get('add_timestamp'), 0)
     add_time = (status_doc or {}).get('add_time', '')
     host_remark = host_row.get('host_remark')
     if host_remark is None:
         host_remark = host_row.get('host_name', '')
-    return {
+    if storage_available:
+        freshness = reporting_freshness_utils.derive_reporting_freshness(
+            reference_time=reference_time,
+            report_time=add_timestamp or add_time,
+            created_time=host_row.get('addtime')
+        )
+    else:
+        freshness = {
+            'reporting_freshness': 'unavailable',
+            'reporting_abnormal': False,
+            'reporting_status_text': '状态存储不可用',
+            'reporting_age_seconds': 0,
+            'last_report_at': '',
+        }
+
+    detail = {
         'id': add_timestamp,
         'host_id': host_row.get('host_id', ''),
         'host_name': getCollectedHostName(status_doc),
@@ -289,6 +305,8 @@ def buildHostDetailFromStatusDoc(host_row, status_doc):
         'last_update': add_time,
         'addtime': add_timestamp
     }
+    detail.update(freshness)
+    return detail
 
 
 def buildHistoryDetailsFromStatusDocs(docs):
@@ -299,11 +317,16 @@ def buildHistoryDetailsFromStatusDocs(docs):
     return history
 
 
-def buildHostDetailMapFromStatusDocs(host_rows, status_docs):
+def buildHostDetailMapFromStatusDocs(host_rows, status_docs, reference_time=None, storage_available=True):
     detail_map = {}
     for row in host_rows:
         host_id = str(row.get('host_id', '') or '').strip()
         if host_id == '':
             continue
-        detail_map[host_id] = buildHostDetailFromStatusDoc(row, status_docs.get(host_id))
+        detail_map[host_id] = buildHostDetailFromStatusDoc(
+            row,
+            status_docs.get(host_id),
+            reference_time=reference_time,
+            storage_available=storage_available
+        )
     return detail_map

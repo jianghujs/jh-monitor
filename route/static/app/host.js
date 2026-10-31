@@ -574,6 +574,8 @@ function getWeb(page, search, host_group_id) {
       const hostAddtime = normalizeText(data.data[i].addtime);
       const detailAddtime = toNumber(data.data[i].detail_addtime, 0);
       const detailAddtimeDisplay = detailAddtime > 0 ? displayText(toTime(detailAddtime)) : '--';
+      const reportingFreshness = normalizeText(data.data[i].reporting_freshness);
+      const reportingStatusText = normalizeText(data.data[i].reporting_status_text);
       // 主机信息
       let name = '';
       name += `
@@ -587,7 +589,13 @@ function getWeb(page, search, host_group_id) {
       `
 
 			// 当前主机状态
-			if (detailAddtime <= 0) {
+			if (data.data[i].reporting_abnormal) {
+				var status = "<span style='color:red' title='" + escapeHtml(reportingStatusText) + "'>上报异常</span>";
+      } else if (reportingFreshness === 'pending') {
+        var status = "<span style='color:#999'>待上报</span>";
+      } else if (reportingFreshness === 'unavailable') {
+        var status = "<span style='color:#f0ad4e' title='" + escapeHtml(reportingStatusText) + "'>状态不可用</span>";
+			} else if (detailAddtime <= 0) {
 				var status = "<span>--</span>";
 			} else if (hostStatus == 'Running') {
 				var status = "<a href='javascript:;' class='btn-defsult'><span style='color:rgb(92, 184, 92)'>运行中</span><span style='color:rgb(92, 184, 92)' class='glyphicon glyphicon-play'></span></a>";

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 import time
 import uuid
@@ -12,6 +13,9 @@ import uuid
 from flask import request
 
 import jh
+
+sys.path.append(os.getcwd() + '/class/plugin')
+import reporting_freshness as reporting_freshness_utils
 
 
 class ha_api:
@@ -361,9 +365,18 @@ class ha_api:
             )
         return task_id
 
-    def _derivePairStatus(self, pair_id):
-        hosts = self._getHosts(pair_id)
+    def _derivePairStatus(self, pair_id, reference_time=None, hosts=None, pair=None):
+        hosts = hosts if hosts is not None else [
+            self._normalizeHost(host, reference_time=reference_time) for host in self._getHosts(pair_id)
+        ]
         if not hosts:
+            pair = pair or self._getPair(pair_id)
+            freshness = reporting_freshness_utils.derive_reporting_freshness(
+                reference_time=reference_time,
+                created_time=pair.get('addtime') if isinstance(pair, dict) else None
+            )
+            if freshness.get('reporting_abnormal'):
+                return 'danger', freshness.get('reporting_status_text')
             return 'unknown', '等待当前机器上报'
         danger_messages = []
         switching_messages = []
@@ -377,6 +390,11 @@ class ha_api:
                 danger_messages.append('{0}：{1}'.format(name, task.get('status_text') or '最近切换失败'))
             if host.get('online_status') == 'offline':
                 danger_messages.append('{0} 已离线'.format(name))
+            if host.get('reporting_abnormal'):
+                report_time = host.get('last_report_at') or '无'
+                danger_messages.append('{0}：{1}（最近上报：{2}）'.format(
+                    name, host.get('reporting_status_text') or '上报异常', report_time
+                ))
             if host.get('health_status') == 'danger':
                 danger_messages.append('{0}：{1}'.format(name, self._healthText(host, '自检异常')))
             if task and task.get('status') in ('pending', 'running'):
@@ -423,9 +441,15 @@ class ha_api:
         )
         return self._getPair(pair_id)
 
-    def _normalizeHost(self, host):
+    def _normalizeHost(self, host, reference_time=None):
         result = dict(host)
         result['health_detail'] = self._jsonLoads(result.get('health_detail'), {})
+        result.update(reporting_freshness_utils.derive_reporting_freshness(
+            reference_time=reference_time,
+            report_time=result.get('update_time') or result.get('last_report_at'),
+            display_report_time=result.get('last_report_at'),
+            created_time=result.get('registered_at') or result.get('addtime')
+        ))
         return result
 
     def _normalizeTask(self, task):
@@ -433,10 +457,16 @@ class ha_api:
         result['step_summary'] = self._jsonLoads(result.get('step_summary'), [])
         return result
 
-    def _normalizePair(self, pair, include_tasks=False):
+    def _normalizePair(self, pair, include_tasks=False, reference_time=None):
         result = dict(pair)
         hosts = self._getHosts(pair.get('pair_id'))
-        result['hosts'] = [self._normalizeHost(host) for host in hosts]
+        result['hosts'] = [self._normalizeHost(host, reference_time=reference_time) for host in hosts]
+        result['status'], result['status_text'] = self._derivePairStatus(
+            pair.get('pair_id'),
+            reference_time=reference_time,
+            hosts=result['hosts'],
+            pair=pair
+        )
         # Keep the latest host field for existing clients while exposing every reporting machine.
         result['host'] = result['hosts'][0] if result['hosts'] else None
         if include_tasks:
@@ -746,7 +776,7 @@ class ha_api:
             for item in rows:
                 if not isinstance(item, dict):
                     continue
-                pairs.append(self._normalizePair(item))
+                pairs.append(self._normalizePair(item, reference_time=time.time()))
         return jh.returnJson(True, 'ok', {'list': pairs})
 
     def localDetailApi(self):
@@ -755,4 +785,4 @@ class ha_api:
         pair = self._getPair(pair_id)
         if not pair:
             return jh.returnJson(False, '归属不存在')
-        return jh.returnJson(True, 'ok', self._normalizePair(pair, include_tasks=True))
+        return jh.returnJson(True, 'ok', self._normalizePair(pair, include_tasks=True, reference_time=time.time()))
